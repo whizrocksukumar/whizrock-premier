@@ -57,55 +57,58 @@ export default function QuotesPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="bg-sky-100 rounded-lg shadow-sm p-6 border border-sky-200">
-        <div className="flex justify-between items-center">
+    <div className="space-y-8">
+      {/* BLUE Header Section */}
+      <div className="bg-blue-600 text-white p-8 rounded">
+        <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Quotes Management</h1>
-            <p className="text-sm text-gray-600 mt-1">Manage and track all customer quotes</p>
+            <h1 className="text-3xl font-bold">Quotes Management</h1>
+            <p className="text-blue-100 mt-2">Manage and track all customer quotes</p>
           </div>
-          <button className="bg-orange-600 hover:bg-orange-700 text-white px-6 py-3 rounded-lg font-medium flex items-center gap-2 transition shadow-md hover:shadow-lg">
+          <button className="px-6 py-3 bg-white text-blue-600 font-medium rounded hover:bg-blue-50 flex items-center gap-2">
             <Plus className="w-5 h-5" />
             New Quote
           </button>
         </div>
       </div>
 
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <div className="p-4 border-b flex flex-wrap gap-4 items-center bg-gray-50">
-          <div className="flex-1 min-w-64">
-            <div className="relative">
-              <Search className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search Quote #, Customer, Site Address..."
-                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-              />
-            </div>
+      {/* Search Bar - 40% width, centered top */}
+      <div className="flex gap-4 items-start">
+        <div className="w-2/5">
+          <div className="relative">
+            <Search className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search Quote #, Customer, Site Address..."
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
           </div>
-          <select className="px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent">
-            <option>All Status</option>
-            <option>Draft</option>
-            <option>Sent</option>
-            <option>Accepted</option>
-          </select>
-          <button className="flex items-center gap-2 px-4 py-3 border border-gray-300 rounded-lg hover:bg-gray-100 transition">
-            <Download className="w-5 h-5" />
-            Export
-          </button>
         </div>
+        <select className="px-4 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500">
+          <option>All Status</option>
+          <option>Draft</option>
+          <option>Sent</option>
+          <option>Accepted</option>
+        </select>
+        <button className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50 flex items-center gap-2">
+          <Download className="w-5 h-5" />
+          Export
+        </button>
+      </div>
 
+      {/* Table */}
+      <div className="bg-white rounded border border-gray-200 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
-            <thead className="bg-blue-900 text-white text-sm font-bold uppercase tracking-wider">
+            <thead className="bg-gray-800 text-white">
               <tr>
                 {['quoteNo', 'region', 'source', 'jobType', 'status', 'quoteDate', 'followUp', 'salesRep', 'customer', 'site', 'total', 'margin'].map((key) => (
                   <th 
                     key={key} 
-                    className="px-4 py-4 text-left font-bold uppercase tracking-wider cursor-pointer hover:bg-blue-800 transition"
+                    className="px-4 py-3 text-left font-semibold text-sm cursor-pointer hover:bg-gray-700"
                     onClick={() => ['region', 'customer', 'jobType', 'salesRep'].includes(key) && handleSort(key as keyof Quote)}
                   >
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-2">
                       {key === 'quoteNo' ? 'Quote No' : 
                        key === 'total' ? 'Total (ex GST)' :
                        key === 'margin' ? 'Margin %' :
@@ -118,36 +121,25 @@ export default function QuotesPage() {
                     </div>
                   </th>
                 ))}
-                <th className="px-4 py-4 text-left font-bold uppercase tracking-wider">Actions</th>
+                <th className="px-4 py-3 text-left font-semibold text-sm">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200">
+            <tbody>
               {quotes.map((q) => (
-                <tr key={q.id} className="hover:bg-gray-50 transition">
-                  <td className="px-4 py-4">
-                    <a href={`/quotes/${q.id}`} className="text-blue-600 font-medium hover:underline">
-                      {q.quoteNo}
-                    </a>
-                  </td>
-                  <td className="px-4 py-4 text-sm">{q.region}</td>
-                  <td className="px-4 py-4 text-sm">{q.source}</td>
-                  <td className="px-4 py-4 text-sm">{q.jobType}</td>
-                  <td className="px-4 py-4">
-                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${statusColors[q.status] || 'bg-gray-100 text-gray-800'}`}>
-                      {q.status}
-                    </span>
-                  </td>
-                  <td className="px-4 py-4 text-sm">{q.quoteDate}</td>
-                  <td className="px-4 py-4 text-sm">{q.followUp || "-"}</td>
-                  <td className="px-4 py-4 text-sm">{q.salesRep}</td>
-                  <td className="px-4 py-4 text-sm">{q.customer}</td>
-                  <td className="px-4 py-4 text-sm">{q.site}</td>
-                  <td className="px-4 py-4 text-sm font-medium">${q.total.toFixed(2)}</td>
-                  <td className="px-4 py-4 text-sm">{q.margin}%</td>
-                  <td className="px-4 py-4 text-sm">
-                    <a href={`/quotes/${q.id}`} className="text-blue-600 hover:underline mr-3">View</a>
-                    <button className="text-gray-600 hover:underline">Edit</button>
-                  </td>
+                <tr key={q.id} className="border-b border-gray-200 hover:bg-gray-50">
+                  <td className="px-4 py-3"><a href={`/quotes/${q.id}`} className="text-blue-600 font-medium">{q.quoteNo}</a></td>
+                  <td className="px-4 py-3 text-sm">{q.region}</td>
+                  <td className="px-4 py-3 text-sm">{q.source}</td>
+                  <td className="px-4 py-3 text-sm">{q.jobType}</td>
+                  <td className="px-4 py-3"><span className={`px-3 py-1 rounded text-xs font-medium ${statusColors[q.status]}`}>{q.status}</span></td>
+                  <td className="px-4 py-3 text-sm">{q.quoteDate}</td>
+                  <td className="px-4 py-3 text-sm">{q.followUp}</td>
+                  <td className="px-4 py-3 text-sm">{q.salesRep}</td>
+                  <td className="px-4 py-3 text-sm">{q.customer}</td>
+                  <td className="px-4 py-3 text-sm">{q.site}</td>
+                  <td className="px-4 py-3 text-sm font-medium">${q.total.toFixed(2)}</td>
+                  <td className="px-4 py-3 text-sm">{q.margin}%</td>
+                  <td className="px-4 py-3 text-sm"><a href={`/quotes/${q.id}`} className="text-blue-600">View</a></td>
                 </tr>
               ))}
             </tbody>
