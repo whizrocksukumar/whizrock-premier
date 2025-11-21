@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Search, Filter, Download, Plus, ChevronUp, ChevronDown } from 'lucide-react'
+import { Search, Download, Plus, ChevronUp, ChevronDown } from 'lucide-react'
 
 interface Quote {
   id: number
@@ -58,12 +58,17 @@ export default function QuotesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold text-gray-900">Quotes Management</h1>
-        <button className="bg-orange-600 hover:bg-orange-700 text-white px-6 py-3 rounded-lg font-medium flex items-center gap-2">
-          <Plus className="w-5 h-5" />
-          New Quote
-        </button>
+      <div className="bg-sky-100 rounded-lg shadow-sm p-6 border border-sky-200">
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Quotes Management</h1>
+            <p className="text-sm text-gray-600 mt-1">Manage and track all customer quotes</p>
+          </div>
+          <button className="bg-orange-600 hover:bg-orange-700 text-white px-6 py-3 rounded-lg font-medium flex items-center gap-2 transition shadow-md hover:shadow-lg">
+            <Plus className="w-5 h-5" />
+            New Quote
+          </button>
+        </div>
       </div>
 
       <div className="bg-white rounded-lg shadow overflow-hidden">
@@ -74,17 +79,17 @@ export default function QuotesPage() {
               <input
                 type="text"
                 placeholder="Search Quote #, Customer, Site Address..."
-                className="w-full pl-10 pr-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
               />
             </div>
           </div>
-          <select className="px-4 py-3 border rounded-lg">
+          <select className="px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent">
             <option>All Status</option>
             <option>Draft</option>
             <option>Sent</option>
             <option>Accepted</option>
           </select>
-          <button className="flex items-center gap-2 px-4 py-3 border rounded-lg hover:bg-gray-100">
+          <button className="flex items-center gap-2 px-4 py-3 border border-gray-300 rounded-lg hover:bg-gray-100 transition">
             <Download className="w-5 h-5" />
             Export
           </button>
@@ -95,8 +100,11 @@ export default function QuotesPage() {
             <thead className="bg-blue-900 text-white text-sm font-bold uppercase tracking-wider">
               <tr>
                 {['quoteNo', 'region', 'source', 'jobType', 'status', 'quoteDate', 'followUp', 'salesRep', 'customer', 'site', 'total', 'margin'].map((key) => (
-                  <th key={key} className="px-4 py-4 text-left font-bold uppercase tracking-wider cursor-pointer hover:bg-blue-800"
-                      onClick={() => ['region', 'customer', 'jobType', 'salesRep'].includes(key) && handleSort(key as keyof Quote)}>
+                  <th 
+                    key={key} 
+                    className="px-4 py-4 text-left font-bold uppercase tracking-wider cursor-pointer hover:bg-blue-800 transition"
+                    onClick={() => ['region', 'customer', 'jobType', 'salesRep'].includes(key) && handleSort(key as keyof Quote)}
+                  >
                     <div className="flex items-center gap-1">
                       {key === 'quoteNo' ? 'Quote No' : 
                        key === 'total' ? 'Total (ex GST)' :
@@ -115,7 +123,7 @@ export default function QuotesPage() {
             </thead>
             <tbody className="divide-y divide-gray-200">
               {quotes.map((q) => (
-                <tr key={q.id} className="hover:bg-gray-50">
+                <tr key={q.id} className="hover:bg-gray-50 transition">
                   <td className="px-4 py-4">
                     <a href={`/quotes/${q.id}`} className="text-blue-600 font-medium hover:underline">
                       {q.quoteNo}
