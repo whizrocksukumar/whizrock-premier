@@ -29,7 +29,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               </div>
             </div>
           </header>
-          <main className="flex-1 overflow-auto bg-white p-10">
+          <main className="flex-1 overflow-auto bg-white">
             {children}
           </main>
         </div>

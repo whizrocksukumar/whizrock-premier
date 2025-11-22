@@ -25,9 +25,10 @@ export default function Sidebar() {
   const pathname = usePathname()
 
   return (
-    <aside style={{ backgroundColor: '#2d3748' }} className="w-72 text-white flex flex-col h-screen">
-      {/* Top - Premier Logo with padding */}
-      <div className="p-8 border-b border-gray-600">
+    // Increased width to w-80 (320px) and ensured dark background
+    <aside style={{ backgroundColor: '#2d3748' }} className="w-80 text-white flex flex-col h-screen">
+      {/* Top - Premier Logo with increased vertical padding */}
+      <div className="py-10 px-8 border-b border-gray-600">
         <Image
           src="/premier-logo.webp"
           alt="Premier Insulation"
@@ -39,9 +40,9 @@ export default function Sidebar() {
         <p className="text-xs text-gray-300">West Rodney Branch</p>
       </div>
 
-      {/* Navigation - WHITE TEXT, BLUE HOVER */}
+      {/* Navigation - Increased vertical spacing and icon-text gap */}
       <nav className="flex-1 p-6 overflow-y-auto">
-        <div className="space-y-2">
+        <div className="space-y-4">
           {navItems.map((item) => {
             const Icon = item.icon
             const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
@@ -49,7 +50,8 @@ export default function Sidebar() {
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex items-center gap-4 px-4 py-3 rounded font-medium text-sm transition-colors ${
+                // Increased gap from gap-4 to gap-6
+                className={`flex items-center gap-6 px-4 py-3 rounded font-medium text-sm transition-colors ${
                   isActive
                     ? 'bg-blue-600 text-white'
                     : 'text-white hover:bg-blue-600'
