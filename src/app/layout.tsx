@@ -6,8 +6,9 @@ import Sidebar from './components/Sidebar';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'Premier Insulation',
-  description: 'Quote & Job Management',
+  title: 'Premier Insulation | Quote & Job Management',
+  description: 'Modern quote and job management system for Premier Insulation',
+  viewport: 'width=device-width, initial-scale=1',
 };
 
 export default function RootLayout({
@@ -17,13 +18,14 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={`${inter.className} bg-gray-50`}>
-        <div className="flex h-screen">
-          <Sidebar />
-          <main className="flex-1 overflow-y-auto p-6">
-            {children}
-          </main>
-        </div>
+      <body className={`${inter.className} flex h-screen bg-gray-50`}>
+        {/* Sidebar */}
+        <Sidebar />
+
+        {/* Main content area */}
+        <main className="flex-1 overflow-y-auto">
+          {children}
+        </main>
       </body>
     </html>
   );
