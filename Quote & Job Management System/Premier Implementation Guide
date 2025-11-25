@@ -1,0 +1,792 @@
+═══════════════════════════════════════════════════════════════════════════════
+PREMIER INSULATION - COMPLETE IMPLEMENTATION GUIDE
+═══════════════════════════════════════════════════════════════════════════════
+Project: Quote & Job Management System
+Tech Stack: Next.js 14 + React + TypeScript + Tailwind CSS + Supabase
+Last Updated: November 24, 2025
+═══════════════════════════════════════════════════════════════════════════════
+
+TABLE OF CONTENTS
+═══════════════════════════════════════════════════════════════════════════════
+1. Project Overview & Architecture
+2. Pages Completed
+3. Pages Remaining
+4. VA Workspace (Product Recommendations) - PRIORITY
+5. Premier User Workflow
+6. Database Schema Requirements
+7. File Structure Standards
+8. Common Issues & Solutions
+9. Development Checklist
+
+═══════════════════════════════════════════════════════════════════════════════
+1. PROJECT OVERVIEW & ARCHITECTURE
+═══════════════════════════════════════════════════════════════════════════════
+
+BUSINESS GOAL:
+Replace legacy MYCS Windows/SQL system, save 300-500 staff hours monthly
+
+TWO USER TYPES:
+1. Virtual Assistants (VAs) - Create product recommendations (NO pricing access)
+2. Premier Users (Sales Reps) - Create quotes with pricing, generate PDFs
+
+CORE WORKFLOW:
+Enquiry (GHL) → VA Product Recommendation → Premier Quote → Job → Invoice
+
+KEY PRINCIPLES:
+- VAs NEVER see pricing, margins, or costs
+- Premier controls ALL pricing & PDF generation
+- Two separate processes: Recommendations ≠ Quotes
+- Version control on quotes (Q-001.01, Q-001.02, etc.)
+- GST 15% (New Zealand)
+- Waste % default 10% (from products table)
+- Labour auto-generated: $1.50 cost, $3.00 sell per m²
+
+MASTER TEMPLATE DESIGN:
+- Salesforce Blue (#0066CC) for headers/buttons
+- Inter font
+- Search box: 30% width
+- Action buttons: Right side
+- Filter buttons: NOT dropdowns
+- Pagination: Bottom of page
+- Blue table headers, sortable columns
+
+═══════════════════════════════════════════════════════════════════════════════
+2. PAGES COMPLETED ✅
+═══════════════════════════════════════════════════════════════════════════════
+
+✅ QUOTES LIST PAGE
+Location: src/app/quotes/page.tsx
+Features:
+- Blue header row (#0066CC)
+- 16 sortable columns (Action, Quote No, Customer Name, Site Address, Region, 
+  Job #, Scheduled Date, Quote Source, Job Type, Status, Quote Date, Follow Up,
+  Sales Rep, Discount, Total Ex GST, Margin %)
+- Fuzzy search (quote_number, site_address)
+- Status filter dropdown
+- Pagination (20 items/page)
+- Click Quote No → Detail page
+Import: import { supabase } from '@/lib/supabase';
+
+✅ ADD NEW QUOTE PAGE (Premier Users Only)
+Location: src/app/quotes/new/page.tsx
+Features:
+- Pricing tier row (Retail/Trade/VIP/Custom) + Labour $/m² + Waste %
+- Client details form
+- Application type dropdown OR custom section name (with color box)
+- Fuzzy product search (R-value, SKU, description)
+- Auto-calculated packs required
+- Auto-generated labour rows below each product
+- Real-time totals (Cost ex GST, Sell ex GST, GP%)
+- PDF template dropdown (Template A/B/Both)
+- Sales rep selection
+Import: import { supabase } from '@/lib/supabase';
+
+✅ QUOTE DETAIL PAGE
+Location: src/app/quotes/[id]/page.tsx
+Import: import { supabase } from '@/lib/supabase';
+
+✅ CUSTOMERS LIST PAGE
+Features:
+- Sortable columns (Name, Company, Site Address, Phone, Email, Status, Follow-up)
+- Fuzzy search
+- Bulk select + bulk edit
+- Pagination
+- Add/Edit/Delete/View
+
+✅ SIDEBAR
+Location: src/components/Sidebar.tsx
+Features:
+- Premier logo (top)
+- Navigation menu
+- Whizrock "Powered by" (bottom)
+Import: No imports needed (uses Next.js Link)
+
+CRITICAL FILE LOCATION ISSUE RESOLVED:
+✅ Supabase client: src/lib/supabase.ts (NOT src/app/lib/)
+✅ All imports: import { supabase } from '@/lib/supabase';
+✅ tsconfig.json: "baseUrl": ".", "paths": { "@/*": ["./src/*"] }
+
+═══════════════════════════════════════════════════════════════════════════════
+3. PAGES REMAINING
+═══════════════════════════════════════════════════════════════════════════════
+
+PRIORITY 1 - VA WORKSPACE (See Section 4)
+PRIORITY 2 - Jobs Page
+PRIORITY 3 - Invoices Page
+PRIORITY 4 - Inventory Page
+PRIORITY 5 - Settings Page
+PRIORITY 6 - Dashboard Page
+PRIORITY 7 - Calendar Page
+
+═══════════════════════════════════════════════════════════════════════════════
+4. VA WORKSPACE - PRODUCT RECOMMENDATIONS (PRIORITY 1)
+═══════════════════════════════════════════════════════════════════════════════
+
+CRITICAL: This is NOT "Quotes" - it's "Product Recommendations"
+
+LOCATION:
+src/app/va-workspace/page.tsx
+
+LAYOUT - SINGLE PAGE DESIGN:
+┌─────────────────────────────────────────────────────────────────┐
+│ PRODUCT RECOMMENDATIONS                                         │
+├─────────────────────────────────────────────────────────────────┤
+│ [Calculator] [Search: fuzzy search...]                          │
+│                                                                 │
+│ ┌──────────┬──────────┬──────────┬──────────┐                  │
+│ │ Created  │ Draft: 3 │ Submit:5 │ Await: 2│                  │
+│ │   10     │          │          │          │                  │
+│ └──────────┴──────────┴──────────┴──────────┘                  │
+│                                                                 │
+│ Status: [All ▼] [Draft ▼] [Submitted ▼] [Awaiting Review ▼]   │
+│                                                                 │
+│ ══════ PENDING ENQUIRIES (From GHL) ═══════                    │
+│ Oscar Williams | Adroit Builders | 45 Smith St | Ref: ENQ-001  │
+│                                        [CREATE RECOMMENDATION →]│
+│ Aaron Alexander | Healthy Estate | 120 Main Ave | Ref: ENQ-002 │
+│                                        [CREATE RECOMMENDATION →]│
+│                                                                 │
+│ ══════ MY RECOMMENDATIONS ═══════                               │
+│ Rec #  │Client        │Company       │Site       │Created      │
+│ R-001  │Oscar Williams│Adroit Build  │45 Smith St│2025-11-23   │
+│  .01   │Status: Draft                │[Edit] [Delete]          │
+│ R-002  │Aaron Alex    │Healthy Est   │120 Main Av│2025-11-23   │
+│  .01   │Status: Submitted            │[View]                   │
+│                                                                 │
+│ [< Previous] [1] [2] [3] [Next >]                              │
+└─────────────────────────────────────────────────────────────────┘
+
+────────────────────────────────────────────────────────────────────
+
+CREATE RECOMMENDATION FORM:
+Location: src/app/va-workspace/new/page.tsx
+
+STEP 1: CLIENT DETAILS
+- Search/select existing client OR create new inline
+- Fields: First Name, Last Name, Email, Phone, Company, Site Address, Region
+- Auto-populate from GHL enquiry if coming from "PENDING ENQUIRIES"
+
+STEP 2: RECOMMENDATION SETTINGS (NO PRICING)
+- Application Type: Dropdown with color-coded options
+  * External Walls (#FFD966 yellow)
+  * Masonry Walls (#9FC5E8 blue)
+  * GIW (#F6B26B orange)
+  * Void Wall (#EAD1DC pink)
+  * Underfloor (#76A5AF teal)
+  * Midfloor (#D9EAD3 light green)
+  * GCFO (#F4CCCC red)
+  * Soffit (#B7B7B7 gray)
+  * Flat Ceiling (#C27BA0 purple)
+  * Raked Ceiling (#CFE2F3 light blue)
+
+STEP 3: ADD SECTIONS & PRODUCTS
+Layout:
+┌─ SECTION ────────────────────────────────────────────────────┐
+│ [🟨 External Walls ▼] or [Custom Name:_______] [Delete]     │
+│                                                              │
+│ Area m² │ Product                    │ Packs │ Stock Status │
+│─────────┼────────────────────────────┼───────┼──────────────│
+│   89    │ [Type R-value, SKU...  🔍] │  10   │ ✓ In Stock  │
+│         │                            │       │              │
+│─────────┴────────────────────────────┴───────┴──────────────│
+│ [+ Add Product]                                              │
+└──────────────────────────────────────────────────────────────┘
+
+Features:
+✓ Fuzzy search for products (R-value, SKU, description)
+✓ Auto-calculate packs = CEIL((area × (1 + waste%)) / bale_size)
+✓ Show stock status: ✓ In Stock / ⚠️ Low Stock / ❌ Out of Stock
+✓ Show waste % from products table (default 10%, editable)
+✓ Show bale size, total coverage
+✓ NO PRICING visible to VA
+
+STEP 4: REVIEW & SUBMIT
+Summary shows:
+- Client info
+- All sections & products
+- Total packs required per product
+- Total area covered
+- Stock warnings
+
+Buttons:
+[Save Draft] [Submit for Review]
+
+WHAT VA SEES:
+✅ Product names, SKU, R-values
+✅ Areas, packs, bale sizes
+✅ Stock status
+✅ Calculator tool
+❌ NO costs, prices, margins
+❌ NO pricing tiers
+❌ NO labour costs/rates
+❌ NO profit information
+
+────────────────────────────────────────────────────────────────────
+
+DATABASE TABLES FOR VA WORKSPACE:
+
+1. product_recommendations
+   - id (UUID)
+   - recommendation_number (REC-2025-001)
+   - version (01, 02, 03...)
+   - enquiry_id (from GHL)
+   - client_id
+   - company_id
+   - created_by_user_id (VA user ID)
+   - created_at
+   - submitted_date
+   - status (Draft, Submitted, Converted to Quote)
+   - notes
+
+2. recommendation_sections
+   - id (UUID)
+   - recommendation_id
+   - app_type_id (nullable)
+   - custom_section_name (nullable)
+   - sort_order
+
+3. recommendation_items
+   - id (UUID)
+   - recommendation_section_id
+   - product_id
+   - area_sqm
+   - waste_percent (from products table)
+   - packs_required (calculated)
+   - notes
+
+FILES TO CREATE:
+1. src/app/va-workspace/page.tsx (list view)
+2. src/app/va-workspace/new/page.tsx (create form)
+3. src/app/va-workspace/[id]/page.tsx (view/edit detail)
+
+Import for all: import { supabase } from '@/lib/supabase';
+
+═══════════════════════════════════════════════════════════════════════════════
+5. PREMIER USER WORKFLOW - QUOTE FROM RECOMMENDATION
+═══════════════════════════════════════════════════════════════════════════════
+
+WHEN: Premier user reviews a submitted Product Recommendation
+
+LOCATION: src/app/quotes/from-recommendation/[id]/page.tsx
+
+PROCESS:
+1. Load recommendation data (client, sections, products, areas, packs)
+2. Pre-populate Add Quote form with recommendation data
+3. Premier adds:
+   - Pricing tier (Retail/Trade/VIP/Custom)
+   - Labour rate (default $3.00/m²)
+   - Custom discounts
+   - Quote validity period
+4. System automatically:
+   - Applies markup to products
+   - Generates labour rows (area × $1.50 cost, area × $3.00 sell)
+   - Calculates totals with GST 15%
+   - Shows margins
+5. Premier generates PDF (Template A or B)
+6. Premier sends to client
+7. Recommendation status → "Converted to Quote"
+
+QUOTE NUMBERING:
+- Recommendation: REC-2025-001.01
+- Converted Quote: Q-2025-001.01
+- Link: quotes.recommendation_id = product_recommendations.id
+
+═══════════════════════════════════════════════════════════════════════════════
+6. JOBS PAGE
+═══════════════════════════════════════════════════════════════════════════════
+
+LOCATION: src/app/jobs/page.tsx
+
+LAYOUT: Same structure as Quotes page
+
+COLUMNS:
+- Action (View/Edit)
+- Job # (sortable, clickable → detail page)
+- Quote # (linked)
+- Customer Name
+- Site Address
+- Region
+- Job Type
+- Status (Scheduled/In Progress/Completed/Cancelled)
+- Scheduled Date
+- Completion Date
+- Assigned Crew
+- Total Value
+- Actual Cost
+- Margin %
+
+FEATURES:
+- Fuzzy search (job #, customer, site address)
+- Status filter dropdown
+- Date range filter
+- Pagination
+- Export to CSV
+
+ACTION BUTTONS:
+[+ New Job] [Import] [Export] [Print Schedule]
+
+STATUS BADGES:
+- Scheduled: Blue
+- In Progress: Orange
+- Completed: Green
+- Cancelled: Red
+
+CREATE JOB:
+- From accepted quote (button on quote detail page)
+- OR manually (src/app/jobs/new/page.tsx)
+
+JOB DETAIL PAGE:
+Location: src/app/jobs/[id]/page.tsx
+Sections:
+- Job info (dates, crew, status)
+- Client details
+- Quoted items vs actual items used
+- Photos (before/after)
+- Completion certificate
+- Invoice generation
+
+DATABASE:
+- jobs table (see schema in document)
+- job_line_items (actual materials used)
+- job_photos
+- completion_certificates
+
+═══════════════════════════════════════════════════════════════════════════════
+7. INVOICES PAGE
+═══════════════════════════════════════════════════════════════════════════════
+
+LOCATION: src/app/invoices/page.tsx
+
+LAYOUT: Same structure as Quotes/Jobs pages
+
+COLUMNS:
+- Action (View/Edit/Download PDF)
+- Invoice # (sortable, clickable)
+- Job # (linked)
+- Customer Name
+- Company
+- Invoice Date
+- Due Date
+- Amount Ex GST
+- GST Amount
+- Total Inc GST
+- Status (Draft/Sent/Paid/Overdue)
+- Payment Method
+
+FEATURES:
+- Fuzzy search
+- Status filter
+- Date range filter
+- Overdue highlighting (red)
+- Pagination
+- Export to Xero/MYOB
+
+ACTION BUTTONS:
+[+ New Invoice] [Import] [Export] [Send Reminders]
+
+STATUS BADGES:
+- Draft: Gray
+- Sent: Blue
+- Paid: Green
+- Overdue: Red
+
+INVOICE GENERATION:
+- Auto-generated from completed job
+- Uses actual materials from job_line_items
+- Includes labour
+- GST 15%
+- Payment terms (e.g., 30 days)
+
+INVOICE PDF:
+Similar to Quote PDF but includes:
+- Invoice # and date
+- Due date
+- Payment instructions
+- Bank account details
+- "PAID" stamp if paid
+
+═══════════════════════════════════════════════════════════════════════════════
+8. INVENTORY PAGE
+═══════════════════════════════════════════════════════════════════════════════
+
+LOCATION: src/app/inventory/page.tsx
+
+LAYOUT: Three sections on one page (tabs or accordion)
+
+SECTION 1: PRODUCTS
+┌──────────────────────────────────────────────────────────────┐
+│ PRODUCTS                                                     │
+│ [Search...] [+ Add New Product] [Import] [Export]           │
+│                                                              │
+│ ☐ SKU | PRODUCT | CATEGORY | R-VALUE | STOCK | REORDER     │
+│ ☐ PIL-006 | R2.4 90mm | Glasswool | R2.4 | 42 | 20         │
+│ ☐ PIL-015 | R2.7 120mm | Glasswool | R2.7 | 15 | 30 ⚠️     │
+│                                                              │
+│ [< Previous] [1] [2] [3] [Next >]                           │
+└──────────────────────────────────────────────────────────────┘
+
+SECTION 2: PURCHASE ORDERS
+┌──────────────────────────────────────────────────────────────┐
+│ PURCHASE ORDERS                                              │
+│ [Search...] [+ New PO] [Import]                             │
+│                                                              │
+│ PO # | SUPPLIER | ORDER DATE | EXPECTED | STATUS | TOTAL    │
+│ PO-001 | Supplier A | 2025-11-20 | 2025-11-27 | Pending |  │
+│                                                              │
+└──────────────────────────────────────────────────────────────┘
+
+SECTION 3: SUPPLIERS
+┌──────────────────────────────────────────────────────────────┐
+│ SUPPLIERS                                                    │
+│ [Search...] [+ New Supplier] [Import]                       │
+│                                                              │
+│ NAME | PHONE | EMAIL | ACCOUNT # | PAYMENT TERMS            │
+│ Supplier A | 021... | contact@... | ACC-001 | Net 30       │
+│                                                              │
+└──────────────────────────────────────────────────────────────┘
+
+FEATURES:
+- Low stock alerts (orange ⚠️ when below reorder level)
+- Generate procurement order from quote
+- Track PO status (Pending, Ordered, Received, Delayed)
+- Update stock on PO receipt
+- Supplier management
+- Stock movements log
+
+ADD PRODUCT FORM:
+Admin only
+Fields:
+- SKU (unique)
+- Name
+- Description
+- Category
+- R-value
+- Thickness (mm)
+- Bale size (m²)
+- Cost price
+- Retail price
+- Pack price
+- Waste % (default 10%)
+- Supplier
+- Reorder level
+- Is active (boolean)
+
+═══════════════════════════════════════════════════════════════════════════════
+9. SETTINGS PAGE
+═══════════════════════════════════════════════════════════════════════════════
+
+LOCATION: src/app/settings/page.tsx
+
+LAYOUT: Card-based dashboard with modal popups
+
+┌─────────────────────────────────────────────────────────────┐
+│ SETTINGS                                                    │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  ┌──────────────────┐  ┌──────────────────┐                │
+│  │ 🔐 Users & Roles │  │ 📋 Application   │                │
+│  │                  │  │    Types         │                │
+│  └──────────────────┘  └──────────────────┘                │
+│                                                             │
+│  ┌──────────────────┐  ┌──────────────────┐                │
+│  │ 💰 Pricing Tiers │  │ 📝 Quote         │                │
+│  │                  │  │    Templates     │                │
+│  └──────────────────┘  └──────────────────┘                │
+│                                                             │
+│  ┌──────────────────┐  ┌──────────────────┐                │
+│  │ 📞 Sales Reps    │  │ ⚙️  System       │                │
+│  │                  │  │     Settings     │                │
+│  └──────────────────┘  └──────────────────┘                │
+│                                                             │
+│  ┌──────────────────┐  ┌──────────────────┐                │
+│  │ 📋 Terms &       │  │ 🔧 Advanced      │                │
+│  │    Conditions    │  │                  │                │
+│  └──────────────────┘  └──────────────────┘                │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+
+Each card opens a modal with:
+
+1. USERS & ROLES
+   - Add/edit users
+   - Assign roles (Admin, Sales Rep, VA, Viewer)
+   - Set permissions
+   - Password reset
+
+2. APPLICATION TYPES
+   - Add/edit application types
+   - Set hex color codes
+   - Reorder list
+   - Activate/deactivate
+
+3. PRICING TIERS
+   - Retail markup % (default 60%)
+   - Trade markup % (default 40%)
+   - VIP markup % (default 25%)
+   - Custom tier options
+
+4. QUOTE TEMPLATES
+   - Edit PDF header/footer
+   - Company logo upload
+   - Template A/B preview
+   - Email templates
+
+5. SALES REPS
+   - Add/edit sales reps
+   - Commission rates
+   - Contact info
+   - Active/inactive status
+
+6. SYSTEM SETTINGS
+   - Company details
+   - GST rate (15%)
+   - Default waste % (10%)
+   - Default labour rate ($3.00/m²)
+   - Quote validity days (30)
+   - Email settings
+   - Backup/restore
+
+7. TERMS & CONDITIONS
+   - Rich text editor (Quill or TinyMCE)
+   - Version control
+   - View history
+   - Activate/deactivate versions
+
+8. ADVANCED
+   - Database backup
+   - Import/export data
+   - API keys
+   - Webhook settings (GHL)
+   - Logs viewer
+
+═══════════════════════════════════════════════════════════════════════════════
+10. DATABASE SCHEMA SUMMARY
+═══════════════════════════════════════════════════════════════════════════════
+
+CORE TABLES:
+✅ clients
+✅ companies
+✅ regions
+✅ sales_reps
+✅ app_types (application types with hex colors)
+✅ products (with waste_percentage, is_labour)
+✅ pricing_tiers
+
+VA TABLES:
+⚠️  product_recommendations
+⚠️  recommendation_sections
+⚠️  recommendation_items
+
+QUOTE TABLES:
+✅ quotes (with pricing_tier_id, labour_rate_per_sqm, version)
+✅ quote_sections
+✅ quote_line_items (with is_labour, parent_line_item_id)
+
+JOB TABLES:
+✅ jobs
+✅ job_line_items
+⚠️  job_photos (add if not exists)
+⚠️  completion_certificates (add if not exists)
+
+INVOICE TABLES:
+✅ invoices
+⚠️  invoice_line_items (add if not exists)
+⚠️  payments (add if not exists)
+
+INVENTORY TABLES:
+✅ suppliers
+✅ purchase_orders
+✅ purchase_order_items
+✅ stock_levels
+⚠️  stock_movements (add if not exists)
+
+SYSTEM TABLES:
+⚠️  users (if not using Supabase auth)
+⚠️  roles_permissions
+⚠️  system_settings
+⚠️  quote_terms (Terms & Conditions)
+⚠️  audit_log
+
+═══════════════════════════════════════════════════════════════════════════════
+11. FILE STRUCTURE STANDARDS
+═══════════════════════════════════════════════════════════════════════════════
+
+CRITICAL RULES:
+1. Supabase client: src/lib/supabase.ts (NOT in src/app/lib/)
+2. All page imports: import { supabase } from '@/lib/supabase';
+3. Page files MUST be named: page.tsx (Next.js requirement)
+4. Folder names can be descriptive (e.g., new)
+
+STRUCTURE:
+src/
+├── lib/
+│   └── supabase.ts                    ← Supabase client (FIXED LOCATION)
+├── app/
+│   ├── dashboard/
+│   │   └── page.tsx
+│   ├── quotes/
+│   │   ├── page.tsx                   ← List
+│   │   ├── new/
+│   │   │   └── page.tsx               ← Create
+│   │   ├── from-recommendation/
+│   │   │   └── [id]/
+│   │   │       └── page.tsx           ← Create from recommendation
+│   │   └── [id]/
+│   │       └── page.tsx               ← Detail
+│   ├── va-workspace/
+│   │   ├── page.tsx                   ← VA dashboard
+│   │   ├── new/
+│   │   │   └── page.tsx               ← Create recommendation
+│   │   └── [id]/
+│   │       └── page.tsx               ← View/edit recommendation
+│   ├── jobs/
+│   │   ├── page.tsx
+│   │   ├── new/
+│   │   │   └── page.tsx
+│   │   └── [id]/
+│   │       └── page.tsx
+│   ├── invoices/
+│   │   ├── page.tsx
+│   │   ├── new/
+│   │   │   └── page.tsx
+│   │   └── [id]/
+│   │       └── page.tsx
+│   ├── inventory/
+│   │   └── page.tsx
+│   ├── settings/
+│   │   └── page.tsx
+│   ├── customers/
+│   │   ├── page.tsx
+│   │   ├── new/
+│   │   │   └── page.tsx
+│   │   └── [id]/
+│   │       └── page.tsx
+│   └── calendar/
+│       └── page.tsx
+└── components/
+    ├── Sidebar.tsx
+    └── [other shared components]
+
+═══════════════════════════════════════════════════════════════════════════════
+12. COMMON ISSUES & SOLUTIONS
+═══════════════════════════════════════════════════════════════════════════════
+
+ISSUE 1: Module not found '@/lib/supabase'
+SOLUTION:
+1. Verify file exists at: src/lib/supabase.ts
+2. Use import: import { supabase } from '@/lib/supabase';
+3. Check tsconfig.json has: "baseUrl": ".", "paths": { "@/*": ["./src/*"] }
+4. Restart dev server: Ctrl+C, then npm run dev
+
+ISSUE 2: Page not loading (404)
+SOLUTION:
+1. Verify file is named: page.tsx (not add-quote-page.tsx)
+2. Check folder structure matches URL
+3. Clear .next cache: rm -rf .next
+
+ISSUE 3: Import path keeps changing
+SOLUTION:
+Use ABSOLUTE imports everywhere: import { supabase } from '@/lib/supabase';
+NEVER use relative paths: ../lib/supabase or ../../lib/supabase
+
+ISSUE 4: TypeScript errors
+SOLUTION:
+1. Ensure all types are defined at top of file
+2. Use proper TypeScript syntax
+3. Check for missing return types
+
+═══════════════════════════════════════════════════════════════════════════════
+13. DEVELOPMENT CHECKLIST
+═══════════════════════════════════════════════════════════════════════════════
+
+PHASE 1: VA WORKSPACE (CURRENT PRIORITY)
+☐ Create database tables:
+  ☐ product_recommendations
+  ☐ recommendation_sections
+  ☐ recommendation_items
+☐ Create pages:
+  ☐ src/app/va-workspace/page.tsx (dashboard)
+  ☐ src/app/va-workspace/new/page.tsx (create form)
+  ☐ src/app/va-workspace/[id]/page.tsx (view/edit)
+☐ Features:
+  ☐ Pending enquiries from GHL
+  ☐ Fuzzy product search
+  ☐ Auto-calculate packs
+  ☐ Stock status warnings
+  ☐ Calculator tool
+  ☐ Version control (.01, .02)
+☐ NO PRICING visible to VA
+
+PHASE 2: QUOTE FROM RECOMMENDATION
+☐ Create page: src/app/quotes/from-recommendation/[id]/page.tsx
+☐ Pre-populate from recommendation data
+☐ Add pricing controls
+☐ Link recommendation_id to quotes table
+☐ Update recommendation status when converted
+
+PHASE 3: JOBS PAGE
+☐ Create database tables (if needed)
+☐ Create pages (list, create, detail)
+☐ Convert quote to job button
+☐ Job scheduling
+☐ Crew assignment
+☐ Photo upload
+☐ Completion certificate generation
+
+PHASE 4: INVOICES PAGE
+☐ Create database tables (if needed)
+☐ Create pages (list, create, detail)
+☐ Generate from completed job
+☐ PDF generation
+☐ Payment tracking
+☐ Overdue reminders
+
+PHASE 5: INVENTORY PAGE
+☐ Products section (already exists, verify)
+☐ Purchase orders section
+☐ Suppliers section
+☐ Stock alerts
+☐ Procurement order generation from quotes
+
+PHASE 6: SETTINGS PAGE
+☐ Create modal components for each setting card
+☐ Users & roles management
+☐ Application types editor
+☐ Pricing tiers editor
+☐ Terms & conditions editor (rich text)
+☐ System settings
+
+PHASE 7: POLISH & TESTING
+☐ Test all workflows end-to-end
+☐ Mobile responsiveness
+☐ Error handling
+☐ Loading states
+☐ PDF generation (both templates)
+☐ GHL integration
+☐ Stock alerts
+☐ Email notifications
+
+═══════════════════════════════════════════════════════════════════════════════
+14. CRITICAL REMINDERS
+═══════════════════════════════════════════════════════════════════════════════
+
+1. VAs create RECOMMENDATIONS, not QUOTES
+2. Premier creates QUOTES from RECOMMENDATIONS
+3. Always verify file locations BEFORE writing code
+4. Use absolute imports: @/lib/supabase
+5. Page files MUST be named: page.tsx
+6. Master template: Blue headers, fuzzy search, filter buttons (not dropdowns)
+7. Labour auto-generated: $1.50 cost, $3.00 sell per m²
+8. GST: 15% (New Zealand)
+9. Waste %: Default 10% from products table
+10. Version control on quotes: Q-001.01, Q-001.02, etc.
+
+═══════════════════════════════════════════════════════════════════════════════
+END OF IMPLEMENTATION GUIDE
+═══════════════════════════════════════════════════════════════════════════════
+
+This document should be uploaded to project knowledge base and referenced for
+all future development sessions to maintain consistency and avoid repeated issues.
+
+Last Updated: November 24, 2025
+Next Priority: VA Workspace (Product Recommendations) - PHASE 1

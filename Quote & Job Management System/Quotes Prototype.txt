@@ -1,0 +1,1571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <link rel="icon" href="/favicon.ico" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Insulation Quoting App</title>
+    
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- React Libraries -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    
+    <!-- Babel Standalone to transpile JSX in the browser -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/"
+  }
+}
+</script>
+</head>
+<body class="bg-slate-50">
+    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <div id="root"></div>
+
+    <!-- 
+      The entire application is contained within this single script tag.
+      type="text/babel" tells Babel to process this script block.
+      data-presets="react" is crucial for Babel to understand JSX.
+    -->
+    <script type="text/babel" data-presets="react">
+    
+    // --- MOCK API AND SERVICES (from services/mockApi.ts) ---
+
+    const productsCsv = `SKU,Product Name,Category,Application Types,Thickness (mm),Bale Dimensions,Coverage (m²),Retail Price (NZD),Unit
+P-001,Premier Acoustic/Thermal Ceiling/Wall Blanket R1.8 75mm,Glasswool,"External Walls, Internal Walls, Ceiling (Flat)",75,1200 × 15m,18,195.0,Bale
+P-002,Premier Acoustic/Thermal Wall Blanket R2.2 90mm,Glasswool,"External Walls, Garage Walls, Internal Walls",90,1200 × 13m,15.6,209.0,Bale
+P-003,Premier Acoustic/Thermal Wall Blanket R2.4 90mm,Glasswool,"External Walls, Garage Walls",90,1200 × 8m,9.6,235.0,Bale
+P-004,Premier Acoustic/Thermal Wall Blanket R2.6 90mm,Glasswool,"External Walls, Midfloor",90,1200 × 7m,8.4,219.0,Bale
+P-005,Premier Acoustic/Thermal Wall Blanket R2.8 90mm,Glasswool,External Walls,90,1200 × 5m,6,208.0,Bale
+P-006,Premier Thermal/Acoustic Skillion Blanket R3.6 140mm,Glasswool,Ceiling (Raking/Skillion),140,1200 × 6.5m,7.8,235.0,Bale
+P-007,Premier Thermal Ceiling Blanket R2.7 120mm,Glasswool,Ceiling (Flat),120,1200 × 10m,12,208.0,Bale
+P-008,Premier Thermal Ceiling Blanket R2.9 125mm,Glasswool,Ceiling (Flat),125,1200 × 10m,12,217.0,Bale
+P-009,Premier Thermal Ceiling Blanket R3.3 145mm,Glasswool,Ceiling (Flat),145,1200 × 8.5m,10.2,195.0,Bale
+P-010,Premier Thermal Ceiling Blanket R3.6 155mm,Glasswool,Ceiling (Flat),155,1200 × 8m,9.6,215.0,Bale
+P-011,Premier Thermal Ceiling Blanket R4.1 175mm,Glasswool,Ceiling (Flat),175,1200 × 8m,9.6,212.0,Bale
+P-012,Premier Thermal Ceiling Segment R3.6 430mm,Glasswool,Ceiling (Flat),430,1200 × 0.43m,5.16,175.0,Bale
+P-013,Premier Thermal Ceiling Segment R3.6 580mm,Glasswool,Ceiling (Flat),580,1200 × 0.58m,6.96,235.0,Bale
+P-014,Premier Thermal Ceiling Segments R5.2 210mm,Glasswool,Ceiling (Flat),210,1200 × 0.58m,6.96,162.0,Bale
+P-015,Premier Thermal Polyester Ceiling Blanket R1.8 115mm,Polyester,Ceiling (Flat),115,870 × 11.5m,10,205.0,Bale
+P-016,Premier Thermal Polyester Ceiling Blanket R2.9 185mm,Polyester,Ceiling (Flat),185,870 × 8.62m,7.5,217.0,Bale
+P-017,Premier Thermal Polyester Ceiling Blanket R3.2 185mm,Polyester,Ceiling (Flat),185,870 × 8.62m,7.5,239.0,Bale
+P-018,Premier Thermal Polyester Ceiling Blanket R3.6 225mm,Polyester,Ceiling (Flat),225,870 × 7.47m,6.5,265.0,Bale
+P-019,Premier Thermal Polyester Ceiling Blanket R4.0 240mm,Polyester,Ceiling (Flat),240,870 × 5.75m,5,227.0,Bale
+P-020,Premier Thermal Polyester Skillion Sections R3.2 165mm,Polyester,Ceiling (Raking/Skillion),165,870 × 1m,0.87,190.0,Bale`;
+
+    const applicationTypesCsv = `Application Type,Colour Code
+External Walls,#FFD966
+Masonry Walls,#9FC5E8
+Garage Walls,#F6B26B
+Internal Walls,#EAD1DC
+Midfloor,#D9EAD3
+Underfloor,#76A5AF
+Ceiling (Flat),#F4CCCC
+Ceiling (Raking/Skillion),#C27BA0
+Soffit,#B7B7B7
+Service Cavity,#A2C4C9
+Acoustic / Sound,#CFE2F3`;
+
+
+    const parseProducts = (csv) => {
+        const lines = csv.split('\n').slice(1);
+        return lines.map((line, index) => {
+            const [sku, name, category, appTypes, thickness, baleDims, coverage, price, unit] = line.split(',');
+            return {
+                id: index + 1,
+                SKU: sku,
+                "Product Name": name,
+                "Category": category,
+                "Application Types": appTypes.replace(/"/g, ''),
+                "Thickness (mm)": thickness,
+                "Bale Dimensions": baleDims,
+                "Coverage (m²)": coverage,
+                "Retail Price (NZD)": price,
+                "Unit": unit
+            };
+        });
+    };
+
+    const parseApplicationTypes = (csv) => {
+        const lines = csv.split('\n').slice(1);
+        return lines.map((line, index) => {
+            const [type, code] = line.split(',');
+            return {
+                id: index + 1,
+                "Application Type": type,
+                "Colour Code": code
+            };
+        });
+    };
+
+    // --- MOCK DATABASE ---
+
+    let products = parseProducts(productsCsv);
+    let applicationTypes = parseApplicationTypes(applicationTypesCsv);
+
+    let clients = [
+      { id: 1, client_name: 'BuildCo Construction', companyName: 'BuildCo Construction', contactName: 'Mark', phone: '021 123 4567', email: 'mark@buildco.com', notes: 'Large construction firm, focuses on commercial projects.' },
+      { id: 2, client_name: 'John Smith (Homeowner)', contactName: 'John Smith', phone: '022 987 6543', email: 'john.s@email.com', notes: 'Individual homeowner, requires clear communication.' },
+      { id: 3, client_name: 'Jane Doe Renovations', companyName: 'Jane Doe Renovations', contactName: 'Jane', phone: '027 555 8888', email: 'jane@janedoe.co.nz', notes: 'Specializes in high-end residential renovations.' },
+    ];
+    let nextClientId = 4;
+
+    let pricingTiers = [
+      { id: 1, tier_name: 'Retail', discount_percentage: 0 },
+      { id: 2, tier_name: 'Trade', discount_percentage: 10 },
+      { id: 3, tier_name: 'VIP', discount_percentage: 15 },
+    ];
+
+    let enquiries = [
+      {
+        id: 101,
+        job_reference: 'ENQ-2024-001',
+        projectDescription: 'New residential build - 3 bedroom home',
+        status: 'converted', // This one is now a quote
+        createdDate: '2025-10-22',
+        dueDate: '2025-10-28',
+        files: [{id: 1, name: 'Architectural Plans - 8 Blicks Rd.pdf', uploadedBy: 'Client'}],
+        sections: [
+          { id: 201, enquiry_id: 101, section_name: 'Living Room Ceiling', application_type_id: 7, line_items: [{ id: 301, enquiry_section_id: 201, product_id: 1, quantity: 5 }], calculation_areas: [] },
+          { id: 202, enquiry_id: 101, section_name: 'External Walls', application_type_id: 1, line_items: [{ id: 302, enquiry_section_id: 202, product_id: 2, quantity: 12 }], calculation_areas: [] },
+        ],
+      },
+      {
+        id: 102,
+        job_reference: 'ENQ-2024-002',
+        projectDescription: 'Garage conversion project',
+        status: 'pending',
+        createdDate: '2025-10-23',
+        dueDate: '2025-10-30',
+        files: [{id: 2, name: 'Renovation_Plans_Main_House.docx', uploadedBy: 'Client'}],
+        sections: [{ id: 203, enquiry_id: 102, section_name: 'Master Bedroom Ceiling', application_type_id: 7, line_items: [], calculation_areas: [] }],
+      },
+       {
+        id: 103,
+        job_reference: 'ENQ-2024-003',
+        projectDescription: 'Rental property insulation upgrade',
+        status: 'pending',
+        createdDate: '2025-10-24',
+        dueDate: '2025-11-01',
+        files: [],
+        sections: [],
+      },
+    ];
+
+    let quotes = [
+        {
+            id: 1,
+            quoteNumber: 'Q-001',
+            enquiry_id: 101,
+            client_id: 2, // John Smith
+            pricing_tier_id: 1, // Retail
+            quote_date: '2025-10-20',
+            status: 'sent',
+            manual_discount: 0,
+            sections: [
+                { id: 601, quote_id: 1, section_name: 'Living Room Ceiling', application_type_id: 7, line_items: [{id: 401, quote_section_id: 601, product_id: 1, quantity: 5}] },
+                { id: 602, quote_id: 1, section_name: 'External Walls', application_type_id: 1, line_items: [{id: 402, quote_section_id: 602, product_id: 2, quantity: 12}] },
+            ]
+        },
+        {
+            id: 2,
+            quoteNumber: 'Q-002',
+            enquiry_id: null, // Created directly
+            client_id: 1, // BuildCo
+            pricing_tier_id: 2, // Trade
+            quote_date: '2025-10-21',
+            status: 'draft',
+            manual_discount: 0,
+            sections: []
+        },
+        {
+            id: 3,
+            quoteNumber: 'Q-003',
+            enquiry_id: null, // Created directly
+            client_id: 3, // Jane Doe
+            pricing_tier_id: 2, // Trade
+            quote_date: '2025-10-22',
+            status: 'accepted',
+            manual_discount: 50,
+            sections: [
+                 { id: 603, quote_id: 3, section_name: 'Skillion Roof', application_type_id: 8, line_items: [{id: 403, quote_section_id: 603, product_id: 6, quantity: 10}] },
+            ]
+        },
+        {
+            id: 4,
+            quoteNumber: 'Q-004',
+            enquiry_id: null, // Created directly
+            client_id: 2, // John Smith
+            pricing_tier_id: 1, // Retail
+            quote_date: '2025-10-22',
+            status: 'draft',
+            manual_discount: 0,
+            sections: []
+        }
+    ];
+    let nextQuoteId = 5;
+    let nextLineItemId = 404;
+    let nextSectionId = 604;
+    let nextEnquiryId = 104;
+    let nextFileId = 3;
+
+    const delay = (data, ms = 300) => new Promise(res => setTimeout(() => res(data), ms));
+
+    // --- API FUNCTIONS ---
+
+    const getEnquiries = async () => delay([...enquiries]);
+    const getProducts = async (includePrice = true) => {
+        if (includePrice) return delay([...products]);
+        return delay(products.map(({ "Retail Price (NZD)": price, ...rest }) => rest));
+    };
+    const getClients = async () => delay([...clients]);
+    const getPricingTiers = async () => delay([...pricingTiers]);
+    const getQuotes = async () => delay([...quotes]);
+    const getApplicationTypes = async () => delay([...applicationTypes]);
+
+    const createClient = async (newClientData) => {
+        const newClient = {
+            id: nextClientId++,
+            ...newClientData
+        };
+        clients.push(newClient);
+        return delay(newClient);
+    };
+
+    const updateClient = async (updatedClient) => {
+        const index = clients.findIndex(c => c.id === updatedClient.id);
+        if (index === -1) throw new Error("Client not found");
+        clients[index] = updatedClient;
+        return delay({ ...clients[index] });
+    };
+
+    const createEnquiry = async (jobReference, files, dueDate) => {
+        const newEnquiry = {
+            id: nextEnquiryId++,
+            job_reference: jobReference,
+            projectDescription: "New draft enquiry",
+            status: 'draft',
+            createdDate: new Date().toISOString().split('T')[0],
+            dueDate: dueDate,
+            files: files.map(f => ({ id: nextFileId++, name: f.name, uploadedBy: 'Client' })),
+            sections: [],
+        };
+        enquiries.unshift(newEnquiry);
+        return delay({ ...newEnquiry });
+    };
+
+    const sendEnquiryToVA = async (enquiryId) => {
+        const enquiry = enquiries.find(e => e.id === enquiryId);
+        if (!enquiry) throw new Error("Enquiry not found");
+        if (enquiry.status !== 'draft') throw new Error("Only draft enquiries can be sent to the VA.");
+
+        enquiry.status = 'pending';
+        if (enquiry.sections.length === 0) {
+          enquiry.sections.push({
+            id: nextSectionId++,
+            enquiry_id: enquiryId,
+            section_name: 'Default Section',
+            application_type_id: 1,
+            line_items: [],
+            calculation_areas: [],
+          });
+        }
+        return delay({ ...enquiry });
+    };
+
+    const updateEnquiry = async (updatedEnquiry) => {
+        const index = enquiries.findIndex(e => e.id === updatedEnquiry.id);
+        if (index === -1) throw new Error("Enquiry not found");
+        enquiries[index] = updatedEnquiry;
+        return delay({ ...enquiries[index] });
+    };
+
+
+    const submitEnquiry = async (enquiryId, vaFiles) => {
+        const enquiry = enquiries.find(e => e.id === enquiryId);
+        if (!enquiry) throw new Error("Enquiry not found");
+        
+        enquiry.status = 'submitted';
+        const newFiles = vaFiles.map(f => ({ id: nextFileId++, name: f.name, uploadedBy: 'VA'}));
+        enquiry.files.push(...newFiles);
+
+        return delay({ ...enquiry });
+    }
+
+    const convertEnquiryToQuote = async (enquiryId, clientId, pricingTierId) => {
+        const enquiry = enquiries.find(e => e.id === enquiryId);
+        if (!enquiry) throw new Error("Enquiry not found");
+        if (enquiry.status !== 'submitted' && enquiry.status !== 'draft') throw new Error("Only submitted or draft enquiries can be converted.");
+
+        enquiry.status = 'converted';
+        const newQuoteId = nextQuoteId++;
+        const newQuote = {
+            id: newQuoteId,
+            quoteNumber: `Q-00${newQuoteId}`,
+            enquiry_id: enquiryId,
+            client_id: clientId,
+            pricing_tier_id: pricingTierId,
+            quote_date: new Date().toISOString().split('T')[0],
+            status: 'draft',
+            manual_discount: 0,
+            sections: enquiry.sections.map((section) => {
+                const newQuoteSectionId = nextSectionId++;
+                return {
+                    id: newQuoteSectionId,
+                    quote_id: newQuoteId,
+                    section_name: section.section_name,
+                    application_type_id: section.application_type_id,
+                    line_items: section.line_items.map(item => ({
+                        id: nextLineItemId++,
+                        quote_section_id: newQuoteSectionId,
+                        product_id: item.product_id,
+                        quantity: item.quantity,
+                    }))
+                }
+            }),
+        };
+        quotes.push(newQuote);
+        return delay({ ...newQuote });
+    };
+
+    const createBlankQuote = async (clientId, pricingTierId) => {
+        const newQuoteId = nextQuoteId++;
+        const newQuote = {
+            id: newQuoteId,
+            quoteNumber: `Q-00${newQuoteId}`,
+            enquiry_id: null,
+            client_id: clientId,
+            pricing_tier_id: pricingTierId,
+            quote_date: new Date().toISOString().split('T')[0],
+            status: 'draft',
+            manual_discount: 0,
+            sections: [],
+        };
+        quotes.unshift(newQuote);
+        return delay({ ...newQuote });
+    };
+
+    const updateQuote = async (updatedQuote) => {
+        const index = quotes.findIndex(q => q.id === updatedQuote.id);
+        if (index === -1) throw new Error("Quote not found");
+        quotes[index] = updatedQuote;
+        return delay({ ...quotes[index] });
+    }
+
+    const getFullProductInfo = (productId) => {
+        return products.find(p => p.id === productId);
+    }
+
+    const getClientById = (id) => {
+        if(id === null) return undefined;
+        return clients.find(c => c.id === id);
+    }
+
+    const getPricingTierById = (id) => {
+         if(id === null) return undefined;
+        return pricingTiers.find(pt => pt.id === id);
+    }
+
+    const getApplicationTypeById = (id) => {
+        return applicationTypes.find(at => at.id === id);
+    }
+    
+    
+    // --- ALL REACT COMPONENTS ---
+    
+    const { useState, useEffect, useMemo, useCallback } = React;
+    let componentNextSectionId = 1000;
+    let componentNextLineItemId = 5000;
+
+    // --- Component: EnquiryCalculator.tsx ---
+    const EnquiryCalculator = ({ section, products, onSectionUpdate }) => {
+        const [areas, setAreas] = useState(section.calculation_areas);
+        const [selectedProductId, setSelectedProductId] = useState(null);
+
+        let nextCalcAreaId = 1000;
+        let nextCalcOpeningId = 5000;
+        let nextLineItemId = 9000;
+
+        const calculationSummary = useMemo(() => {
+            let grossArea = 0;
+            let openingsArea = 0;
+            areas.forEach(area => {
+                grossArea += area.length * area.height;
+                area.openings.forEach(opening => {
+                    openingsArea += opening.length * opening.height;
+                });
+            });
+            const netArea = grossArea - openingsArea;
+            return { grossArea, openingsArea, netArea };
+        }, [areas]);
+        
+        const suggestedQuantity = useMemo(() => {
+            if (!selectedProductId) return 0;
+            const product = products.find(p => p.id === selectedProductId);
+            const coverage = product ? parseFloat(product['Coverage (m²)'] || '0') : 0;
+            if (coverage === 0) return 0;
+            return Math.ceil(calculationSummary.netArea / coverage);
+        }, [selectedProductId, calculationSummary.netArea, products]);
+
+
+        const handleAddArea = () => {
+            const newArea = { id: nextCalcAreaId++, name: 'New Area', length: 0, height: 0, openings: [] };
+            const updatedAreas = [...areas, newArea];
+            setAreas(updatedAreas);
+            onSectionUpdate({ ...section, calculation_areas: updatedAreas });
+        };
+        
+        const handleUpdateArea = (areaId, field, value) => {
+            const updatedAreas = areas.map(area => area.id === areaId ? { ...area, [field]: value } : area);
+            setAreas(updatedAreas);
+            onSectionUpdate({ ...section, calculation_areas: updatedAreas });
+        }
+
+        const handleAddOpening = (areaId) => {
+            const newOpening = { id: nextCalcOpeningId++, name: 'Window', length: 0, height: 0 };
+            const updatedAreas = areas.map(area => {
+                if (area.id === areaId) {
+                    return { ...area, openings: [...area.openings, newOpening] };
+                }
+                return area;
+            });
+            setAreas(updatedAreas);
+            onSectionUpdate({ ...section, calculation_areas: updatedAreas });
+        };
+        
+         const handleUpdateOpening = (areaId, openingId, field, value) => {
+            const updatedAreas = areas.map(area => {
+                if (area.id === areaId) {
+                    const updatedOpenings = area.openings.map(op => op.id === openingId ? { ...op, [field]: value } : op);
+                    return { ...area, openings: updatedOpenings };
+                }
+                return area;
+            });
+            setAreas(updatedAreas);
+            onSectionUpdate({ ...section, calculation_areas: updatedAreas });
+        }
+
+        const addLineItem = (productId, quantity) => {
+            if (!productId || quantity <= 0) {
+                alert("Please select a product and ensure quantity is greater than zero.");
+                return;
+            }
+            const newLineItem = {
+                id: nextLineItemId++,
+                enquiry_section_id: section.id,
+                product_id: productId,
+                quantity: quantity
+            };
+            onSectionUpdate({ ...section, line_items: [...section.line_items, newLineItem] });
+        };
+
+        const removeLineItem = (lineItemId) => {
+            onSectionUpdate({ ...section, line_items: section.line_items.filter(item => item.id !== lineItemId) });
+        };
+
+        const ManualAddForm = () => {
+            const [manualProductId, setManualProductId] = useState('');
+            const [manualQuantity, setManualQuantity] = useState(1);
+          
+            const handleManualAdd = () => {
+              addLineItem(Number(manualProductId), manualQuantity);
+              setManualProductId('');
+              setManualQuantity(1);
+            };
+          
+            return (
+              <div className="flex gap-2 p-2 bg-gray-100 rounded-b-md">
+                <select value={manualProductId} onChange={e => setManualProductId(Number(e.target.value))} className="flex-grow p-2 border rounded-md text-sm">
+                  <option value="">-- Select Product for Manual Add --</option>
+                  {products.map(p => <option key={p.id} value={p.id}>{p["Product Name"]}</option>)}
+                </select>
+                <input type="number" value={manualQuantity} onChange={e => setManualQuantity(Number(e.target.value) || 1)} min="1" className="w-20 p-2 border rounded-md text-sm" />
+                <button onClick={handleManualAdd} className="bg-indigo-500 text-white font-bold px-3 py-2 rounded-md hover:bg-indigo-600 text-sm">Add</button>
+              </div>
+            );
+          };
+
+        return (
+            <div className="p-4">
+                <div className="space-y-4">
+                    {areas.map(area => (
+                        <div key={area.id} className="p-3 bg-gray-50 rounded-lg border">
+                            <div className="grid grid-cols-4 gap-2 items-center">
+                                <input type="text" value={area.name} onChange={e => handleUpdateArea(area.id, 'name', e.target.value)} className="col-span-2 p-1 border rounded text-sm" placeholder="Area Name (e.g., North Wall)"/>
+                                <input type="number" value={area.length} onChange={e => handleUpdateArea(area.id, 'length', parseFloat(e.target.value) || 0)} className="p-1 border rounded text-sm" placeholder="Length"/>
+                                <input type="number" value={area.height} onChange={e => handleUpdateArea(area.id, 'height', parseFloat(e.target.value) || 0)} className="p-1 border rounded text-sm" placeholder="Height"/>
+                            </div>
+                            <div className="pl-4 mt-2 space-y-1">
+                                {area.openings.map(op => (
+                                        <div key={op.id} className="grid grid-cols-4 gap-2 items-center">
+                                        <input type="text" value={op.name} onChange={e => handleUpdateOpening(area.id, op.id, 'name', e.target.value)} className="col-span-2 p-1 border rounded text-xs" placeholder="Opening (e.g., Window)"/>
+                                        <input type="number" value={op.length} onChange={e => handleUpdateOpening(area.id, op.id, 'length', parseFloat(e.target.value) || 0)} className="p-1 border rounded text-xs" placeholder="Length"/>
+                                        <input type="number" value={op.height} onChange={e => handleUpdateOpening(area.id, op.id, 'height', parseFloat(e.target.value) || 0)} className="p-1 border rounded text-xs" placeholder="Height"/>
+                                    </div>
+                                ))}
+                                <button onClick={() => handleAddOpening(area.id)} className="text-xs text-blue-600 hover:underline">+ Add Opening</button>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+                <button onClick={handleAddArea} className="mt-2 text-sm text-green-600 font-semibold hover:underline">+ Add Area Calculation</button>
+
+                <div className="mt-4 pt-4 border-t">
+                    <div className="grid grid-cols-3 gap-2 text-center text-sm mb-4">
+                            <div><span className="font-semibold block text-gray-700">{calculationSummary.grossArea.toFixed(2)} m²</span><span className="text-xs text-gray-500">Gross Area</span></div>
+                            <div><span className="font-semibold block text-red-500">{calculationSummary.openingsArea.toFixed(2)} m²</span><span className="text-xs text-gray-500">Openings</span></div>
+                            <div><span className="font-bold block text-green-600 text-base">{calculationSummary.netArea.toFixed(2)} m²</span><span className="text-xs text-gray-500">Net Area</span></div>
+                    </div>
+                    <div className="flex gap-2">
+                        <select value={selectedProductId || ''} onChange={e => setSelectedProductId(Number(e.target.value))} className="flex-grow p-2 border rounded-md text-sm">
+                            <option value="">-- Select Product for Calculation --</option>
+                            {products.map(p => <option key={p.id} value={p.id}>{p["Product Name"]}</option>)}
+                        </select>
+                        <input type="number" value={suggestedQuantity} readOnly className="w-20 p-2 border rounded-md text-sm bg-gray-100" title="Suggested Quantity"/>
+                        <button onClick={() => addLineItem(selectedProductId, suggestedQuantity)} className="bg-blue-500 text-white font-bold px-3 py-2 rounded-md hover:bg-blue-600 text-sm">Add</button>
+                    </div>
+                </div>
+
+                <div className="mt-4 pt-4 border-t">
+                    <h4 className="font-semibold text-gray-600 mb-2">Recommended Products in Section</h4>
+                    {section.line_items.length > 0 ? (
+                        <ul className="space-y-2">
+                            {section.line_items.map(item => {
+                                const product = products.find(p => p.id === item.product_id);
+                                return (
+                                    <li key={item.id} className="flex justify-between items-center p-2 bg-gray-100 rounded">
+                                        <span className="text-gray-800 text-sm">{product?.["Product Name"]}</span>
+                                        <div className="flex items-center gap-3">
+                                            <span className="font-semibold text-gray-600 text-sm">Qty: {item.quantity}</span>
+                                            <button onClick={() => removeLineItem(item.id)} className="text-red-500 hover:text-red-700 text-xs font-bold">X</button>
+                                        </div>
+                                    </li>
+                                );
+                            })}
+                        </ul>
+                    ) : (
+                        <p className="text-gray-500 italic text-sm mt-2">No products added to this section yet.</p>
+                    )}
+                </div>
+                <div className="mt-4 border-t">
+                     <ManualAddForm />
+                </div>
+            </div>
+        );
+    };
+
+    // --- Component: QuotePreview.tsx ---
+    const QuotePreview = ({ quote, clientName, calculation, onBack }) => {
+        const allLineItems = quote.sections.flatMap(section => 
+            section.line_items.map(item => ({
+                ...item,
+                product: getFullProductInfo(item.product_id)
+            }))
+        );
+
+        return (
+            <div className="bg-white p-6 md:p-10 rounded-lg shadow-2xl max-w-4xl mx-auto">
+                <button onClick={onBack} className="mb-6 text-blue-600 hover:underline font-semibold">&larr; Back to Editor</button>
+                
+                <div className="flex justify-between items-start mb-8 pb-4 border-b">
+                    <div>
+                        <h1 className="text-4xl font-bold text-gray-900">Quote</h1>
+                        <p className="text-gray-500">Quote ID: #{quote.id}</p>
+                    </div>
+                    <div className="text-right">
+                        <h2 className="text-2xl font-semibold text-gray-800">Your Company Name</h2>
+                        <p className="text-gray-600">123 Insulation St, Auckland</p>
+                        <p className="text-gray-600">contact@insulation.co.nz</p>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-8 mb-8">
+                    <div>
+                        <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2">Quote For</h3>
+                        <p className="text-lg font-medium text-gray-800">{clientName}</p>
+                    </div>
+                    <div className="text-right">
+                        <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2">Date of Issue</h3>
+                        <p className="text-lg font-medium text-gray-800">{new Date(quote.quote_date).toLocaleDateString()}</p>
+                    </div>
+                </div>
+
+                <div className="mb-8">
+                    <table className="w-full">
+                        <thead className="bg-gray-100">
+                            <tr>
+                                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600 uppercase tracking-wider">Product Description</th>
+                                <th className="px-4 py-3 text-right text-sm font-semibold text-gray-600 uppercase tracking-wider">Quantity</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200">
+                            {allLineItems.map(item => (
+                                <tr key={item.id}>
+                                    <td className="px-4 py-4 whitespace-nowrap">
+                                        <p className="text-md font-medium text-gray-900">{item.product["Product Name"]}</p>
+                                        <p className="text-sm text-gray-500">{item.product["Category"]}</p>
+                                    </td>
+                                    <td className="px-4 py-4 whitespace-nowrap text-right text-md text-gray-700">{item.quantity}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div className="flex justify-end">
+                    <div className="w-full max-w-sm p-6 bg-gray-100 rounded-lg">
+                        <div className="flex justify-between items-center">
+                            <span className="text-xl font-semibold text-gray-600">Grand Total</span>
+                            <span className="text-3xl font-bold text-gray-900">${calculation.grandTotal.toFixed(2)}</span>
+                        </div>
+                         <p className="text-right text-sm text-gray-500 mt-1">All prices are inclusive of GST.</p>
+                    </div>
+                </div>
+                
+                <div className="mt-10 text-center text-sm text-gray-500">
+                    <p>Thank you for your business!</p>
+                    <p>This quote is valid for 30 days.</p>
+                </div>
+            </div>
+        );
+    };
+
+    // --- Component: ClientEditor.tsx ---
+    const ClientEditor = ({ client, onBack, onUpdate }) => {
+        const [isEditing, setIsEditing] = useState(false);
+        const [editedClient, setEditedClient] = useState(JSON.parse(JSON.stringify(client)));
+        const [isSaving, setIsSaving] = useState(false);
+        
+        const handleSave = async () => {
+            setIsSaving(true);
+            try {
+                const updated = await updateClient(editedClient);
+                onUpdate(updated);
+                setIsEditing(false);
+            } catch (error) {
+                console.error("Failed to update client:", error);
+                alert("Could not update client.");
+            } finally {
+                setIsSaving(false);
+            }
+        };
+
+        const handleCancel = () => {
+            setEditedClient(JSON.parse(JSON.stringify(client)));
+            setIsEditing(false);
+        };
+        
+        const handleChange = (e) => {
+            const { name, value } = e.target;
+            setEditedClient(prev => ({ ...prev, [name]: value }));
+        };
+
+        return (
+            <div className="bg-white p-8 rounded-lg shadow-2xl max-w-4xl mx-auto">
+                <button onClick={onBack} className="mb-6 text-blue-600 hover:underline font-semibold">&larr; Back to Dashboard</button>
+                <div className="flex justify-between items-center mb-6 pb-4 border-b">
+                    <h2 className="text-3xl font-bold text-gray-800">Client Details</h2>
+                    {!isEditing && <button onClick={() => setIsEditing(true)} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Edit</button>}
+                </div>
+
+                {isEditing ? (
+                    <div className="space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">Display Name</label>
+                                <input name="client_name" value={editedClient.client_name} onChange={handleChange} className="mt-1 p-2 border rounded-md w-full" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">Company Name</label>
+                                <input name="companyName" value={editedClient.companyName} onChange={handleChange} className="mt-1 p-2 border rounded-md w-full" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">Contact Name</label>
+                                <input name="contactName" value={editedClient.contactName} onChange={handleChange} className="mt-1 p-2 border rounded-md w-full" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">Email</label>
+                                <input type="email" name="email" value={editedClient.email} onChange={handleChange} className="mt-1 p-2 border rounded-md w-full" />
+                            </div>
+                             <div>
+                                <label className="block text-sm font-medium text-gray-700">Phone</label>
+                                <input name="phone" value={editedClient.phone} onChange={handleChange} className="mt-1 p-2 border rounded-md w-full" />
+                            </div>
+                        </div>
+                         <div>
+                            <label className="block text-sm font-medium text-gray-700">Notes</label>
+                            <textarea name="notes" value={editedClient.notes} onChange={handleChange} className="mt-1 p-2 border rounded-md w-full h-32" />
+                        </div>
+                        <div className="flex justify-end gap-4 pt-4">
+                            <button onClick={handleCancel} className="px-4 py-2 bg-gray-200 rounded-md hover:bg-gray-300">Cancel</button>
+                            <button onClick={handleSave} disabled={isSaving} className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-green-300">
+                                {isSaving ? 'Saving...' : 'Save Changes'}
+                            </button>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="space-y-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
+                             <div>
+                                <h3 className="text-sm font-medium text-gray-500">Display Name</h3>
+                                <p className="mt-1 text-lg text-gray-900">{client.client_name}</p>
+                            </div>
+                            <div>
+                                <h3 className="text-sm font-medium text-gray-500">Company Name</h3>
+                                <p className="mt-1 text-lg text-gray-900">{client.companyName || 'N/A'}</p>
+                            </div>
+                             <div>
+                                <h3 className="text-sm font-medium text-gray-500">Contact Person</h3>
+                                <p className="mt-1 text-lg text-gray-900">{client.contactName}</p>
+                            </div>
+                            <div>
+                                <h3 className="text-sm font-medium text-gray-500">Email Address</h3>
+                                <p className="mt-1 text-lg text-gray-900">{client.email}</p>
+                            </div>
+                             <div>
+                                <h3 className="text-sm font-medium text-gray-500">Phone Number</h3>
+                                <p className="mt-1 text-lg text-gray-900">{client.phone}</p>
+                            </div>
+                        </div>
+                        <div>
+                            <h3 className="text-sm font-medium text-gray-500">Notes</h3>
+                            <p className="mt-1 text-lg text-gray-900 whitespace-pre-wrap">{client.notes || 'No notes provided.'}</p>
+                        </div>
+                    </div>
+                )}
+            </div>
+        );
+    };
+
+
+    // --- Component: QuoteEditor.tsx ---
+    const QuoteEditor = ({ quote: initialQuote, onBack, onUpdate }) => {
+        const [quote, setQuote] = useState(JSON.parse(JSON.stringify(initialQuote)));
+        const [clients, setClients] = useState([]);
+        const [pricingTiers, setPricingTiers] = useState([]);
+        const [products, setProducts] = useState([]);
+        const [applicationTypes, setApplicationTypes] = useState([]);
+        const [dragInfo, setDragInfo] = useState(null);
+        const [isSaving, setIsSaving] = useState(false);
+        const [showPreview, setShowPreview] = useState(false);
+
+        useEffect(() => {
+            const fetchData = async () => {
+                const [clientsData, tiersData, productsData, appTypesData] = await Promise.all([
+                    getClients(),
+                    getPricingTiers(),
+                    getProducts(true),
+                    getApplicationTypes()
+                ]);
+                setClients(clientsData);
+                setPricingTiers(tiersData);
+                setProducts(productsData);
+                setApplicationTypes(appTypesData);
+            };
+            fetchData();
+        }, []);
+        
+        const handleSave = async () => {
+            setIsSaving(true);
+            try {
+                const updated = await updateQuote(quote);
+                onUpdate(updated);
+            } catch(error) {
+                console.error("Failed to save quote:", error);
+                alert("Could not save quote.");
+            } finally {
+                setIsSaving(false);
+            }
+        };
+        
+        const calculation = useMemo(() => {
+            const tier = pricingTiers.find(t => t.id === quote.pricing_tier_id);
+            const tierDiscountPercentage = tier ? tier.discount_percentage : 0;
+            
+            const subtotal = quote.sections.reduce((total, section) => {
+                return total + section.line_items.reduce((sectionTotal, item) => {
+                    const product = products.find(p => p.id === item.product_id);
+                    const price = product ? parseFloat(product["Retail Price (NZD)"]) : 0;
+                    return sectionTotal + (price * item.quantity);
+                }, 0);
+            }, 0);
+            
+            const tierDiscount = subtotal * (tierDiscountPercentage / 100);
+            const manualDiscount = quote.manual_discount;
+            const taxableAmount = subtotal - tierDiscount - manualDiscount;
+            const tax = taxableAmount * 0.15;
+            const grandTotal = taxableAmount + tax;
+            
+            return { subtotal, tierDiscount, manualDiscount, tax, grandTotal };
+        }, [quote, pricingTiers, products]);
+        
+        const onDragStart = (lineItemId, sourceSectionId) => setDragInfo({ lineItemId, sourceSectionId });
+        
+        const onDrop = (targetSectionId) => {
+            if (!dragInfo || targetSectionId === dragInfo.sourceSectionId) return;
+            
+            setQuote(prev => {
+                const newQuote = JSON.parse(JSON.stringify(prev));
+                const sourceSection = newQuote.sections.find((s) => s.id === dragInfo.sourceSectionId);
+                const targetSection = newQuote.sections.find((s) => s.id === targetSectionId);
+                if (!sourceSection || !targetSection) return prev;
+                
+                const itemIndex = sourceSection.line_items.findIndex((item) => item.id === dragInfo.lineItemId);
+                if(itemIndex === -1) return prev;
+                
+                const [movedItem] = sourceSection.line_items.splice(itemIndex, 1);
+                movedItem.quote_section_id = targetSectionId;
+                targetSection.line_items.push(movedItem);
+                
+                return newQuote;
+            });
+            setDragInfo(null);
+        };
+
+        const addSection = () => {
+            const newSection = {
+                id: componentNextSectionId++,
+                quote_id: quote.id,
+                section_name: "New Section",
+                application_type_id: 1,
+                line_items: []
+            };
+            setQuote(prev => ({ ...prev, sections: [...prev.sections, newSection] }));
+        }
+
+        const updateSection = (id, name, appTypeId) => {
+            setQuote(prev => ({
+                ...prev,
+                sections: prev.sections.map(s => s.id === id ? { ...s, section_name: name, application_type_id: appTypeId } : s)
+            }))
+        }
+
+        const removeSection = (id) => {
+            if (window.confirm("Are you sure you want to delete this section and all its items?")) {
+                setQuote(prev => ({...prev, sections: prev.sections.filter(s => s.id !== id) }));
+            }
+        }
+
+        const addProductToSection = (sectionId, productId, quantity) => {
+            if (!productId || quantity <= 0) {
+                alert("Please select a product and quantity.");
+                return;
+            }
+            const newLineItem = {
+                id: componentNextLineItemId++,
+                quote_section_id: sectionId,
+                product_id: productId,
+                quantity: quantity
+            };
+            setQuote(prev => ({
+                ...prev,
+                sections: prev.sections.map(s => s.id === sectionId ? {...s, line_items: [...s.line_items, newLineItem]} : s)
+            }))
+        }
+        
+        const removeProductFromSection = (sectionId, lineItemId) => {
+            setQuote(prev => ({
+                ...prev,
+                sections: prev.sections.map(s => s.id === sectionId ? {...s, line_items: s.line_items.filter(li => li.id !== lineItemId)} : s)
+            }))
+        }
+
+        if (showPreview) {
+            const clientName = getClientById(quote.client_id)?.client_name || 'N/A';
+            return <QuotePreview quote={quote} clientName={clientName} calculation={calculation} onBack={() => setShowPreview(false)} />;
+        }
+        
+        const AddProductForm = ({sectionId}) => {
+            const [productId, setProductId] = useState('');
+            const [quantity, setQuantity] = useState(1);
+
+            const handleAdd = () => {
+                addProductToSection(sectionId, Number(productId), quantity);
+                setProductId('');
+                setQuantity(1);
+            }
+
+            return <div className="flex gap-2 p-2 border-t mt-2">
+                <select value={productId} onChange={e => setProductId(Number(e.target.value))} className="flex-grow p-1 border rounded-md text-sm">
+                    <option value="">-- Select Product --</option>
+                    {products.map(p => <option key={p.id} value={p.id}>{p["Product Name"]}</option>)}
+                </select>
+                <input type="number" value={quantity} onChange={e => setQuantity(Number(e.target.value))} min="1" className="w-20 p-1 border rounded-md text-sm" />
+                <button onClick={handleAdd} className="bg-blue-500 text-white font-bold px-3 rounded-md hover:bg-blue-600 text-sm">Add</button>
+            </div>
+        }
+        
+        const currentClient = getClientById(quote.client_id);
+        const currentTier = getPricingTierById(quote.pricing_tier_id);
+
+        return (
+            <div className="bg-white p-6 rounded-lg shadow-2xl">
+                <button onClick={onBack} className="mb-4 text-blue-600 hover:underline font-semibold">&larr; Back to Dashboard</button>
+                <div className="flex justify-between items-start mb-6 pb-4 border-b">
+                    <div>
+                         <h2 className="text-3xl font-bold text-gray-800">Editing Quote #{quote.quoteNumber}</h2>
+                         <p className="text-gray-500">For: <span className="font-semibold text-gray-700">{currentClient?.client_name || 'N/A'}</span></p>
+                    </div>
+                    <div className="flex flex-col items-end">
+                        <span className="text-lg font-semibold">{currentTier?.tier_name} Tier</span>
+                        <span className="text-sm text-gray-500">{currentTier?.discount_percentage}% Discount</span>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8 p-4 bg-gray-50 rounded-lg border">
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700">Client</label>
+                        <select value={quote.client_id ?? ''} onChange={e => setQuote({...quote, client_id: Number(e.target.value)})} className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
+                             {clients.map(c => <option key={c.id} value={c.id}>{c.client_name}</option>)}
+                        </select>
+                    </div>
+                    <div>
+                         <label className="block text-sm font-medium text-gray-700">Pricing Tier</label>
+                        <select value={quote.pricing_tier_id ?? ''} onChange={e => setQuote({...quote, pricing_tier_id: Number(e.target.value)})} className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
+                             {pricingTiers.map(t => <option key={t.id} value={t.id}>{t.tier_name} ({t.discount_percentage}%)</option>)}
+                        </select>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700">Manual Discount ($)</label>
+                        <input type="number" value={quote.manual_discount} onChange={e => setQuote({...quote, manual_discount: parseFloat(e.target.value) || 0})} className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"/>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div className="lg:col-span-2 space-y-6">
+                        <div className="flex justify-between items-center">
+                            <h3 className="text-xl font-semibold text-gray-700">Quote Sections</h3>
+                            <button onClick={addSection} className="bg-green-500 text-white font-bold py-2 px-4 rounded-md hover:bg-green-600">+ Add Section</button>
+                        </div>
+                        {quote.sections.map(section => {
+                            const color = getApplicationTypeById(section.application_type_id)?.["Colour Code"] || '#CCC';
+                            return (
+                             <div key={section.id} className="border rounded-lg" style={{ borderLeft: `5px solid ${color}` }} onDragOver={(e) => e.preventDefault()} onDrop={() => onDrop(section.id)}>
+                                <div className="p-4 bg-gray-50 flex justify-between items-center rounded-t-lg">
+                                    <input type="text" value={section.section_name} onChange={e => updateSection(section.id, e.target.value, section.application_type_id)} className="text-lg font-semibold bg-transparent w-1/2"/>
+                                    <select value={section.application_type_id} onChange={e => updateSection(section.id, section.section_name, Number(e.target.value))} className="text-sm p-1 rounded border">
+                                        {applicationTypes.map(at => <option key={at.id} value={at.id}>{at["Application Type"]}</option>)}
+                                    </select>
+                                    <button onClick={() => removeSection(section.id)} className="text-red-500 hover:text-red-700 font-bold text-xl">&times;</button>
+                                </div>
+                                <div className="p-2 space-y-2">
+                                   {section.line_items.map(item => {
+                                       const product = getFullProductInfo(item.product_id);
+                                       return (
+                                           <div key={item.id} draggable onDragStart={() => onDragStart(item.id, section.id)} className="flex justify-between items-center p-2 bg-white rounded shadow-sm cursor-grab border hover:border-blue-500">
+                                               <span className="text-sm text-gray-800 flex-grow">{product?.["Product Name"]}</span>
+                                               <span className="font-semibold text-gray-600 mx-4">Qty: {item.quantity}</span>
+                                               <button onClick={() => removeProductFromSection(section.id, item.id)} className="text-red-400 hover:text-red-600 text-xs">remove</button>
+                                           </div>
+                                       );
+                                   })}
+                                   {section.line_items.length === 0 && <p className="text-gray-500 italic p-4 text-center">Drag items or add new products</p>}
+                                    <AddProductForm sectionId={section.id} />
+                                </div>
+                            </div>
+                        )})}
+                    </div>
+
+                    <div className="lg:col-span-1">
+                        <div className="bg-gray-50 p-6 rounded-lg shadow-inner sticky top-8">
+                            <h3 className="text-xl font-bold text-gray-800 border-b pb-2 mb-4">Pricing Summary</h3>
+                            <div className="space-y-3 text-gray-700">
+                                 <div className="flex justify-between"><span>Subtotal:</span> <span>${calculation.subtotal.toFixed(2)}</span></div>
+                                 <div className="flex justify-between text-red-600"><span>Tier Discount:</span> <span>-${calculation.tierDiscount.toFixed(2)}</span></div>
+                                 <div className="flex justify-between text-red-600"><span>Manual Discount:</span> <span>-${calculation.manualDiscount.toFixed(2)}</span></div>
+                                 <hr className="my-2"/>
+                                 <div className="flex justify-between"><span>Tax (15%):</span> <span>${calculation.tax.toFixed(2)}</span></div>
+                                 <div className="flex justify-between text-2xl font-bold text-gray-900 mt-2 pt-2 border-t"><span>Grand Total:</span> <span>${calculation.grandTotal.toFixed(2)}</span></div>
+                            </div>
+                            <div className="mt-6 flex flex-col space-y-2">
+                               <button onClick={handleSave} disabled={isSaving} className="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-md hover:bg-blue-700 disabled:bg-blue-300 transition-colors">
+                                {isSaving ? 'Saving...' : 'Save Changes'}
+                               </button>
+                               <button onClick={() => setShowPreview(true)} className="w-full bg-green-600 text-white font-bold py-2 px-4 rounded-md hover:bg-green-700 transition-colors">
+                                Generate Final Quote
+                               </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    // --- View: VirtualAssistantView.tsx ---
+    const VirtualAssistantView = () => {
+        const [enquiries, setEnquiries] = useState([]);
+        const [products, setProducts] = useState([]);
+        const [applicationTypes, setApplicationTypes] = useState([]);
+        const [selectedEnquiry, setSelectedEnquiry] = useState(null);
+        const [isLoading, setIsLoading] = useState(true);
+        const [searchTerm, setSearchTerm] = useState('');
+        const [statusFilter, setStatusFilter] = useState('all');
+
+        let nextSectionId = 800;
+
+        const statusStyles = {
+          pending: 'bg-yellow-100 text-yellow-800',
+          submitted: 'bg-blue-100 text-blue-800',
+          converted: 'bg-green-100 text-green-800',
+        };
+
+        const fetchAllData = useCallback(async () => {
+            setIsLoading(true);
+            try {
+                const [enquiriesData, productsData, appTypesData] = await Promise.all([
+                    getEnquiries(),
+                    getProducts(false),
+                    getApplicationTypes()
+                ]);
+                setEnquiries(enquiriesData);
+                setProducts(productsData);
+                setApplicationTypes(appTypesData);
+            } catch(error) {
+                console.error("Failed to fetch data:", error);
+            } finally {
+                setIsLoading(false);
+            }
+        }, []);
+
+        useEffect(() => {
+            fetchAllData();
+        }, [fetchAllData]);
+        
+        const handleEnquiryUpdate = (updatedEnquiry) => {
+            setEnquiries(prev => prev.map(e => e.id === updatedEnquiry.id ? updatedEnquiry : e));
+            setSelectedEnquiry(updatedEnquiry);
+        };
+        
+        const filteredEnquiries = useMemo(() => {
+            return enquiries.filter(enquiry => {
+            const lowerSearch = searchTerm.toLowerCase();
+            const matchesSearch = enquiry.job_reference.toLowerCase().includes(lowerSearch) ||
+                                    enquiry.projectDescription.toLowerCase().includes(lowerSearch);
+            const matchesStatus = statusFilter === 'all' || enquiry.status === statusFilter;
+            return matchesSearch && matchesStatus;
+            }).filter(e => e.status === 'pending');
+        }, [enquiries, searchTerm, statusFilter]);
+        
+        const EnquiryDetails = ({ enquiry, onBack, products, applicationTypes, onEnquiryUpdate }) => {
+            const [editedEnquiry, setEditedEnquiry] = useState(JSON.parse(JSON.stringify(enquiry)));
+            const [isSaving, setIsSaving] = useState(false);
+            const [vaFiles, setVaFiles] = useState([]);
+            
+            const handleSubmission = async () => {
+                if(editedEnquiry.status === 'pending') {
+                    setIsSaving(true);
+                    await handleSaveProgress();
+                    const updated = await submitEnquiry(editedEnquiry.id, vaFiles);
+                    onEnquiryUpdate(updated);
+                    setIsSaving(false);
+                }
+            }
+
+            const handleSaveProgress = async () => {
+                setIsSaving(true);
+                const updated = await updateEnquiry(editedEnquiry);
+                onEnquiryUpdate(updated);
+                setIsSaving(false);
+            }
+
+            const handleSectionUpdate = (updatedSection) => {
+                setEditedEnquiry(prev => ({
+                    ...prev,
+                    sections: prev.sections.map(s => s.id === updatedSection.id ? updatedSection : s)
+                }))
+            }
+
+            const handleAddSection = () => {
+                const newSection = {
+                    id: nextSectionId++,
+                    enquiry_id: editedEnquiry.id,
+                    section_name: "New Section",
+                    application_type_id: 1,
+                    line_items: [],
+                    calculation_areas: []
+                };
+                setEditedEnquiry(prev => ({ ...prev, sections: [...prev.sections, newSection]}));
+            }
+
+            const handleSectionInfoChange = (sectionId, field, value) => {
+                setEditedEnquiry(prev => ({
+                    ...prev,
+                    sections: prev.sections.map(s => s.id === sectionId ? {...s, [field]: value} : s)
+                }));
+            };
+
+            return (
+                <div className="bg-white p-6 rounded-lg shadow-lg">
+                    <button onClick={onBack} className="mb-4 text-blue-600 hover:underline font-semibold">&larr; Back to Enquiries</button>
+                    <div className="flex justify-between items-start mb-6 pb-4 border-b">
+                        <div>
+                            <h2 className="text-2xl font-bold text-gray-800">{editedEnquiry.job_reference}</h2>
+                             <p className="text-gray-500">{enquiry.projectDescription}</p>
+                            <div className="flex items-center gap-4 mt-2">
+                                <span className={`px-2 py-1 text-xs font-bold rounded-full ${statusStyles[editedEnquiry.status]}`}>
+                                    {editedEnquiry.status}
+                                </span>
+                                {editedEnquiry.dueDate && (
+                                    <div className="text-sm font-semibold text-red-600 flex items-center gap-1">
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.414-1.415L11 9.586V6z" clipRule="evenodd" /></svg>
+                                        Due: {new Date(editedEnquiry.dueDate).toLocaleDateString()}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                        {editedEnquiry.status === 'pending' && (
+                            <div className="flex items-center gap-2">
+                                <button onClick={handleSaveProgress} disabled={isSaving} className="bg-gray-500 text-white font-bold py-2 px-4 rounded-md hover:bg-gray-600 transition-colors disabled:bg-gray-300">
+                                   {isSaving ? 'Saving...' : 'Save Progress'}
+                                </button>
+                                 <button onClick={handleSubmission} disabled={isSaving} className="bg-blue-600 text-white font-bold py-2 px-4 rounded-md hover:bg-blue-700 transition-colors disabled:bg-blue-300">
+                                    {isSaving ? 'Submitting...' : 'Submit for Review'}
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                    
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                        <div className="lg:col-span-2 space-y-6">
+                            <div className="flex justify-between items-center">
+                                <h3 className="text-xl font-semibold text-gray-700">Enquiry Sections & Calculations</h3>
+                                <button onClick={handleAddSection} className="bg-green-500 text-white font-bold text-sm py-1 px-3 rounded-md hover:bg-green-600 transition-colors">+ Add Section</button>
+                            </div>
+                            {editedEnquiry.sections.map(section => {
+                                const appType = getApplicationTypeById(section.application_type_id);
+                                const color = appType ? appType["Colour Code"] : '#cccccc';
+
+                                return (
+                                    <div key={section.id} className="border rounded-lg" style={{ borderLeft: `5px solid ${color}` }}>
+                                        <div className="p-4 bg-gray-50 flex justify-between items-center rounded-t-lg">
+                                            <input 
+                                                type="text"
+                                                value={section.section_name}
+                                                onChange={(e) => handleSectionInfoChange(section.id, 'section_name', e.target.value)}
+                                                className="text-lg font-semibold text-gray-700 bg-transparent border-b-2 border-transparent focus:border-blue-500 focus:outline-none"
+                                            />
+                                            <select 
+                                                value={section.application_type_id}
+                                                onChange={(e) => handleSectionInfoChange(section.id, 'application_type_id', Number(e.target.value))}
+                                                className="text-sm border-gray-300 rounded-md shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
+                                            >
+                                                {applicationTypes.map(at => <option key={at.id} value={at.id}>{at["Application Type"]}</option>)}
+                                            </select>
+                                        </div>
+                                       <EnquiryCalculator section={section} products={products} onSectionUpdate={handleSectionUpdate} />
+                                    </div>
+                                )
+                            })}
+                        </div>
+
+                        <div className="lg:col-span-1 space-y-6">
+                            {/* file sections can be added here */}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+
+        if (isLoading) {
+            return <div className="text-center p-8">Loading VA dashboard...</div>;
+        }
+
+        if (selectedEnquiry) {
+            return <EnquiryDetails enquiry={selectedEnquiry} onBack={() => setSelectedEnquiry(null)} products={products} applicationTypes={applicationTypes} onEnquiryUpdate={handleEnquiryUpdate} />;
+        }
+
+        return (
+            <div className="bg-white p-6 rounded-lg shadow-lg">
+            <div className="flex justify-between items-center mb-4 border-b pb-4">
+                <div>
+                    <h2 className="text-2xl font-bold text-gray-800">VA Workspace - Product Recommendations</h2>
+                    <p className="text-sm text-gray-500">Manage pending enquiries and submit recommendations.</p>
+                </div>
+                <button className="bg-blue-600 text-white font-bold py-2 px-4 rounded-md hover:bg-blue-700">New Recommendation</button>
+            </div>
+            
+            <div className="flex space-x-4 mb-4">
+                <input 
+                    type="text" 
+                    placeholder="Search enquiries..." 
+                    value={searchTerm}
+                    onChange={e => setSearchTerm(e.target.value)}
+                    className="w-full md:w-1/3 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                />
+            </div>
+
+            <div className="overflow-x-auto">
+                <table className="min-w-full bg-white">
+                <thead className="bg-gray-50">
+                    <tr>
+                    <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Job Reference</th>
+                    <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Project Description</th>
+                    <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                    <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created Date</th>
+                    </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                    {filteredEnquiries.map(enquiry => (
+                    <tr key={enquiry.id} onClick={() => setSelectedEnquiry(enquiry)} className="hover:bg-gray-50 cursor-pointer">
+                        <td className="py-4 px-4 whitespace-nowrap font-medium text-blue-600">{enquiry.job_reference}</td>
+                        <td className="py-4 px-4 whitespace-nowrap text-gray-700">{enquiry.projectDescription}</td>
+                        <td className="py-4 px-4 whitespace-nowrap">
+                            <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${statusStyles[enquiry.status]}`}>
+                                {enquiry.status}
+                            </span>
+                        </td>
+                        <td className="py-4 px-4 whitespace-nowrap text-gray-500">{enquiry.createdDate}</td>
+                    </tr>
+                    ))}
+                    {filteredEnquiries.length === 0 && (
+                        <tr><td colSpan={4} className="text-center py-8 text-gray-500 italic">No pending enquiries found.</td></tr>
+                    )}
+                </tbody>
+                </table>
+            </div>
+            </div>
+        );
+    };
+    
+    // --- View: ClientView.tsx ---
+    const ClientView = () => {
+        const [enquiries, setEnquiries] = useState([]);
+        const [quotes, setQuotes] = useState([]);
+        const [clients, setClients] = useState([]);
+        const [pricingTiers, setPricingTiers] = useState([]);
+        const [isLoading, setIsLoading] = useState(true);
+        const [activeQuote, setActiveQuote] = useState(null);
+        const [activeClient, setActiveClient] = useState(null);
+        const [isCreatingClient, setIsCreatingClient] = useState(false);
+        
+        const [quoteSearch, setQuoteSearch] = useState('');
+        const [quoteStatus, setQuoteStatus] = useState('all');
+        const [enquirySearch, setEnquirySearch] = useState('');
+        
+        const quoteStatusStyles = {
+            draft: 'bg-yellow-100 text-yellow-800',
+            sent: 'bg-blue-100 text-blue-800',
+            accepted: 'bg-green-100 text-green-800',
+        };
+
+        const enquiryStatusStyles = {
+            pending: 'bg-purple-100 text-purple-800',
+        };
+
+        const CreateClientModal = ({onClose, onClientCreated}) => {
+            const [clientData, setClientData] = useState({
+                client_name: '', companyName: '', contactName: '', email: '', phone: '', notes: ''
+            });
+            const [isSaving, setIsSaving] = useState(false);
+
+            const handleChange = (e) => {
+                const {name, value} = e.target;
+                setClientData(prev => ({...prev, [name]: value}));
+            }
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                if(!clientData.client_name.trim() || !clientData.contactName.trim()) {
+                    alert('Display Name and Contact Name are required.');
+                    return;
+                }
+                setIsSaving(true);
+                try {
+                    const newClient = await createClient(clientData);
+                    onClientCreated(newClient);
+                    onClose();
+                } catch (error) {
+                    console.error("Failed to create client:", error);
+                    alert("Could not create client.");
+                } finally {
+                    setIsSaving(false);
+                }
+            }
+
+            return (
+                <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-center">
+                    <div className="bg-white rounded-lg shadow-xl p-8 w-full max-w-2xl">
+                        <h2 className="text-2xl font-bold text-gray-800 mb-6">Create New Client</h2>
+                        <form onSubmit={handleSubmit} className="space-y-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <input name="client_name" value={clientData.client_name} onChange={handleChange} placeholder="Display Name (e.g., John Smith or BuildCo)" className="p-2 border rounded-md w-full" required />
+                                <input name="companyName" value={clientData.companyName} onChange={handleChange} placeholder="Company Name (Optional)" className="p-2 border rounded-md w-full" />
+                                <input name="contactName" value={clientData.contactName} onChange={handleChange} placeholder="Contact Person Name" className="p-2 border rounded-md w-full" required />
+                                <input name="email" type="email" value={clientData.email} onChange={handleChange} placeholder="Email Address" className="p-2 border rounded-md w-full" />
+                                <input name="phone" value={clientData.phone} onChange={handleChange} placeholder="Phone Number" className="p-2 border rounded-md w-full" />
+                            </div>
+                            <textarea name="notes" value={clientData.notes} onChange={handleChange} placeholder="Notes..." className="p-2 border rounded-md w-full h-24" />
+                            <div className="flex justify-end gap-4 pt-4">
+                                <button type="button" onClick={onClose} className="px-4 py-2 bg-gray-200 rounded-md hover:bg-gray-300">Cancel</button>
+                                <button type="submit" disabled={isSaving} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-blue-300">
+                                    {isSaving ? 'Saving...' : 'Save Client'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            );
+        }
+
+        const fetchClientData = useCallback(async () => {
+            setIsLoading(true);
+            try {
+                const [enquiriesData, quotesData, clientsData, tiersData] = await Promise.all([getEnquiries(), getQuotes(), getClients(), getPricingTiers()]);
+                setEnquiries(enquiriesData);
+                setQuotes(quotesData);
+                setClients(clientsData);
+                setPricingTiers(tiersData);
+            } catch(error) {
+                console.error("Failed to fetch client data:", error);
+            } finally {
+                setIsLoading(false);
+            }
+        }, []);
+
+        useEffect(() => {
+            fetchClientData();
+        }, [fetchClientData]);
+
+        const handleCreateQuote = async () => {
+            if(clients.length === 0) {
+                alert("Please create a client first.");
+                return;
+            }
+            const newQuote = await createBlankQuote(clients[0].id, pricingTiers[0].id);
+            setQuotes(prev => [newQuote, ...prev]);
+            setActiveQuote(newQuote);
+        }
+
+        const handleQuoteUpdate = (updatedQuote) => {
+            setQuotes(prev => prev.map(q => q.id === updatedQuote.id ? updatedQuote : q));
+            setActiveQuote(updatedQuote);
+        };
+
+        const handleClientCreated = (newClient) => {
+            setClients(prev => [...prev, newClient]);
+        }
+
+        const handleClientUpdate = (updatedClient) => {
+            setClients(prev => prev.map(c => c.id === updatedClient.id ? updatedClient : c));
+            setActiveClient(updatedClient);
+        }
+        
+        const filteredQuotes = useMemo(() => {
+            return quotes.filter(quote => {
+            const clientName = getClientById(quote.client_id)?.client_name || '';
+            const lowerSearch = quoteSearch.toLowerCase();
+            const matchesSearch = quote.quoteNumber.toLowerCase().includes(lowerSearch) || 
+                                    clientName.toLowerCase().includes(lowerSearch);
+            const matchesStatus = quoteStatus === 'all' || quote.status === quoteStatus;
+            return matchesSearch && matchesStatus;
+            });
+        }, [quotes, quoteSearch, quoteStatus]);
+        
+        const filteredEnquiries = useMemo(() => {
+            return enquiries.filter(enquiry => {
+            const lowerSearch = enquirySearch.toLowerCase();
+            const matchesSearch = enquiry.job_reference.toLowerCase().includes(lowerSearch) ||
+                                    enquiry.projectDescription.toLowerCase().includes(lowerSearch);
+            
+            return enquiry.status === 'pending' && matchesSearch;
+            });
+        }, [enquiries, enquirySearch]);
+
+        if (isLoading) {
+            return <div className="text-center p-8">Loading Client dashboard...</div>;
+        }
+        
+        if (activeQuote) {
+            return <QuoteEditor quote={activeQuote} onBack={() => setActiveQuote(null)} onUpdate={handleQuoteUpdate} />;
+        }
+
+        if (activeClient) {
+            return <ClientEditor client={activeClient} onBack={() => setActiveClient(null)} onUpdate={handleClientUpdate} />
+        }
+
+        return (
+            <div className="space-y-12">
+            {isCreatingClient && <CreateClientModal onClose={() => setIsCreatingClient(false)} onClientCreated={handleClientCreated} />}
+            <section className="bg-white p-6 rounded-lg shadow-lg">
+                <div className="flex justify-between items-center mb-4 border-b pb-4">
+                    <div>
+                        <h2 className="text-2xl font-bold text-gray-800">Quote Management</h2>
+                        <p className="text-sm text-gray-500">View, edit, and create new quotes.</p>
+                    </div>
+                     <div className="flex gap-2">
+                        <button onClick={() => setIsCreatingClient(true)} className="bg-green-600 text-white font-bold py-2 px-4 rounded-md hover:bg-green-700">New Client</button>
+                        <button onClick={handleCreateQuote} className="bg-blue-600 text-white font-bold py-2 px-4 rounded-md hover:bg-blue-700">Create New Quote</button>
+                    </div>
+                </div>
+
+                <div className="flex space-x-4 mb-4">
+                    <input 
+                        type="text" 
+                        placeholder="Search by client or quote #" 
+                        value={quoteSearch}
+                        onChange={e => setQuoteSearch(e.target.value)}
+                        className="w-full md:w-1/3 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    />
+                    <select 
+                        value={quoteStatus}
+                        onChange={e => setQuoteStatus(e.target.value)}
+                        className="px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    >
+                        <option value="all">All Statuses</option>
+                        <option value="draft">Draft</option>
+                        <option value="sent">Sent</option>
+                        <option value="accepted">Accepted</option>
+                    </select>
+                </div>
+                
+                <div className="overflow-x-auto">
+                    <table className="min-w-full bg-white">
+                        <thead className="bg-gray-50">
+                            <tr>
+                                <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quote #</th>
+                                <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quote Date</th>
+                                <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Client Name</th>
+                                <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Pricing Tier</th>
+                                <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Discount %</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200">
+                            {filteredQuotes.map(quote => {
+                                const client = getClientById(quote.client_id);
+                                const tier = getPricingTierById(quote.pricing_tier_id);
+                                return (
+                                    <tr key={quote.id} className="hover:bg-gray-50">
+                                        <td onClick={() => setActiveQuote(quote)} className="py-4 px-4 whitespace-nowrap font-medium text-blue-600 cursor-pointer">{quote.quoteNumber}</td>
+                                        <td onClick={() => setActiveQuote(quote)} className="py-4 px-4 whitespace-nowrap text-gray-700 cursor-pointer">{quote.quote_date}</td>
+                                        <td onClick={() => client && setActiveClient(client)} className="py-4 px-4 whitespace-nowrap text-gray-700 cursor-pointer hover:underline">{client?.client_name || 'N/A'}</td>
+                                        <td onClick={() => setActiveQuote(quote)} className="py-4 px-4 whitespace-nowrap cursor-pointer">
+                                            <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${quoteStatusStyles[quote.status]}`}>
+                                                {quote.status}
+                                            </span>
+                                        </td>
+                                        <td onClick={() => setActiveQuote(quote)} className="py-4 px-4 whitespace-nowrap text-gray-500 cursor-pointer">{tier?.tier_name || 'N/A'}</td>
+                                        <td onClick={() => setActiveQuote(quote)} className="py-4 px-4 whitespace-nowrap text-gray-500 cursor-pointer">{tier?.discount_percentage || 0}%</td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section className="bg-white p-6 rounded-lg shadow-lg">
+                <div className="flex justify-between items-center mb-4 border-b pb-4">
+                    <div>
+                        <h2 className="text-2xl font-bold text-gray-800">VA Workspace - Product Recommendations</h2>
+                        <p className="text-sm text-gray-500">Track enquiries currently with the Virtual Assistant.</p>
+                    </div>
+                </div>
+
+                <div className="flex space-x-4 mb-4">
+                    <input 
+                        type="text" 
+                        placeholder="Search enquiries..." 
+                        value={enquirySearch}
+                        onChange={e => setEnquirySearch(e.target.value)}
+                        className="w-full md:w-1/3 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    />
+                </div>
+
+                <div className="overflow-x-auto">
+                    <table className="min-w-full bg-white">
+                        <thead className="bg-gray-50">
+                            <tr>
+                                <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Job Reference</th>
+                                <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Project Description</th>
+                                <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created Date</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200">
+                             {filteredEnquiries.map(enquiry => (
+                                <tr key={enquiry.id} className="hover:bg-gray-50">
+                                    <td className="py-4 px-4 whitespace-nowrap font-medium text-gray-800">{enquiry.job_reference}</td>
+                                    <td className="py-4 px-4 whitespace-nowrap text-gray-700">{enquiry.projectDescription}</td>
+                                    <td className="py-4 px-4 whitespace-nowrap">
+                                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${enquiryStatusStyles[enquiry.status]}`}>
+                                            {enquiry.status}
+                                        </span>
+                                    </td>
+                                    <td className="py-4 px-4 whitespace-nowrap text-gray-500">{enquiry.createdDate}</td>
+                                </tr>
+                             ))}
+                             {filteredEnquiries.length === 0 && <tr><td colSpan={4} className="text-center py-8 text-gray-500 italic">No enquiries are currently with the VA.</td></tr>}
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+            </div>
+        );
+    };
+
+
+    // --- Component: App.tsx ---
+    const App = () => {
+      const [role, setRole] = useState('Client');
+
+      const RoleSwitcher = () => (
+        <div className="bg-white shadow rounded-full p-1 border">
+          <button
+            onClick={() => setRole('VA')}
+            className={`px-3 py-1 text-sm font-semibold rounded-full transition-colors ${role === 'VA' ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`}
+          >
+            VA
+          </button>
+          <button
+            onClick={() => setRole('Client')}
+            className={`px-3 py-1 text-sm font-semibold rounded-full transition-colors ${role === 'Client' ? 'bg-green-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`}
+          >
+            Client
+          </button>
+        </div>
+      );
+
+      return (
+        <div className="min-h-screen bg-slate-100 font-sans">
+          <header className="bg-white shadow-sm sticky top-0 z-40">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div className="flex justify-between items-center py-3">
+                    <div className="flex items-center space-x-4">
+                        <svg className="h-8 w-8 text-slate-700" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 5.25h16.5m-16.5 4.5h16.5m-16.5 4.5h16.5m-16.5 4.5h16.5" />
+                        </svg>
+                        <h1 className="text-xl font-semibold text-slate-800">My Drafts/Quotation Management System</h1>
+                        <span className="text-slate-400 font-medium text-sm pt-0.5">/</span>
+                        <span className="text-slate-500 font-medium text-sm pt-0.5">Proposals Process</span>
+                    </div>
+                    <div className="flex items-center space-x-4">
+                       <RoleSwitcher />
+                    </div>
+                </div>
+            </div>
+          </header>
+          <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            {role === 'VA' ? <VirtualAssistantView /> : <ClientView />}
+          </main>
+        </div>
+      );
+    };
+
+    // --- RENDER THE APP (from index.tsx) ---
+    const rootElement = document.getElementById('root');
+    const root = ReactDOM.createRoot(rootElement);
+    root.render(<App />);
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,290 @@
+Quote creation page:
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Premier Insulation – Quote & Job System</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
+  <style>
+    body {font-family: 'Inter', Arial, sans-serif;}
+    .text-xs{font-size:.75rem;line-height:1rem;}
+    .text-sm{font-size:.875rem;line-height:1.25rem;}
+    table{font-size:.875rem;}
+    th,td{padding:.5rem .75rem;vertical-align:middle;}
+    .status-draft {@apply bg-yellow-100 text-yellow-800;}
+    .status-sent {@apply bg-blue-100 text-blue-800;}
+    .status-accepted {@apply bg-green-100 text-green-800;}
+    .status-lost {@apply bg-red-100 text-red-800;}
+    .gp-good {color:#16a34a;}
+    .gp-ok {color:#ca8a04;}
+    .gp-bad {color:#dc2626;}
+  </style>
+</head>
+<body class="bg-gray-50">
+  <div id="root"></div>
+
+  <script type="text/babel" data-presets="env,react">
+
+  const {useState, useEffect} = React;
+
+  const NavItem = ({icon, label, target, currentView, setView}) => (
+    <button
+      onClick={() => setView(target)}
+      className={`w-full text-left px-4 py-3 rounded-lg flex items-center gap-3 transition ${currentView === target ? 'bg-blue-600 text-white' : 'hover:bg-gray-100'}`}
+    >
+      <i className={`fa-solid ${icon} w-5`}></i>
+      <span>{label}</span>
+    </button>
+  );
+
+  const PricingButton = ({label, selected, onClick}) => (
+    <button
+      onClick={onClick}
+      className={`px-6 py-3 rounded-lg font-medium transition ${selected ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+    >
+      {label}
+    </button>
+  );
+
+  const NewQuotePage = () => {
+    const [pricingMode, setPricingMode] = useState('Margin Markup');
+    const [markupPercent, setMarkupPercent] = useState(60);
+    const [wastePercent, setWastePercent] = useState(10);
+    const [lines, setLines] = useState([
+      {id:1, section:'External Walls', area:89, product:'R2.4 90mm Premier Glasswool', packs:10, cost:955, sell:1528, gp:37.5, custom:null},
+      {id:2, section:'Ceiling (Flat)', area:120, product:'R6.3 260mm Premier Glasswool', packs:14, cost:1400, sell:2240, gp:37.5, custom:null},
+      {id:3, section:'Skillion Roof', area:45, product:'R3.6 140mm Premier Glasswool', packs:6, cost:570, sell:912, gp:37.5, custom:null},
+    ]);
+
+    const totalCost = lines.reduce((sum, l) => sum + l.cost, 0);
+    const totalSell = lines.reduce((sum, l) => sum + (l.custom || l.sell), 0);
+    const totalGP = totalSell > 0 ? ((totalSell - totalCost) / totalSell * 100).toFixed(1) : 0;
+
+    const updateLineSell = (id, customValue) => {
+      setLines(lines.map(l => {
+        if (l.id === id) {
+          const newSell = customValue ? parseFloat(customValue) || 0 : l.sell;
+          const newGP = newSell > 0 ? ((newSell - l.cost) / newSell * 100).toFixed(1) : 0;
+          return {...l, custom: customValue ? newSell : null, sell: newSell, gp: newGP};
+        }
+        return l;
+      }));
+    };
+
+    return (
+      <div className="max-w-5xl mx-auto">
+        <div className="bg-white rounded-xl shadow-lg p-8">
+          {/* Header */}
+          <div className="flex justify-between items-start mb-8">
+            <div>
+              <h1 className="text-3xl font-bold text-blue-600">New Quote</h1>
+              <p className="text-gray-600 mt-1">VMI-PI-6468 – 8 Ulster Road, Blockhouse Bay</p>
+            </div>
+            <div className="text-right">
+              <div className="text-sm text-gray-600">Quote Date</div>
+              <div className="font-semibold">20 Nov 2025</div>
+              <div className="text-sm text-gray-600 mt-2">Status</div>
+              <select className="border rounded px-3 py-1">
+                <option>Draft</option>
+                <option>Sent</option>
+                <option>Accepted</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Customer & Job Info */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 p-6 bg-gray-50 rounded-lg">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Client Name</label>
+              <input type="text" className="w-full border rounded-lg px-4 py-2" defaultValue="John Smith" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Site Address *</label>
+              <input type="text" className="w-full border rounded-lg px-4 py-2 border" placeholder="8 Ulster Road, Blockhouse Bay" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Region *</label>
+              <select className="w-full border rounded-lg px-4 py-2">
+                <option>Auckland</option>
+                <option>Waikato</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Job Type *</label>
+              <select className="w-full border rounded-lg px-4 py-2">
+                <option>New Build</option>
+                <option>Retrofit</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Sales Rep</label>
+              <input type="text" className="w-full border rounded-lg px-4 py-2" defaultValue="Percy Darbhanga" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Follow-Up Date</label>
+              <input type="date" className="w-full border rounded-lg px-4 py-2" />
+            </div>
+          </div>
+
+          {/* Pricing Mode */}
+          <div className="mb-8 p-6 bg-gradient-to-r from-blue-50 to-cyan-50 rounded-xl">
+            <div className="flex items-center gap-4 flex-wrap">
+              <PricingButton label="Retail" selected={pricingMode === 'Retail'} onClick={() => setPricingMode('Retail')} />
+              <PricingButton label="Trade" selected={pricingMode === 'Trade'} onClick={() => setPricingMode('Trade')} />
+              <PricingButton label="VIP" selected={pricingMode === 'VIP'} onClick={() => setPricingMode('VIP')} />
+              <PricingButton label="Margin Markup" selected={pricingMode === 'Margin Markup'} onClick={() => setPricingMode('Margin Markup')} />
+              {pricingMode === 'Margin Markup' && (
+                <div className="flex items-center gap-3 ml-6">
+                  <label className="font-medium">Markup %</label>
+                  <input
+                    type="number"
+                    value={markupPercent}
+                    onChange={(e) => setMarkupPercent(e.target.value)}
+                    className="w-24 border rounded-lg px-3 py-2 text-center font-bold text-blue-600"
+                  />
+                  <span className="text-gray-600">%</span>
+                </div>
+              )}
+              <div className="flex items-center gap-3 ml-auto">
+                <label className="font-medium">Waste %</label>
+                <input
+                  type="number"
+                  value={wastePercent}
+                  onChange={(e) => setWastePercent(e.target.value)}
+                  className="w-20 border rounded-lg px-3 py-2 text-center"
+                />
+                <span className="text-gray-600">%</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Quote Lines Table */}
+          <div className="bg-white rounded-xl shadow overflow-hidden">
+            <table className="w-full">
+              <thead className="bg-gray-100">
+                <tr>
+                  <th className="text-left">Section</th>
+                  <th className="text-center w-24">Area m²</th>
+                  <th className="text-left">Product</th>
+                  <th className="text-center w-24">Packs</th>
+                  <th className="text-right w-32">Cost ex</th>
+                  <th className="text-right w-32">Sell ex</th>
+                  <th className="text-center w-24">GP%</th>
+                  <th className="w-8"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {lines.map(line => (
+                  <tr key={line.id} className="border-t hover:bg-gray-50">
+                    <td className="font-medium text-blue-600">{line.section}</td>
+                    <td className="text-center"><input type="number" defaultValue={line.area} className="w-20 text-center border rounded" /></td>
+                    <td>
+                      <select className="w-full border rounded px-2 py-1">
+                        <option>{line.product}</option>
+                      </select>
+                    </td>
+                    <td className="text-center font-medium">{line.packs}</td>
+                    <td className="text-right">${line.cost.toLocaleString()}</td>
+                    <td>
+                      <input
+                        type="number"
+                        defaultValue={line.custom || line.sell}
+                        onChange={(e) => updateLineSell(line.id, e.target.value)}
+                        className={`w-full text-right border rounded px-2 py-1 ${line.custom ? 'border-red-500 bg-red-50' : ''}`}
+                      />
+                    </td>
+                    <td className={`text-center font-bold ${line.gp >= 40 ? 'gp-good' : line.gp >= 30 ? 'gp-ok' : 'gp-bad'}`}>
+                      {line.gp}%
+                    </td>
+                    <td><button className="text-red-600"><i className="fa-solid fa-trash"></i></button></td>
+                  </tr>
+                ))}
+                <tr>
+                  <td colSpan="8" className="pt-4">
+                    <button className="text-blue-600 font-medium flex items-center gap-2">
+                      <i className="fa-solid fa-plus"></i> Add Section
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          {/* Totals Bar */}
+          <div className="mt-8 flex justify-end gap-12 text-lg font-bold">
+            <div className="text-right">
+              <div className="text-gray-600 text-sm">Total Cost ex GST</div>
+              <div>${totalCost.toLocaleString()}</div>
+            </div>
+            <div className="text-right">
+              <div className="text-gray-600 text-sm">Total Sell ex GST</div>
+              <div>${totalSell.toLocaleString()}</div>
+            </div>
+            <div className="text-right">
+              <div className="text-gray-600 text-sm">Gross Profit</div>
+              <div className={totalGP >= 40 ? 'text-green-600' : totalGP >= 30 ? 'text-yellow-600' : 'text-red-600'}>
+                {totalGP}%
+              </div>
+            </div>
+          </div>
+
+          {/* Buttons */}
+          <div className="mt-10 flex justify-end gap-4">
+            <button className="px-8 py-3 border border border-gray-300 rounded-lg hover:bg-gray-50">Save Draft</button>
+            <button className="px-8 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Send to Client</button>
+            <button className="px-8 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700">Generate PDF</button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const App = () => {
+    const [view, setView] = useState('new-quote'); // default to new quote for demo
+
+    const NavItem = ({icon, label, target}) => (
+      <button
+        onClick={() => setView(target)}
+        className={`w-full text-left px-4 py-3 rounded-lg flex items-center gap-3 transition ${view === target ? 'bg-blue-600 text-white' : 'hover:bg-gray-100'}`}
+      >
+        <i className={`fa-solid ${icon} w-5`}></i>
+        <span>{label}</span>
+      </button>
+    );
+
+    return (
+      <div className="min-h-screen bg-gray-50">
+        {/* Sidebar */}
+        <div className="fixed inset-y-0 left-0 w-64 bg-white shadow-lg p-4 space-y-2 overflow-y-auto">
+          <h1 className="text-xl font-bold text-blue-600 mb-6 px-4">Premier Insulation</h1>
+          <NavItem icon="fa-tachometer-alt" label="Dashboard" target="dashboard" />
+          <NavItem icon="fa-users" label="Customers" target="customers" />
+          <NavItem icon="fa-file-invoice" label="Quotes" target="new-quote" />
+          <NavItem icon="fa-tools" label="Jobs" target="jobs" />
+          <NavItem icon="fa-calendar-alt" label="Calendar" target="calendar" />
+          <NavItem icon="fa-box" label="Products" target="products" />
+          <NavItem icon="fa-clipboard-check" label="Insulation Assessments" target="assessments" />
+          <NavItem icon="fa-exclamation-triangle" label="Accidents & Near Misses" target="accidents" />
+          <NavItem icon="fa-certificate" label="Completion Certificates" target="certificates" />
+          <NavItem icon="fa-recycle" label="Recycle Bin" target="recycle" />
+          <NavItem icon="fa-robot" label="VA Workspace" target="va" />
+        </div>
+
+        {/* Main Content */}
+        <div className="ml-64 p-8">
+          {view === 'new-quote' && <NewQuotePage />}
+        </div>
+      </div>
+    );
+  };
+
+  ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

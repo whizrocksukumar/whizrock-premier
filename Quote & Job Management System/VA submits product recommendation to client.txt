@@ -1,0 +1,234 @@
+VA submits product recommendation back to client: this needs slight modification. The add section should be at the end of the first section and subsequently too. so when the VA completes the one section, he can add the next section. The colors need to match what we are using currently for the buttons, header, etc. The Top part is prepopulated from when the customer send the initial request to the VA. that is a separate form.
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VA Product Recommendation – Premier Insulation</title>
+    <style>
+        body {font-family: 'Segoe UI', Arial, sans-serif; background:#f8f9fa; margin:0; padding:20px;}
+        .container {max-width:1000px; margin:auto; background:#fff; border-radius:12px; box-shadow:0 4px 20px rgba(0,0,0,0.1); overflow:hidden;}
+        .header {background:#167d7f; color:white; padding:25px; text-align:center;}
+        .header h1 {margin:0; font-size:28px;}
+        .info-grid {display:grid; grid-template-columns:repeat(auto-fit, minmax(250px,1fr)); gap:15px; padding:25px; background:#f5f5f5;}
+        .info-box {background:white; padding:15px; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.05);}
+        .info-box strong {display:block; color:#167d7f; font-size:14px; margin-bottom:5px;}
+        .info-box span {font-size:18px; font-weight:600;}
+        .content {padding:30px;}
+        .add-section-btn {background:#167d7f; color:white; border:none; padding:14px 28px; border-radius:8px; font-size:16px; cursor:pointer; margin-bottom:20px;}
+        .section {border:2px solid #eee; border-radius:10px; padding:20px; margin-bottom:25px; position:relative;}
+        .section-header {font-size:20px; font-weight:bold; padding:10px 15px; border-radius:6px; margin:-20px -20px 20px -20px; color:white;}
+        .remove-section {position:absolute; top:10px; right:10px; background:#dc3545; color:white; border:none; width:30px; height:30px; border-radius:50%; cursor:pointer; font-size:18px;}
+        table {width:100%; border-collapse:collapse; margin:15px 0;}
+        th, td {border:1px solid #ddd; padding:12px; text-align:left;}
+        th {background:#f8f9fa; font-weight:600;}
+        select, input[type=text], input[type=number] {width:100%; padding:10px; border:1px solid #ddd; border-radius:6px; font-size:14px;}
+        .notes {width:100%; padding:12px; border:1px solid #ddd; border-radius:6px; min-height:80px; margin-top:15px;}
+        .footer {background:#f8f9fa; padding:30px; text-align:center;}
+        .submit-btn {background:#28a745; color:white; border:none; padding:16px 40px; font-size:18px; border-radius:8px; cursor:pointer;}
+        .total-box {background:#e9f7ef; padding:20px; border-radius:8px; text-align:center; font-size:20px; margin:20px 0;}
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="header">
+        <h1>Premier Insulation Rodney & West Auckland</h1>
+        <p>Product Recommendation Form</p>
+    </div>
+
+    <div class="info-grid">
+        <div class="info-box"><strong>Attention</strong><span id="attention">Loading...</span></div>
+        <div class="info-box"><strong>Site Address</strong><span id="site_address">Loading...</span></div>
+        <div class="info-box"><strong>Reference No</strong><span id="reference_no">Loading...</span></div>
+        <div class="info-box"><strong>Nimbus Ref</strong><span id="nimbus_ref">—</span></div>
+        <div class="info-box"><strong>Due Date</strong><span id="due_date">Loading...</span></div>
+        <div class="info-box"><strong>Date Today</strong><span id="today">Loading...</span></div>
+    </div>
+
+    <div class="content">
+        <button class="add-section-btn" onclick="addSection()">+ Add New Section</button>
+        <div id="sections-container"></div>
+
+        <div class="total-box">
+            <strong>Total Area Recommended:</strong> <span id="total-area">0.00</span> m²
+        </div>
+
+        <div>
+            <label><strong>General Notes / Special Instructions</strong></label>
+            <textarea id="general_notes" class="notes" placeholder="Any additional notes for the sales team..."></textarea>
+        </div>
+
+        <div class="footer">
+            <button class="submit-btn" onclick="submitForm()">Submit Recommendation → Generate Quote</button>
+        </div>
+    </div>
+</div>
+
+<!-- Hidden fields for GHL workflow -->
+<input type="hidden" id="opportunity_id">
+
+<script>
+    // ==================== CONFIGURATION ====================
+    const GHL_API_TOKEN = 'YOUR_SUBACCOUNT_API_KEY_HERE'; // ← Replace this when pasting
+    const PRODUCTS_API = 'https://services.leadconnectorhq.com/products/';
+    // ======================================================
+
+    // Pre-fill from URL parameters (from Trigger Link email)
+    const params = new URLSearchParams(window.location.search);
+    document.getElementById('attention').textContent = params.get('attention') || '—';
+    document.getElementById('site_address').textContent = params.get('site_address') || '—';
+    document.getElementById('reference_no').textContent = params.get('reference_no') || '—';
+    document.getElementById('nimbus_ref').textContent = params.get('nimbus_ref') || '—';
+    document.getElementById('due_date').textContent = params.get('due_date') || '—';
+    document.getElementById('today').textContent = new Date().toLocaleDateString('en-NZ', {weekday:'long', year:'numeric', month:'long', day:'numeric'});
+    document.getElementById('opportunity_id').value = params.get('opp_id') || '';
+
+    // Application Types with MYCS colours
+    const appColors = {
+        'Ext. Walls': '#FFD966',
+        'Masonry Walls': '#9FC5E8',
+        'G.I.W.': '#F6B26B',
+        'Void Wall': '#EAD1DC',
+        'Underfloor': '#76A5AF',
+        'Midfloor': '#D9EAD3',
+        'GCFO': '#F4CCCC',
+        'Soffit': '#B7B7B7',
+        'Flat Ceiling': '#C27BA0',
+        'Garage Flat Ceiling': '#C27BA0',
+        'Raked Ceiling': '#CFE2F3'
+    };
+
+    let products = [];
+    let sectionCounter = 0;
+
+    // Fetch products from GHL (no pricing shown)
+    async function loadProducts() {
+        try {
+            const res = await fetch(PRODUCTS_API, {
+                headers: { 'Authorization': `Bearer ${GHL_API_TOKEN}` }
+            });
+            const data = await res.json();
+            products = data.products.map(p => ({
+                id: p.id,
+                name: p.name,
+                sku: p.sku || '',
+                applications: p.custom_fields?.ApplicationTypes?.split(',') || [],
+                thickness: p.custom_fields?.['Thickness ( Gustafsson'] || ''
+            }));
+        } catch (e) {
+            console.error('Failed to load products – using fallback', e);
+            // Fallback hardcoded list (add your 20 products here if needed)
+            products = [];
+        }
+    }
+
+    function addSection() {
+        sectionCounter++;
+        const container = document.getElementById('sections-container');
+        const div = document.createElement('div');
+        div.className = 'section';
+        div.id = `section-${sectionCounter}`;
+        div.innerHTML = `
+            <button class="remove-section" onclick="removeSection(${sectionCounter})">×</button>
+            <div class="section-header" id="header-${sectionCounter}" style="background:#eee;">Select Application Type</div>
+            <label><strong>Application Type</strong></label>
+            <select onchange="updateHeader(${sectionCounter}, this.value); filterProducts(${sectionCounter})">
+                <option value="">– Select –</option>
+                ${Object.keys(appColors).map(k => `<option value="${k}">${k}</option>`).join('')}
+            </select>
+
+            <table>
+                <thead><tr><th>Plan Marker(s)</th><th>Product</th><th>Application</th><th>Area (m²)</th></tr></thead>
+                <tbody>
+                    <tr>
+                        <td><input type="text" id="marker-${sectionCounter}" placeholder="e.g. W10, W11"></td>
+                        <td>
+                            <select id="product-${sectionCounter}" required>
+                                <option value="">– Select Product –</option>
+                            </select>
+                        </td>
+                        <td id="app-display-${sectionCounter}">–</td>
+                        <td><input type="number" step="0.01" min="0" id="area-${sectionCounter}" onchange="calcTotal()" required></td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <label><strong>Notes for this section</strong></label>
+            <textarea class="notes" id="notes-${sectionCounter}"></textarea>
+        `;
+        container.appendChild(div);
+    }
+
+    function updateHeader(id, value) {
+        const header = document.getElementById(`header-${id}`);
+        header.textContent = value || 'Select Application Type';
+        header.style.background = appColors[value] || '#eee';
+        document.getElementById(`app-display-${id}`).textContent = value;
+    }
+
+    function filterProducts(id) {
+        const app = document.querySelector(`#header-${id}`).textContent;
+        const select = document.getElementById(`product-${id}`);
+        select.innerHTML = '<option value="">– Select Product –</option>';
+        const filtered = products.filter(p => p.applications.some(a => a.includes(app)));
+        filtered.forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p.id;
+            opt.textContent = `${p.name} (${p.sku})`;
+            select.appendChild(opt);
+        });
+    }
+
+    function removeSection(id) {
+        document.getElementById(`section-${id}`).remove();
+        calcTotal();
+    }
+
+    function calcTotal() {
+        let total = 0;
+        for (let i = 1; i <= sectionCounter; i++) {
+            const el = document.getElementById(`area-${i}`);
+            if (el) total += parseFloat(el.value) || 0;
+        }
+        document.getElementById('total-area').textContent = total.toFixed(2);
+    }
+
+    function submitForm() {
+        const sections = [];
+        for (let i = 1; i <= sectionCounter; i++) {
+            const sectionEl = document.getElementById(`section-${i}`);
+            if (!sectionEl) continue;
+            const app = sectionEl.querySelector('.section-header').textContent;
+            const marker = document.getElementById(`marker-${i}`).value;
+            const productId = document.getElementById(`product-${i}`).value;
+            const area = document.getElementById(`area-${i}`).value;
+            const notes = document.getElementById(`notes-${i}`).value;
+            if (app && productId && area) {
+                sections.push({app, marker, productId, area: parseFloat(area), notes});
+            }
+        }
+
+        const payload = {
+            opportunity_id: document.getElementById('opportunity_id').value,
+            general_notes: document.getElementById('general_notes').value,
+            sections
+        };
+
+        // POST to your GHL webhook (create in Workflows → Webhooks)
+        fetch('https://your-webhook-url-here.com', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        }).then(() => {
+            alert('Recommendation submitted! Quote is being generated.');
+            window.location.href = 'https://your-thank-you-page.com';
+        }).catch(() => alert('Error – contact admin'));
+    }
+
+    // Init
+    loadProducts().then(() => addSection());
+</script>
+</body>
+</html>

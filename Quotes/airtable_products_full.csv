@@ -1,0 +1,21 @@
+SKU,Product Name,Category,Application Types,Thickness (mm),Bale Dimensions,Coverage (m²),Retail Price (NZD),Unit
+P-001,Premier Acoustic/Thermal Ceiling/Wall Blanket R1.8 75mm,Glasswool,"External Walls, Internal Walls, Ceiling (Flat)",75,1200 × 15m,,195.0,Bale
+P-002,Premier Acoustic/Thermal Wall Blanket R2.2 90mm,Glasswool,"External Walls, Garage Walls, Internal Walls",90,1200 × 13m,,209.0,Bale
+P-003,Premier Acoustic/Thermal Wall Blanket R2.4 90mm,Glasswool,"External Walls, Garage Walls",90,1200 × 8m,,235.0,Bale
+P-004,Premier Acoustic/Thermal Wall Blanket R2.6 90mm,Glasswool,"External Walls, Midfloor",90,1200 × 7m,,219.0,Bale
+P-005,Premier Acoustic/Thermal Wall Blanket R2.8 90mm,Glasswool,External Walls,90,1200 × 5m,,208.0,Bale
+P-006,Premier Thermal/Acoustic Skillion Blanket R3.6 140mm,Glasswool,Ceiling (Raking/Skillion),140,1200 × 6.5m,,235.0,Bale
+P-007,Premier Thermal Ceiling Blanket R2.7 120mm,Glasswool,Ceiling (Flat),120,1200 × 10m,,208.0,Bale
+P-008,Premier Thermal Ceiling Blanket R2.9 125mm,Glasswool,Ceiling (Flat),125,1200 × 10m,,217.0,Bale
+P-009,Premier Thermal Ceiling Blanket R3.3 145mm,Glasswool,Ceiling (Flat),145,1200 × 8.5m,,195.0,Bale
+P-010,Premier Thermal Ceiling Blanket R3.6 155mm,Glasswool,Ceiling (Flat),155,1200 × 8m,,215.0,Bale
+P-011,Premier Thermal Ceiling Blanket R4.1 175mm,Glasswool,Ceiling (Flat),175,1200 × 8m,,212.0,Bale
+P-012,Premier Thermal Ceiling Segment R3.6 430mm,Glasswool,Ceiling (Flat),430,1200 × 0.43m,,175.0,Bale
+P-013,Premier Thermal Ceiling Segment R3.6 580mm,Glasswool,Ceiling (Flat),580,1200 × 0.58m,,235.0,Bale
+P-014,Premier Thermal Ceiling Segments R5.2 210mm,Glasswool,Ceiling (Flat),210,1200 × 0.58m,,162.0,Bale
+P-015,Premier Thermal Polyester Ceiling Blanket R1.8 115mm,Polyester,Ceiling (Flat),115,870 × 11.5m,,205.0,Bale
+P-016,Premier Thermal Polyester Ceiling Blanket R2.9 185mm,Polyester,Ceiling (Flat),185,870 × 8.62m,,217.0,Bale
+P-017,Premier Thermal Polyester Ceiling Blanket R3.2 185mm,Polyester,Ceiling (Flat),185,870 × 8.62m,,239.0,Bale
+P-018,Premier Thermal Polyester Ceiling Blanket R3.6 225mm,Polyester,Ceiling (Flat),225,870 × 7.47m,,265.0,Bale
+P-019,Premier Thermal Polyester Ceiling Blanket R4.0 240mm,Polyester,Ceiling (Flat),240,870 × 5.75m,,227.0,Bale
+P-020,Premier Thermal Polyester Skillion Sections R3.2 165mm,Polyester,Ceiling (Raking/Skillion),165,870 × 1m,,,Bale

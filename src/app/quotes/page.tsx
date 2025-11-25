@@ -38,7 +38,7 @@ export default function Quotes() {
   }
 
   const handleNewQuote = () => {
-    alert('Create new quote - will implement form')
+    window.location.href = '/quotes/new'
     // In real app, open a form modal or navigate to quote creation page
   }
 
