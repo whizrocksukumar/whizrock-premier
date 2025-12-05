@@ -4,21 +4,22 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import Image from 'next/image'
 import {
-  Home, FileText, Briefcase, Calendar, ClipboardCheck,
-  AlertTriangle, FileCheck, Wrench, Package, Users
+  Home, Users, FileText, ClipboardList, Package,
+  Wrench, Calendar, Box, Settings, AlertTriangle
 } from 'lucide-react'
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: Home },
   { href: '/customers', label: 'Customers', icon: Users },
-  { href: '/quotes', label: 'Quotes', icon: FileText },
+  { href: '/enquiries', label: 'Enquiries', icon: FileText },
+  { href: '/assessments', label: 'Assessments', icon: ClipboardList },
   { href: '/va-workspace', label: 'VA Workspace', icon: Package },
-  { href: '/jobs', label: 'Jobs', icon: Briefcase },
+  { href: '/quotes', label: 'Quotes', icon: FileText },
+  { href: '/jobs', label: 'Jobs', icon: Wrench },
   { href: '/calendar', label: 'Calendar', icon: Calendar },
-  { href: '/assessments', label: 'Insulation Assessments', icon: ClipboardCheck },
-  { href: '/incidents', label: 'Accidents & Near Misses', icon: AlertTriangle },
-  { href: '/certificates', label: 'Completion Certificates', icon: FileCheck },
-  { href: '/ps3', label: 'Recycle Bin', icon: Wrench },
+  { href: '/inventory', label: 'Inventory', icon: Box },
+  { href: '/settings', label: 'Settings', icon: Settings },
+  { href: '/incidents', label: 'Incidents', icon: AlertTriangle },
 ]
 
 export default function Sidebar() {
