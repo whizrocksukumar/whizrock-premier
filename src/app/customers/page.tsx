@@ -73,12 +73,12 @@ export default function CustomersPage() {
             if (companyIds.length > 0) {
                 const { data: companies } = await supabase
                     .from('companies')
-                    .select('id, name')
+                    .select('id, company_name')
                     .in('id', companyIds);
                 
                 if (companies) {
                     companies.forEach(company => {
-                        companyMap[company.id] = company.name;
+                        companyMap[company.id] = company.company_name;
                     });
                 }
             }
@@ -342,13 +342,13 @@ export default function CustomersPage() {
                                             className="text-left px-4 py-3 text-xs font-semibold whitespace-nowrap cursor-pointer hover:bg-[#0055aa]"
                                             onClick={() => handleSort('first_name')}
                                         >
-                                            Name <SortArrow field="first_name" />
+                                            Contact Name <SortArrow field="first_name" />
                                         </th>
                                         <th
                                             className="text-left px-4 py-3 text-xs font-semibold whitespace-nowrap cursor-pointer hover:bg-[#0055aa]"
                                             onClick={() => handleSort('company_name')}
                                         >
-                                            Company <SortArrow field="company_name" />
+                                            Company Name <SortArrow field="company_name" />
                                         </th>
                                         <th
                                             className="text-left px-4 py-3 text-xs font-semibold whitespace-nowrap cursor-pointer hover:bg-[#0055aa]"

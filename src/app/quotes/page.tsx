@@ -281,7 +281,10 @@ export default function QuotesPage() {
                       Quote No <SortArrow field="quote_number" />
                     </th>
                     <th className="text-left px-2 py-3 text-xs font-semibold whitespace-nowrap">
-                      Customer Name
+                      Company Name
+                    </th>
+                    <th className="text-left px-2 py-3 text-xs font-semibold whitespace-nowrap">
+                      Contact Name
                     </th>
                     <th 
                       className="text-left px-2 py-3 text-xs font-semibold whitespace-nowrap cursor-pointer hover:bg-[#0055aa]"
@@ -358,6 +361,9 @@ export default function QuotesPage() {
                           >
                             {quote.quote_number}
                           </Link>
+                        </td>
+                        <td className="px-2 py-2 text-sm text-gray-700">
+                          {quote.company_name || '-'}
                         </td>
                         <td className="px-2 py-2 text-sm">
                           {quote.client_name}

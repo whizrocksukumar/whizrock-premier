@@ -1,9 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { Search, Plus, Trash2, X } from 'lucide-react';
+import ClientDetailsForm from '@/components/ClientDetailsForm';
 
 // Types
 interface Product {
@@ -62,13 +63,17 @@ interface LineItemAREA extends LineItem {
 
 export default function CreateRecommendation() {
     const router = useRouter();
+    const searchParams = useSearchParams();
+    const opportunityId = searchParams.get('opportunityId');
 
-    // Form state
+    // Form state - Using dummy clientId for now (will be properly handled when opportunity linking is complete)
+    const [clientId, setClientId] = useState('');
     const [companyName, setCompanyName] = useState('');
     const [siteAddress, setSiteAddress] = useState('');
     const [contactPerson, setContactPerson] = useState('');
     const [contactEmail, setContactEmail] = useState('');
     const [contactPhone, setContactPhone] = useState('');
+    const [opportunityNumber, setOpportunityNumber] = useState('');
 
     // Sections and line items
     const [sections, setSections] = useState<Section[]>([]);
@@ -88,8 +93,63 @@ export default function CreateRecommendation() {
 
     useEffect(() => {
         loadLookupData();
-        addInitialSection();
-    }, []);
+        if (opportunityId) {
+            loadOpportunityData(opportunityId);
+        } else {
+            addInitialSection();
+        }
+    }, [opportunityId]);
+
+    const loadOpportunityData = async (oppId: string) => {
+        try {
+            const { data: opp, error } = await supabase
+                .from('opportunities')
+                .select(`
+                    id,
+                    opp_number,
+                    contact_first_name,
+                    contact_last_name,
+                    contact_email,
+                    contact_phone,
+                    site_address,
+                    site_city,
+                    site_postcode,
+                    company_id,
+                    notes
+                `)
+                .eq('id', oppId)
+                .single();
+
+            if (error) throw error;
+
+            if (opp) {
+                setOpportunityNumber(opp.opp_number);
+                setContactPerson(`${opp.contact_first_name} ${opp.contact_last_name}`);
+                setContactEmail(opp.contact_email || '');
+                setContactPhone(opp.contact_phone || '');
+                setSiteAddress(`${opp.site_address}, ${opp.site_city} ${opp.site_postcode}`);
+                if (opp.notes) setGeneralNotes(opp.notes);
+
+                // If there's a company, fetch it
+                if (opp.company_id) {
+                    const { data: company } = await supabase
+                        .from('companies')
+                        .select('company_name')
+                        .eq('id', opp.company_id)
+                        .single();
+                    
+                    if (company) {
+                        setCompanyName(company.company_name);
+                    }
+                }
+            }
+
+            addInitialSection();
+        } catch (err) {
+            console.error('Error loading opportunity:', err);
+            setError('Failed to load opportunity data');
+        }
+    };
 
     const loadLookupData = async () => {
         try {
@@ -328,44 +388,78 @@ export default function CreateRecommendation() {
             <div className="max-w-6xl mx-auto p-6">
                 {/* Client Details */}
                 <div className="bg-white rounded-lg shadow p-6 mb-6">
-                    <h2 className="text-lg font-semibold text-gray-800 mb-4">Client Information</h2>
-                    <div className="grid grid-cols-2 gap-4">
-                        <input
-                            type="text"
-                            placeholder="Company Name"
-                            value={companyName}
-                            onChange={e => setCompanyName(e.target.value)}
-                            className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC]"
-                        />
-                        <input
-                            type="text"
-                            placeholder="Site Address"
-                            value={siteAddress}
-                            onChange={e => setSiteAddress(e.target.value)}
-                            className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC]"
-                        />
-                        <input
-                            type="text"
-                            placeholder="Contact Person"
-                            value={contactPerson}
-                            onChange={e => setContactPerson(e.target.value)}
-                            className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC]"
-                        />
-                        <input
-                            type="email"
-                            placeholder="Email"
-                            value={contactEmail}
-                            onChange={e => setContactEmail(e.target.value)}
-                            className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC]"
-                        />
-                        <input
-                            type="tel"
-                            placeholder="Phone"
-                            value={contactPhone}
-                            onChange={e => setContactPhone(e.target.value)}
-                            className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC]"
-                        />
+                    <div className="flex items-center justify-between mb-4">
+                        <h2 className="text-lg font-semibold text-gray-800">Client Information</h2>
+                        {opportunityNumber && (
+                            <span className="px-3 py-1 bg-blue-100 text-blue-800 text-sm font-medium rounded-lg">
+                                Opportunity: {opportunityNumber}
+                            </span>
+                        )}
                     </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Company Name</label>
+                            <input
+                                type="text"
+                                placeholder="Company Name"
+                                value={companyName}
+                                onChange={e => setCompanyName(e.target.value)}
+                                disabled={!!opportunityId}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC] disabled:bg-gray-100 disabled:text-gray-700"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Site Address</label>
+                            <input
+                                type="text"
+                                placeholder="Site Address"
+                                value={siteAddress}
+                                onChange={e => setSiteAddress(e.target.value)}
+                                disabled={!!opportunityId}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC] disabled:bg-gray-100 disabled:text-gray-700"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Contact Person</label>
+                            <input
+                                type="text"
+                                placeholder="Contact Person"
+                                value={contactPerson}
+                                onChange={e => setContactPerson(e.target.value)}
+                                disabled={!!opportunityId}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC] disabled:bg-gray-100 disabled:text-gray-700"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                            <input
+                                type="email"
+                                placeholder="Email"
+                                value={contactEmail}
+                                onChange={e => setContactEmail(e.target.value)}
+                                disabled={!!opportunityId}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC] disabled:bg-gray-100 disabled:text-gray-700"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                            <input
+                                type="tel"
+                                placeholder="Phone"
+                                value={contactPhone}
+                                onChange={e => setContactPhone(e.target.value)}
+                                disabled={!!opportunityId}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC] disabled:bg-gray-100 disabled:text-gray-700"
+                            />
+                        </div>
+                    </div>
+                    {opportunityId && (
+                        <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                            <p className="text-sm text-blue-800">
+                                <strong>Note:</strong> Client details are pre-filled from the linked opportunity and cannot be edited here.
+                            </p>
+                        </div>
+                    )}
                 </div>
 
                 {/* Sections */}

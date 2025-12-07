@@ -11,7 +11,7 @@ import {
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: Home },
   { href: '/customers', label: 'Customers', icon: Users },
-  { href: '/enquiries', label: 'Enquiries', icon: FileText },
+  { href: '/opportunities', label: 'Opportunities', icon: FileText },
   { href: '/assessments', label: 'Assessments', icon: ClipboardList },
   { href: '/va-workspace', label: 'VA Workspace', icon: Package },
   { href: '/quotes', label: 'Quotes', icon: FileText },
