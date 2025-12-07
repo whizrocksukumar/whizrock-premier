@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
+import Link from 'next/link'
 import { Search, Eye, Edit, Trash2, ChevronUp, ChevronDown, Plus, Upload, Download, Printer } from 'lucide-react'
 
 interface Column {
@@ -21,6 +22,7 @@ interface DataTableProps {
   onExport?: () => void
   onPrint?: () => void
   title: string
+  subtitle?: string
   loading?: boolean
 }
 
@@ -35,6 +37,7 @@ export const DataTable = ({
   onExport,
   onPrint,
   title,
+  subtitle,
   loading = false
 }: DataTableProps) => {
   const [searchQuery, setSearchQuery] = useState('')
@@ -167,7 +170,10 @@ export const DataTable = ({
     <div className="page-content">
       <div className="page-header">
         <div className="flex items-center justify-between">
-          <h1 className="page-title">{title}</h1>
+          <div>
+            <h1 className="page-title">{title}</h1>
+            {subtitle && <p className="page-subtitle">{subtitle}</p>}
+          </div>
           <div className="page-actions">
             {onNew && (
               <button onClick={onNew} className="btn-primary">
@@ -273,6 +279,14 @@ export const DataTable = ({
                           <span className={getStatusBadge(row[col.name])}>
                             {formatValue(row[col.name], col.type)}
                           </span>
+                        ) : col.name === 'customer_name' && row.customer_name_link ? (
+                          <Link href={row.customer_name_link} className="text-[#0066CC] hover:underline">
+                            {formatValue(row[col.name], col.type)}
+                          </Link>
+                        ) : col.name === 'customer_company' && row.company_id && row[col.name] !== '—' ? (
+                          <Link href={`/companies/${row.company_id}`} className="text-[#0066CC] hover:underline">
+                            {formatValue(row[col.name], col.type)}
+                          </Link>
                         ) : (
                           formatValue(row[col.name], col.type)
                         )}

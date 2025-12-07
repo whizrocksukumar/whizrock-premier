@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 
 // Types
@@ -17,16 +17,17 @@ interface Region {
 
 export default function AddCustomerPage() {
     const router = useRouter();
+    const searchParams = useSearchParams();
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    // Form state
+    // Form state - pre-fill company_id from URL parameter
     const [firstName, setFirstName] = useState('');
     const [lastName, setLastName] = useState('');
     const [email, setEmail] = useState('');
     const [phone, setPhone] = useState('');
-    const [companyId, setCompanyId] = useState('');
+    const [companyId, setCompanyId] = useState(searchParams.get('company_id') || '');
     const [status, setStatus] = useState('Active');
     const [followUpDate, setFollowUpDate] = useState('');
 

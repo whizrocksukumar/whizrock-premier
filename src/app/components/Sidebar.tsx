@@ -18,8 +18,8 @@ const navItems = [
   { href: '/jobs', label: 'Jobs', icon: Wrench },
   { href: '/calendar', label: 'Calendar', icon: Calendar },
   { href: '/inventory', label: 'Inventory', icon: Box },
-  { href: '/settings', label: 'Settings', icon: Settings },
   { href: '/incidents', label: 'Incidents', icon: AlertTriangle },
+  { href: '/settings', label: 'Settings', icon: Settings },
 ]
 
 export default function Sidebar() {

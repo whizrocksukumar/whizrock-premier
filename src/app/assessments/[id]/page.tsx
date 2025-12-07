@@ -1,14 +1,12 @@
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
 import { ArrowLeft, Edit, Trash2, CheckCircle } from 'lucide-react'
+import WordingsSelector from '@/app/components/WordingsSelector'
+import { ResultType } from '@/types/assessmentWordings'
 
 interface AssessmentDetail {
   id: string
   reference_number: string
-  customer_name: string
-  customer_email: string
-  customer_phone: string | null
-  customer_company: string | null
   site_address: string
   city: string
   region_id: string
@@ -20,13 +18,32 @@ interface AssessmentDetail {
   created_at: string
   assigned_installer_id: string | null
   enquiry_id: string | null
-  team_members?: {
-    name: string
+  client_id: string | null
+  clients?: {
+    first_name: string
+    last_name: string
     email: string
-  }[] | null
-  enquiries?: {
-    enquiry_number: string
-  }[] | null
+    phone: string | null
+    company_id: string | null
+  } | null
+  team_members?: {
+    first_name: string
+    last_name: string
+    email: string
+  } | null
+}
+
+interface AssessmentArea {
+  id: string
+  assessment_id: string
+  area_name: string
+  square_metres: number
+  existing_insulation_type: string | null
+  recommended_r_value: string | null
+  removal_required: boolean
+  notes: string | null
+  result_type: ResultType
+  created_at: string
 }
 
 async function getAssessment(id: string) {
@@ -36,10 +53,6 @@ async function getAssessment(id: string) {
       .select(`
         id,
         reference_number,
-        customer_name,
-        customer_email,
-        customer_phone,
-        customer_company,
         site_address,
         city,
         region_id,
@@ -51,12 +64,18 @@ async function getAssessment(id: string) {
         created_at,
         assigned_installer_id,
         enquiry_id,
-        team_members:assigned_installer_id (
-          name,
-          email
+        client_id,
+        clients!client_id (
+          first_name,
+          last_name,
+          email,
+          phone,
+          company_id
         ),
-        enquiries:enquiry_id (
-          enquiry_number
+        team_members!assigned_installer_id (
+          first_name,
+          last_name,
+          email
         )
       `)
       .eq('id', id)
@@ -74,12 +93,34 @@ async function getAssessment(id: string) {
   }
 }
 
+async function getAssessmentAreas(assessmentId: string) {
+  try {
+    const { data, error } = await supabase
+      .from('assessment_areas')
+      .select('*')
+      .eq('assessment_id', assessmentId)
+      .order('created_at', { ascending: true })
+
+    if (error) {
+      console.error('Error fetching assessment areas:', error)
+      return { data: [], error: error.message }
+    }
+
+    return { data: data || [], error: null }
+  } catch (err) {
+    console.error('Unexpected error:', err)
+    return { data: [], error: 'An unexpected error occurred' }
+  }
+}
+
 export default async function AssessmentDetailPage({ 
   params 
 }: { 
-  params: { id: string } 
+  params: Promise<{ id: string }>
 }) {
-  const { data: assessment, error } = await getAssessment(params.id)
+  const { id } = await params
+  const { data: assessment, error } = await getAssessment(id)
+  const { data: areas } = await getAssessmentAreas(id)
 
   if (error || !assessment) {
     return (
@@ -108,16 +149,12 @@ export default async function AssessmentDetailPage({
     )
   }
 
-  const nameParts = assessment.customer_name.split(' ')
-  const firstName = nameParts[0] || ''
-  const lastName = nameParts.slice(1).join(' ') || ''
-
   const clientData = {
-    firstName,
-    lastName,
-    email: assessment.customer_email,
-    phone: assessment.customer_phone || '',
-    company: assessment.customer_company || '',
+    firstName: assessment.clients?.first_name || '',
+    lastName: assessment.clients?.last_name || '',
+    email: assessment.clients?.email || '',
+    phone: assessment.clients?.phone || '',
+    company: '', // Will populate from companies table later
     siteAddress: assessment.site_address,
     region: assessment.region_id,
     postcode: assessment.postcode || ''
@@ -140,115 +177,123 @@ export default async function AssessmentDetailPage({
   }
 
   return (
-    <div className="page-content">
-      {/* Header Section */}
-      <div className="page-header">
-        <Link href="/assessments" className="btn-ghost btn-sm mb-4">
-          <ArrowLeft className="w-4 h-4" />
-          Back to Assessments
-        </Link>
-        
-        <div className="flex items-start justify-between">
+    <div className="min-h-screen bg-gray-50">
+      {/* ===== HEADER ROW ===== */}
+      <div className="bg-white border-b border-gray-200 px-6 py-4">
+        <div className="flex items-center justify-between">
           <div>
-            <h1 className="page-title">{assessment.reference_number}</h1>
-            <p className="page-subtitle">{assessment.customer_name}</p>
+            <Link href="/assessments" className="text-sm text-gray-600 hover:text-gray-900 flex items-center gap-1 mb-2">
+              <ArrowLeft className="w-4 h-4" />
+              Back to Assessments
+            </Link>
+            <h1 className="text-2xl font-bold text-gray-900">{assessment.reference_number}</h1>
+            <p className="text-sm text-gray-600 mt-1">
+              {clientData.firstName} {clientData.lastName} • {assessment.site_address}
+            </p>
           </div>
-          
-          <div className="flex gap-3">
+        </div>
+      </div>
+
+      {/* ===== TOOLBAR ROW ===== */}
+      <div className="bg-white border-b border-gray-200 px-6 py-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className={getStatusBadge(assessment.status)}>
+              {assessment.status}
+            </span>
+            <span className="text-sm text-gray-600">•</span>
+            <span className="text-sm text-gray-600">{formatDate(assessment.scheduled_date)} at {assessment.scheduled_time}</span>
+          </div>
+
+          {/* Right side - Action Buttons */}
+          <div className="flex items-center gap-3">
             {assessment.status === 'Scheduled' && (
-              <Link 
-                href={`/assessments/${params.id}/complete`}
-                className="btn-primary"
+              <Link
+                href={`/assessments/${id}/complete`}
+                className="px-4 py-2 text-sm border border-gray-300 rounded hover:bg-gray-50 transition-colors flex items-center gap-2"
               >
                 <CheckCircle className="w-4 h-4" />
                 Mark Complete
               </Link>
             )}
-            <button
-              disabled
-              className="btn-secondary"
-              title="Edit functionality coming in Phase 1B"
+            <Link
+              href={`/assessments/${id}/edit`}
+              className="px-4 py-2 text-sm border border-gray-300 rounded hover:bg-gray-50 transition-colors flex items-center gap-2"
             >
               <Edit className="w-4 h-4" />
               Edit
-            </button>
-            <button
-              disabled
-              className="btn-danger"
-              title="Delete functionality coming in Phase 1B"
-            >
-              <Trash2 className="w-4 h-4" />
-              Delete
-            </button>
+            </Link>
           </div>
         </div>
       </div>
 
-      <div className="space-y-6">
-        {/* Customer Details Section */}
-        <div className="card">
-          <div className="card-header">
-            <h2 className="card-title">Customer Details</h2>
-          </div>
-          <div className="card-body">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label className="form-label">First Name</label>
-                <p className="font-medium" style={{ color: 'var(--color-neutral-900)' }}>
-                  {firstName}
-                </p>
-              </div>
-
-              <div>
-                <label className="form-label">Last Name</label>
-                <p className="font-medium" style={{ color: 'var(--color-neutral-900)' }}>
-                  {lastName}
-                </p>
-              </div>
-
-              <div>
-                <label className="form-label">Email</label>
-                <p className="font-medium" style={{ color: 'var(--color-neutral-900)' }}>
-                  {assessment.customer_email}
-                </p>
-              </div>
-
-              {assessment.customer_phone && (
+      {/* ===== CONTENT AREA ===== */}
+      <div className="p-6">
+        <div className="space-y-6">
+          {/* Customer Details Section */}
+          <div className="bg-white rounded-lg shadow">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <h2 className="text-lg font-semibold text-gray-900">Customer Details</h2>
+            </div>
+            <div className="p-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label className="form-label">Phone</label>
-                  <p className="font-medium" style={{ color: 'var(--color-neutral-900)' }}>
-                    {assessment.customer_phone}
+                  <label className="text-xs font-medium text-gray-500 uppercase tracking-wider block mb-1">First Name</label>
+                  <p className="font-medium text-gray-900">
+                    {clientData.firstName || 'No Client Linked'}
                   </p>
                 </div>
+
+                <div>
+                  <label className="text-xs font-medium text-gray-500 uppercase tracking-wider block mb-1">Last Name</label>
+                  <p className="font-medium text-gray-900">
+                    {clientData.lastName || '—'}
+                  </p>
+                </div>
+
+                <div>
+                  <label className="text-xs font-medium text-gray-500 uppercase tracking-wider block mb-1">Email</label>
+                  <p className="font-medium text-gray-900">
+                    {clientData.email || '—'}
+                  </p>
+                </div>
+
+                {clientData.phone && (
+                  <div>
+                    <label className="text-xs font-medium text-gray-500 uppercase tracking-wider block mb-1">Phone</label>
+                    <p className="font-medium text-gray-900">
+                      {clientData.phone}
+                    </p>
+                  </div>
               )}
 
-              {assessment.customer_company && (
+              {clientData.company && (
                 <div>
                   <label className="form-label">Company</label>
                   <p className="font-medium" style={{ color: 'var(--color-neutral-900)' }}>
-                    {assessment.customer_company}
+                    {clientData.company}
                   </p>
                 </div>
               )}
 
-              <div className={assessment.customer_company ? '' : 'md:col-span-2'}>
-                <label className="form-label">Site Address</label>
-                <p className="font-medium" style={{ color: 'var(--color-neutral-900)' }}>
+              <div className={clientData.company ? '' : 'md:col-span-2'}>
+                <label className="text-xs font-medium text-gray-500 uppercase tracking-wider block mb-1">Site Address</label>
+                <p className="font-medium text-gray-900">
                   {assessment.site_address}
                 </p>
               </div>
 
               <div>
-                <label className="form-label">Region</label>
-                <p className="font-medium" style={{ color: 'var(--color-neutral-900)' }}>
+                <label className="text-xs font-medium text-gray-500 uppercase tracking-wider block mb-1">Region</label>
+                <p className="font-medium text-gray-900">
                   {assessment.region_id}
                 </p>
               </div>
 
               {assessment.postcode && (
                 <div>
-                  <label className="form-label">Postcode</label>
-                  <p className="font-medium" style={{ color: 'var(--color-neutral-900)' }}>
+                  <label className="text-xs font-medium text-gray-500 uppercase tracking-wider block mb-1">Postcode</label>
+                  <p className="font-medium text-gray-900">
                     {assessment.postcode}
                   </p>
                 </div>
@@ -258,28 +303,28 @@ export default async function AssessmentDetailPage({
         </div>
 
         {/* Assessment Details Section */}
-        <div className="card">
-          <div className="card-header">
-            <h2 className="card-title">Assessment Details</h2>
+        <div className="bg-white rounded-lg shadow">
+          <div className="px-6 py-4 border-b border-gray-200">
+            <h2 className="text-lg font-semibold text-gray-900">Assessment Details</h2>
           </div>
-          <div className="card-body">
+          <div className="p-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="form-label">Scheduled Date</label>
-                <p className="font-medium" style={{ color: 'var(--color-neutral-900)' }}>
+                <label className="text-xs font-medium text-gray-500 uppercase tracking-wider block mb-1">Scheduled Date</label>
+                <p className="font-medium text-gray-900">
                   {formatDate(assessment.scheduled_date)}
                 </p>
               </div>
 
               <div>
-                <label className="form-label">Scheduled Time</label>
-                <p className="font-medium" style={{ color: 'var(--color-neutral-900)' }}>
+                <label className="text-xs font-medium text-gray-500 uppercase tracking-wider block mb-1">Scheduled Time</label>
+                <p className="font-medium text-gray-900">
                   {assessment.scheduled_time}
                 </p>
               </div>
 
               <div>
-                <label className="form-label">Status</label>
+                <label className="text-xs font-medium text-gray-500 uppercase tracking-wider block mb-1">Status</label>
                 <div>
                   <span className={getStatusBadge(assessment.status)}>
                     {assessment.status}
@@ -288,38 +333,31 @@ export default async function AssessmentDetailPage({
               </div>
 
               <div>
-                <label className="form-label">Assigned Installer</label>
-                <p className="font-medium" style={{ color: 'var(--color-neutral-900)' }}>
-                  {assessment.team_members?.[0]?.name || 'Unassigned'}
+                <label className="text-xs font-medium text-gray-500 uppercase tracking-wider block mb-1">Assigned Installer</label>
+                <p className="font-medium text-gray-900">
+                  {assessment.team_members
+                    ? `${assessment.team_members.first_name} ${assessment.team_members.last_name}`
+                    : 'Unassigned'}
                 </p>
-                {assessment.team_members?.[0]?.email && (
-                  <p className="text-sm" style={{ color: 'var(--color-neutral-500)' }}>
-                    {assessment.team_members[0].email}
+                {assessment.team_members?.email && (
+                  <p className="text-sm text-gray-500">
+                    {assessment.team_members.email}
                   </p>
                 )}
               </div>
 
               <div>
-                <label className="form-label">Created Date</label>
-                <p className="font-medium" style={{ color: 'var(--color-neutral-900)' }}>
+                <label className="text-xs font-medium text-gray-500 uppercase tracking-wider block mb-1">Created Date</label>
+                <p className="font-medium text-gray-900">
                   {formatDate(assessment.created_at)}
                 </p>
               </div>
-
-              {assessment.enquiries?.[0] && (
-                <div>
-                  <label className="form-label">Linked Enquiry</label>
-                  <p className="font-medium" style={{ color: 'var(--color-primary)' }}>
-                    {assessment.enquiries[0].enquiry_number}
-                  </p>
-                </div>
-              )}
             </div>
 
             {assessment.notes && (
-              <div className="mt-6 pt-6" style={{ borderTop: '1px solid var(--color-neutral-200)' }}>
-                <label className="form-label">Notes</label>
-                <p style={{ color: 'var(--color-neutral-700)', whiteSpace: 'pre-wrap' }}>
+              <div className="mt-6 pt-6 border-t border-gray-200">
+                <label className="text-xs font-medium text-gray-500 uppercase tracking-wider block mb-1">Notes</label>
+                <p className="text-gray-700 whitespace-pre-wrap">
                   {assessment.notes}
                 </p>
               </div>
@@ -327,9 +365,33 @@ export default async function AssessmentDetailPage({
           </div>
         </div>
 
+        {/* Assessment Areas with Wordings Section */}
+        {areas && areas.length > 0 && (
+          <div className="bg-white rounded-lg shadow">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <h2 className="text-lg font-semibold text-gray-900">Assessment Areas & Results</h2>
+              <p className="text-sm text-gray-600 mt-1">
+                Set result type and add findings for each area
+              </p>
+            </div>
+            <div className="p-6 space-y-4">
+              {areas.map((area) => (
+                <WordingsSelector
+                  key={area.id}
+                  assessmentId={assessment.id}
+                  areaId={area.id}
+                  areaName={area.area_name}
+                  currentResultType={area.result_type || 'Pending'}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+        </div>
+
         {/* Action Buttons */}
-        <div className="flex gap-3 justify-end">
-          <Link href="/assessments" className="btn-secondary">
+        <div className="flex gap-3 justify-end mt-6">
+          <Link href="/assessments" className="px-4 py-2 text-sm border border-gray-300 rounded hover:bg-gray-50 transition-colors">
             Back to List
           </Link>
         </div>

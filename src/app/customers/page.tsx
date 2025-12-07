@@ -47,51 +47,61 @@ export default function CustomersPage() {
             setLoading(true);
             setError('');
 
-            let query = supabase
+            // Get clients
+            const { data, error: fetchError } = await supabase
                 .from('clients')
-                .select(`
-                    id, first_name, last_name, email, phone, company_id, status, follow_up_date,
-                    companies(company_name, site_address)
-                `, { count: 'exact' });
+                .select('*')
+                .order('last_name', { ascending: true })
+                .limit(50);
 
-            // Search filter
-            if (searchTerm) {
-                query = query.or(`first_name.ilike.%${searchTerm}%,last_name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%,phone.ilike.%${searchTerm}%`);
+            console.log('Supabase response:', { data, error: fetchError });
+
+            if (fetchError) {
+                console.error('Supabase error:', fetchError);
+                throw fetchError;
             }
 
-            // Status filter
-            if (statusFilter !== 'all') {
-                query = query.eq('status', statusFilter);
+            if (!data) {
+                throw new Error('No data returned from Supabase');
             }
 
-            // Sorting
-            query = query.order(sortField, { ascending: sortDirection === 'asc' });
+            // Get unique company IDs
+            const companyIds = [...new Set(data.map(c => c.company_id).filter(Boolean))];
+            
+            // Fetch company names
+            const companyMap: Record<string, string> = {};
+            if (companyIds.length > 0) {
+                const { data: companies } = await supabase
+                    .from('companies')
+                    .select('id, name')
+                    .in('id', companyIds);
+                
+                if (companies) {
+                    companies.forEach(company => {
+                        companyMap[company.id] = company.name;
+                    });
+                }
+            }
 
-            // Pagination
-            const offset = (pagination.page - 1) * pagination.pageSize;
-            query = query.range(offset, offset + pagination.pageSize - 1);
-
-            const { data, count, error: fetchError } = await query;
-
-            if (fetchError) throw fetchError;
-
-            const transformedData = (data || []).map((client: any) => ({
+            const transformedData = data.map((client: any) => ({
                 id: client.id,
-                first_name: client.first_name,
-                last_name: client.last_name,
-                email: client.email,
-                phone: client.phone,
+                first_name: client.first_name || '',
+                last_name: client.last_name || '',
+                email: client.email || '',
+                phone: client.phone || '',
                 company_id: client.company_id,
-                company_name: client.companies?.company_name || '',
-                site_address: client.companies?.site_address || '',
+                company_name: client.company_id ? (companyMap[client.company_id] || '—') : '—',
+                site_address: client.address_line_1 || '—',
                 status: client.status || 'Active',
                 follow_up_date: client.follow_up_date || '',
             }));
 
+            console.log('Transformed data:', transformedData);
             setClients(transformedData);
-            setPagination(prev => ({ ...prev, total: count || 0 }));
+            setPagination(prev => ({ ...prev, total: data.length }));
             setSelectedIds(new Set());
         } catch (err) {
+            console.error('Fetch error:', err);
             setError(err instanceof Error ? err.message : 'Failed to fetch customers');
         } finally {
             setLoading(false);
@@ -130,7 +140,7 @@ export default function CustomersPage() {
         }
     };
 
-    const formatDate = (dateString: string) => {
+    const formatDate = (dateString?: string) => {
         if (!dateString) return '-';
         return new Date(dateString).toLocaleDateString('en-NZ', {
             day: '2-digit',
@@ -140,10 +150,10 @@ export default function CustomersPage() {
     };
 
     const toggleSelectAll = () => {
-        if (selectedIds.size === clients.length) {
+        if (selectedIds.size === filteredClients.length) {
             setSelectedIds(new Set());
         } else {
-            setSelectedIds(new Set(clients.map(c => c.id)));
+            setSelectedIds(new Set(filteredClients.map(c => c.id)));
         }
     };
 
@@ -156,6 +166,35 @@ export default function CustomersPage() {
         }
         setSelectedIds(newSelected);
     };
+
+    // Filter clients based on search term and status
+    const getFilteredClients = () => {
+        let filtered = clients;
+
+        // Apply search filter
+        if (searchTerm) {
+            const term = searchTerm.toLowerCase();
+            filtered = filtered.filter(client =>
+                client.first_name?.toLowerCase().includes(term) ||
+                client.last_name?.toLowerCase().includes(term) ||
+                client.email?.toLowerCase().includes(term) ||
+                client.phone?.includes(term) ||
+                client.company_name?.toLowerCase().includes(term) ||
+                client.site_address?.toLowerCase().includes(term)
+            );
+        }
+
+        // Apply status filter
+        if (statusFilter !== 'all') {
+            filtered = filtered.filter(client => 
+                client.status?.toLowerCase() === statusFilter.toLowerCase()
+            );
+        }
+
+        return filtered;
+    };
+
+    const filteredClients = getFilteredClients();
 
     return (
         <div className="min-h-screen bg-gray-100">
@@ -272,8 +311,8 @@ export default function CustomersPage() {
                     </div>
                 )}
 
-                <div className="mb-3 text-sm text-gray-600">
-                    Showing {clients.length} of {pagination.total} customers
+                <div className="text-sm text-gray-600">
+                    Showing {filteredClients.length} of {clients.length} customers
                 </div>
 
                 {loading ? (
@@ -351,7 +390,7 @@ export default function CustomersPage() {
                                             </td>
                                         </tr>
                                     ) : (
-                                        clients.map((client, index) => (
+                                        filteredClients.map((client, index) => (
                                             <tr
                                                 key={client.id}
                                                 className={`hover:bg-blue-50 transition-colors ${
@@ -391,7 +430,16 @@ export default function CustomersPage() {
                                                     </Link>
                                                 </td>
                                                 <td className="px-4 py-3 text-sm text-gray-700">
-                                                    {client.company_name}
+                                                    {client.company_name && client.company_name !== '—' && client.company_id ? (
+                                                        <Link
+                                                            href={`/companies/${client.company_id}`}
+                                                            className="text-[#0066CC] hover:underline"
+                                                        >
+                                                            {client.company_name}
+                                                        </Link>
+                                                    ) : (
+                                                        <span className="text-gray-500">—</span>
+                                                    )}
                                                 </td>
                                                 <td className="px-4 py-3 text-sm text-gray-700 max-w-[200px] truncate" title={client.site_address}>
                                                     {client.site_address}

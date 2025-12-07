@@ -1,3 +1,6 @@
+'use client'
+
+import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { DataTable } from '@/app/components/DataTable'
 import Link from 'next/link'
@@ -6,51 +9,89 @@ import { Plus } from 'lucide-react'
 interface Assessment {
   id: string
   reference_number: string
-  customer_name: string
   site_address: string
   scheduled_date: string
   scheduled_time: string
   status: string
   assigned_installer_id: string | null
-  team_members?: Array<{
-    name: string
-  }> | null
+  client_id: string | null
+  clients?: {
+    first_name: string
+    last_name: string
+    email: string
+    phone: string | null
+    company_id: string | null
+    companies?: {
+      id: string
+      name: string
+    } | null
+  } | null
+  team_members?: {
+    first_name: string
+    last_name: string
+  } | null
 }
 
-async function getAssessments() {
-  try {
-    const { data, error } = await supabase
-      .from('assessments')
-      .select(`
-        id,
-        reference_number,
-        customer_name,
-        site_address,
-        scheduled_date,
-        scheduled_time,
-        status,
-        assigned_installer_id,
-        team_members:assigned_installer_id (
-          name
-        )
-      `)
-      .neq('status', 'Deleted')
-      .order('scheduled_date', { ascending: false })
+export default function AssessmentsPage() {
+  const [assessments, setAssessments] = useState<Assessment[]>([])
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
 
-    if (error) {
-      console.error('Error fetching assessments:', error)
-      return { data: null, error: error.message }
+  useEffect(() => {
+    getAssessments()
+  }, [])
+
+  async function getAssessments() {
+    try {
+      setLoading(true)
+      const { data, error } = await supabase
+        .from('assessments')
+        .select(`
+          id,
+          reference_number,
+          site_address,
+          scheduled_date,
+          scheduled_time,
+          status,
+          assigned_installer_id,
+          client_id,
+          clients!client_id (
+            first_name,
+            last_name,
+            email,
+            phone,
+            company_id,
+            companies (
+              id,
+              name
+            )
+          ),
+          team_members!assigned_installer_id (
+            first_name,
+            last_name
+          )
+        `)
+        .neq('status', 'Deleted')
+        .order('scheduled_date', { ascending: false })
+
+      console.log('Raw data from DB:', data)
+      console.log('Error:', error)
+
+      if (error) {
+        console.error('Error fetching assessments:', error)
+        setError(error.message)
+        return
+      }
+
+      setAssessments(data || [])
+      setError(null)
+    } catch (err) {
+      console.error('Unexpected error:', err)
+      setError('An unexpected error occurred')
+    } finally {
+      setLoading(false)
     }
-
-    return { data, error: null }
-  } catch (err) {
-    console.error('Unexpected error:', err)
-    return { data: null, error: 'An unexpected error occurred' }
   }
-}
-
-export default async function AssessmentsPage() {
-  const { data: assessments, error } = await getAssessments()
 
   const columns = [
     {
@@ -62,6 +103,12 @@ export default async function AssessmentsPage() {
     {
       name: 'customer_name',
       label: 'Customer Name',
+      sortable: true,
+      type: 'string' as const
+    },
+    {
+      name: 'customer_company',
+      label: 'Company Name',
       sortable: true,
       type: 'string' as const
     },
@@ -97,16 +144,46 @@ export default async function AssessmentsPage() {
     }
   ]
 
-  const transformedData = assessments?.map((assessment: Assessment) => ({
-    id: assessment.id,
-    reference_number: assessment.reference_number,
-    customer_name: assessment.customer_name,
-    site_address: assessment.site_address,
-    scheduled_date: assessment.scheduled_date,
-    scheduled_time: assessment.scheduled_time,
-    installer_name: assessment.team_members?.[0]?.name || 'Unassigned',
-    status: assessment.status
-  })) || []
+  const transformedData = assessments.map((assessment: Assessment) => {
+    const clientName = assessment.clients
+      ? `${assessment.clients.first_name} ${assessment.clients.last_name}`
+      : 'No Client Linked'
+    const companyName = assessment.clients?.companies?.name || '—'
+    const clientId = assessment.clients?.company_id || null
+    const companyId = assessment.clients?.companies?.id || null
+
+    return {
+      id: assessment.id,
+      reference_number: assessment.reference_number,
+      customer_name: clientName,
+      customer_name_link: assessment.client_id ? `/customers/${assessment.client_id}` : null,
+      customer_company: companyName,
+      company_id: companyId,
+      site_address: assessment.site_address,
+      scheduled_date: assessment.scheduled_date,
+      scheduled_time: assessment.scheduled_time,
+      installer_name: assessment.team_members
+        ? `${assessment.team_members.first_name} ${assessment.team_members.last_name}`
+        : 'Unassigned',
+      status: assessment.status
+    }
+  })
+
+  if (loading) {
+    return (
+      <div className="page-content">
+        <div className="page-header">
+          <h1 className="page-title">Assessments</h1>
+          <p className="page-subtitle">Schedule and manage free assessments</p>
+        </div>
+        <div className="card">
+          <div style={{ textAlign: 'center', padding: '2rem' }}>
+            <p>Loading assessments...</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   if (error) {
     return (
@@ -142,8 +219,8 @@ export default async function AssessmentsPage() {
       data={transformedData}
       columns={columns}
       title="Assessments"
+      subtitle="Schedule and manage free assessments"
       onView={(id) => {
-        // Client-side navigation will be handled by DataTable
         window.location.href = `/assessments/${id}`
       }}
       onEdit={(id) => {

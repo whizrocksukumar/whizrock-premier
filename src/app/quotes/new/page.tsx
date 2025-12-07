@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { Search, Plus, Trash2, X } from 'lucide-react';
@@ -85,14 +85,34 @@ interface Section {
 export default function AddQuotePage() {
     const router = useRouter();
 
-    // Form state
+    // Quote header fields
+    const [quoteNumber, setQuoteNumber] = useState('');
+    const [quoteDate, setQuoteDate] = useState(new Date().toISOString().split('T')[0]);
+    const [validUntil, setValidUntil] = useState('');
+    const [quoteStatus, setQuoteStatus] = useState('Draft');
+    const [reference, setReference] = useState('');
+
+    // Client selection
     const [clientId, setClientId] = useState('');
+    const [clientSearch, setClientSearch] = useState('');
+    const [showClientSuggestions, setShowClientSuggestions] = useState(false);
+    const [showAddClientForm, setShowAddClientForm] = useState(false);
+
+    // New client form
+    const [newClientFirstName, setNewClientFirstName] = useState('');
+    const [newClientLastName, setNewClientLastName] = useState('');
+    const [newClientEmail, setNewClientEmail] = useState('');
+    const [newClientPhone, setNewClientPhone] = useState('');
+    const [newClientCompany, setNewClientCompany] = useState('');
+
+    // Form state
     const [siteAddress, setSiteAddress] = useState('');
+    const [city, setCity] = useState('');
+    const [postcode, setPostcode] = useState('');
     const [regionId, setRegionId] = useState('');
     const [jobType, setJobType] = useState('');
     const [salesRepId, setSalesRepId] = useState('');
-    const [followUpDate, setFollowUpDate] = useState('');
-    const [quoteStatus, setQuoteStatus] = useState('Draft');
+    const [notes, setNotes] = useState('');
 
     // Pricing settings
     const [pricingTier, setPricingTier] = useState('Retail');
@@ -119,12 +139,27 @@ export default function AddQuotePage() {
     const [productSearch, setProductSearch] = useState<{ [key: string]: string }>({});
     const [showProductSuggestions, setShowProductSuggestions] = useState<{ [key: string]: boolean }>({});
 
+    // Refs for click-outside handling
+    const clientDropdownRef = useRef<HTMLDivElement>(null);
+
     useEffect(() => {
         if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
             setError('Supabase environment variables are missing. Please check your configuration.');
         }
         loadLookupData();
         addInitialSection();
+    }, []);
+
+    // Handle click outside to close client dropdown
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (clientDropdownRef.current && !clientDropdownRef.current.contains(event.target as Node)) {
+                setShowClientSuggestions(false);
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
     const loadLookupData = async () => {
@@ -140,7 +175,10 @@ export default function AddQuotePage() {
                 supabase.from('sales_reps').select('*').order('name'),
             ]);
 
-            if (clientsRes.data) setClients(clientsRes.data as any);
+            if (clientsRes.data) {
+                setClients(clientsRes.data as any);
+                console.log('Clients loaded:', clientsRes.data.length);
+            }
             if (productsRes.data) {
                 // Filter products client-side
                 const activeProducts = productsRes.data.filter((p: any) => p.is_active !== false && p.is_labour !== true);
@@ -173,6 +211,77 @@ export default function AddQuotePage() {
             line_items: []
         }]);
         setNextSectionId(2);
+    };
+
+    // Client fuzzy search
+    const filterClients = (searchTerm: string) => {
+        if (!searchTerm) return clients;
+        const term = searchTerm.toLowerCase();
+        return clients.filter(c => 
+            c.first_name?.toLowerCase().includes(term) ||
+            c.last_name?.toLowerCase().includes(term) ||
+            c.email?.toLowerCase().includes(term) ||
+            c.phone?.includes(term) ||
+            c.companies?.company_name?.toLowerCase().includes(term)
+        );
+    };
+
+    const selectClient = (client: Client) => {
+        setClientId(client.id);
+        setClientSearch(`${client.first_name} ${client.last_name}${client.companies?.company_name ? ` - ${client.companies.company_name}` : ''}`);
+        setShowClientSuggestions(false);
+        // Auto-populate site address if available
+        if (client.companies?.site_address) {
+            setSiteAddress(client.companies.site_address);
+        }
+    };
+
+    const handleAddNewClient = async () => {
+        if (!newClientFirstName || !newClientLastName) {
+            alert('Please enter at least first and last name');
+            return;
+        }
+
+        try {
+            setSaving(true);
+            const { data, error } = await supabase
+                .from('clients')
+                .insert({
+                    first_name: newClientFirstName,
+                    last_name: newClientLastName,
+                    email: newClientEmail || null,
+                    phone: newClientPhone || null,
+                })
+                .select()
+                .single();
+
+            if (error) throw error;
+
+            if (data) {
+                // Reload clients
+                const { data: updatedClients } = await supabase
+                    .from('clients')
+                    .select('id, first_name, last_name, email, phone, company_id, companies(company_name, site_address)');
+                
+                if (updatedClients) setClients(updatedClients as any);
+                
+                // Select the new client
+                selectClient(data as Client);
+                
+                // Reset form
+                setNewClientFirstName('');
+                setNewClientLastName('');
+                setNewClientEmail('');
+                setNewClientPhone('');
+                setNewClientCompany('');
+                setShowAddClientForm(false);
+            }
+        } catch (error: any) {
+            console.error('Error adding client:', error);
+            alert(`Error adding client: ${error.message}`);
+        } finally {
+            setSaving(false);
+        }
     };
 
     const addSection = () => {
@@ -438,16 +547,34 @@ export default function AddQuotePage() {
             setSaving(true);
             console.log('Saving draft...');
 
+            // Validation
+            if (!clientId) {
+                alert('Please select a client');
+                setSaving(false);
+                return;
+            }
+            if (!siteAddress) {
+                alert('Please enter a site address');
+                setSaving(false);
+                return;
+            }
+
             // 1. Insert Quote
             const { data: quoteData, error: quoteError } = await supabase
                 .from('quotes')
                 .insert({
+                    quote_number: quoteNumber || null,
                     client_id: clientId || null,
                     site_address: siteAddress,
+                    city: city || null,
+                    postcode: postcode || null,
                     region_id: regionId || null,
                     job_type: jobType,
                     sales_rep_id: salesRepId || null,
                     status: quoteStatus,
+                    quote_date: quoteDate || null,
+                    valid_until: validUntil || null,
+                    notes: notes || null,
                     pricing_tier: pricingTier,
                     markup_percent: markupPercent,
                     waste_percent: wastePercent,
@@ -458,6 +585,8 @@ export default function AddQuotePage() {
                     total_inc_gst: parseFloat(totals.totalIncGST),
                     gross_profit: parseFloat(totals.grossProfit),
                     gross_profit_percent: parseFloat(totals.grossProfitPercent),
+                    subtotal: parseFloat(totals.totalSellExGST),
+                    total_amount: parseFloat(totals.totalIncGST),
                 })
                 .select()
                 .single();
@@ -585,163 +714,316 @@ export default function AddQuotePage() {
             </div>
 
             <div className="p-6 max-w-7xl mx-auto">
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-                    <div className="flex items-center gap-4 flex-wrap">
-                        <div className="flex items-center gap-2">
-                            <button
-                                onClick={() => setPricingTier('Retail')}
-                                className={`px-4 py-2 rounded text-sm font-medium transition-colors ${pricingTier === 'Retail' ? 'bg-[#0066CC] text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                                    }`}
-                            >
-                                Retail
-                            </button>
-                            <button
-                                onClick={() => setPricingTier('Trade')}
-                                className={`px-4 py-2 rounded text-sm font-medium transition-colors ${pricingTier === 'Trade' ? 'bg-[#0066CC] text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                                    }`}
-                            >
-                                Trade
-                            </button>
-                            <button
-                                onClick={() => setPricingTier('VIP')}
-                                className={`px-4 py-2 rounded text-sm font-medium transition-colors ${pricingTier === 'VIP' ? 'bg-[#0066CC] text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                                    }`}
-                            >
-                                VIP
-                            </button>
-                            <button
-                                onClick={() => setPricingTier('Custom')}
-                                className={`px-4 py-2 rounded text-sm font-medium transition-colors ${pricingTier === 'Custom' ? 'bg-[#0066CC] text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                                    }`}
-                            >
-                                Margin Markup
-                            </button>
-                        </div>
-
-                        {pricingTier === 'Custom' && (
-                            <div className="flex items-center gap-2">
-                                <label className="text-sm font-medium text-gray-700">Markup %:</label>
+                {/* Quote Header Card */}
+                <div className="bg-white rounded-lg shadow mb-6">
+                    <div className="border-b border-gray-200 px-6 py-4">
+                        <h2 className="text-lg font-semibold text-gray-800">Quote Details</h2>
+                    </div>
+                    <div className="p-6">
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Quote Number</label>
                                 <input
-                                    type="number"
-                                    value={markupPercent}
-                                    onChange={(e) => setMarkupPercent(parseFloat(e.target.value) || 0)}
-                                    className="w-20 px-2 py-1 border border-gray-300 rounded text-sm"
+                                    type="text"
+                                    value={quoteNumber}
+                                    onChange={(e) => setQuoteNumber(e.target.value)}
+                                    placeholder="Auto-generated"
+                                    className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
                                 />
-                                <span className="text-sm text-gray-600">%</span>
                             </div>
-                        )}
-
-                        <div className="flex items-center gap-2">
-                            <label className="text-sm font-medium text-gray-700">Labour $/m²:</label>
-                            <input
-                                type="number"
-                                step="0.01"
-                                value={labourRate}
-                                onChange={(e) => setLabourRate(parseFloat(e.target.value) || 0)}
-                                className="w-20 px-2 py-1 border border-gray-300 rounded text-sm"
-                            />
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Quote Date *</label>
+                                <input
+                                    type="date"
+                                    value={quoteDate}
+                                    onChange={(e) => setQuoteDate(e.target.value)}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Valid Until</label>
+                                <input
+                                    type="date"
+                                    value={validUntil}
+                                    onChange={(e) => setValidUntil(e.target.value)}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Reference</label>
+                                <input
+                                    type="text"
+                                    value={reference}
+                                    onChange={(e) => setReference(e.target.value)}
+                                    placeholder="Optional reference"
+                                    className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
+                                />
+                            </div>
                         </div>
 
-                        <div className="flex items-center gap-2">
-                            <label className="text-sm font-medium text-gray-700">Waste %:</label>
-                            <input
-                                type="number"
-                                step="0.1"
-                                value={wastePercent}
-                                onChange={(e) => setWastePercent(parseFloat(e.target.value) || 0)}
-                                className="w-20 px-2 py-1 border border-gray-300 rounded text-sm"
-                            />
-                            <span className="text-sm text-gray-600">%</span>
+                        {/* Pricing Tier Selection */}
+                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                            <div className="flex items-center gap-4 flex-wrap">
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        onClick={() => setPricingTier('Retail')}
+                                        className={`px-4 py-2 rounded text-sm font-medium transition-colors ${pricingTier === 'Retail' ? 'bg-[#0066CC] text-white' : 'bg-white text-gray-700 hover:bg-gray-100'}`}
+                                    >
+                                        Retail
+                                    </button>
+                                    <button
+                                        onClick={() => setPricingTier('Trade')}
+                                        className={`px-4 py-2 rounded text-sm font-medium transition-colors ${pricingTier === 'Trade' ? 'bg-[#0066CC] text-white' : 'bg-white text-gray-700 hover:bg-gray-100'}`}
+                                    >
+                                        Trade
+                                    </button>
+                                    <button
+                                        onClick={() => setPricingTier('VIP')}
+                                        className={`px-4 py-2 rounded text-sm font-medium transition-colors ${pricingTier === 'VIP' ? 'bg-[#0066CC] text-white' : 'bg-white text-gray-700 hover:bg-gray-100'}`}
+                                    >
+                                        VIP
+                                    </button>
+                                    <button
+                                        onClick={() => setPricingTier('Custom')}
+                                        className={`px-4 py-2 rounded text-sm font-medium transition-colors ${pricingTier === 'Custom' ? 'bg-[#0066CC] text-white' : 'bg-white text-gray-700 hover:bg-gray-100'}`}
+                                    >
+                                        Custom Markup
+                                    </button>
+                                </div>
+
+                                {pricingTier === 'Custom' && (
+                                    <div className="flex items-center gap-2">
+                                        <label className="text-sm font-medium text-gray-700">Markup:</label>
+                                        <input
+                                            type="number"
+                                            value={markupPercent}
+                                            onChange={(e) => setMarkupPercent(parseFloat(e.target.value) || 0)}
+                                            className="w-20 px-2 py-1 border border-gray-300 rounded text-sm"
+                                        />
+                                        <span className="text-sm text-gray-600">%</span>
+                                    </div>
+                                )}
+
+                                <div className="flex items-center gap-2">
+                                    <label className="text-sm font-medium text-gray-700">Labour $/m\u00b2:</label>
+                                    <input
+                                        type="number"
+                                        step="0.01"
+                                        value={labourRate}
+                                        onChange={(e) => setLabourRate(parseFloat(e.target.value) || 0)}
+                                        className="w-20 px-2 py-1 border border-gray-300 rounded text-sm"
+                                    />
+                                </div>
+
+                                <div className="flex items-center gap-2">
+                                    <label className="text-sm font-medium text-gray-700">Waste:</label>
+                                    <input
+                                        type="number"
+                                        step="0.1"
+                                        value={wastePercent}
+                                        onChange={(e) => setWastePercent(parseFloat(e.target.value) || 0)}
+                                        className="w-20 px-2 py-1 border border-gray-300 rounded text-sm"
+                                    />
+                                    <span className="text-sm text-gray-600">%</span>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <div className="bg-white rounded-lg shadow p-6 mb-6">
-                    <h3 className="text-lg font-semibold text-gray-800 mb-4">Client Details</h3>
-                    <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Client Name</label>
-                            <select
-                                value={clientId}
-                                onChange={(e) => {
-                                    setClientId(e.target.value);
-                                    const client = clients.find(c => c.id === e.target.value);
-                                    if (client?.companies) {
-                                        setSiteAddress(client.companies.site_address || '');
-                                    }
-                                }}
-                                className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
+                {/* Client Details Card */}
+                <div className="bg-white rounded-lg shadow mb-6">
+                    <div className="border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+                        <h2 className="text-lg font-semibold text-gray-800">Client Information</h2>
+                        {!showAddClientForm && (
+                            <button
+                                onClick={() => setShowAddClientForm(true)}
+                                className="px-3 py-1.5 text-sm bg-[#0066CC] text-white rounded hover:bg-[#0052a3] transition-colors"
                             >
-                                <option value="">Select client...</option>
-                                {clients.map(c => (
-                                    <option key={c.id} value={c.id}>
-                                        {c.first_name} {c.last_name} {c.companies?.company_name ? `- ${c.companies.company_name}` : ''}
-                                    </option>
-                                ))}
-                            </select>
+                                + Add New Client
+                            </button>
+                        )}
+                    </div>
+                    <div className="p-6">
+                        {showAddClientForm ? (
+                            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                                <div className="flex items-center justify-between mb-4">
+                                    <h3 className="font-semibold text-gray-800">New Client</h3>
+                                    <button
+                                        onClick={() => setShowAddClientForm(false)}
+                                        className="text-gray-500 hover:text-gray-700"
+                                    >
+                                        <X className="w-5 h-5" />
+                                    </button>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">First Name *</label>
+                                        <input
+                                            type="text"
+                                            value={newClientFirstName}
+                                            onChange={(e) => setNewClientFirstName(e.target.value)}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded text-sm"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Last Name *</label>
+                                        <input
+                                            type="text"
+                                            value={newClientLastName}
+                                            onChange={(e) => setNewClientLastName(e.target.value)}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded text-sm"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                                        <input
+                                            type="email"
+                                            value={newClientEmail}
+                                            onChange={(e) => setNewClientEmail(e.target.value)}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded text-sm"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                                        <input
+                                            type="tel"
+                                            value={newClientPhone}
+                                            onChange={(e) => setNewClientPhone(e.target.value)}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded text-sm"
+                                        />
+                                    </div>
+                                </div>
+                                <div className="flex justify-end gap-2 mt-4">
+                                    <button
+                                        onClick={() => setShowAddClientForm(false)}
+                                        className="px-4 py-2 text-sm border border-gray-300 rounded hover:bg-gray-50"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        onClick={handleAddNewClient}
+                                        disabled={saving}
+                                        className="px-4 py-2 text-sm bg-[#0066CC] text-white rounded hover:bg-[#0052a3] disabled:opacity-50"
+                                    >
+                                        {saving ? 'Adding...' : 'Add Client'}
+                                    </button>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="relative mb-4" ref={clientDropdownRef}>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Search Client *</label>
+                                <div className="relative">
+                                    <input
+                                        type="text"
+                                        value={clientSearch}
+                                        onChange={(e) => {
+                                            setClientSearch(e.target.value);
+                                            setShowClientSuggestions(true);
+                                            console.log('Search changed:', e.target.value, 'Show dropdown:', true);
+                                        }}
+                                        onFocus={() => {
+                                            setShowClientSuggestions(true);
+                                            console.log('Input focused, clients count:', clients.length, 'Show dropdown:', true);
+                                        }}
+                                        placeholder="Type to search by name, email, phone, or company..."
+                                        className="w-full px-3 py-2 pr-10 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
+                                    />
+                                    <Search className="absolute right-3 top-2.5 w-5 h-5 text-gray-400" />
+                                </div>
+                                {showClientSuggestions && clients.length > 0 && (
+                                    <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                                        {filterClients(clientSearch).map(c => (
+                                            <button
+                                                key={c.id}
+                                                onClick={() => selectClient(c)}
+                                                className="w-full text-left px-4 py-3 hover:bg-blue-50 border-b border-gray-100 last:border-b-0 transition-colors"
+                                            >
+                                                <p className="font-medium text-gray-900">{c.first_name} {c.last_name}</p>
+                                                <p className="text-sm text-gray-600">{c.email}</p>
+                                                {c.companies?.company_name && (
+                                                    <p className="text-xs text-gray-500">{c.companies.company_name}</p>
+                                                )}
+                                            </button>
+                                        ))}
+                                        {filterClients(clientSearch).length === 0 && (
+                                            <div className="px-4 py-3 text-sm text-gray-500 text-center">
+                                                No clients found. <button onClick={() => setShowAddClientForm(true)} className="text-[#0066CC] hover:underline">Add new client</button>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div className="md:col-span-2">
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Site Address *</label>
+                                <input
+                                    type="text"
+                                    value={siteAddress}
+                                    onChange={(e) => setSiteAddress(e.target.value)}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
+                                    placeholder="8 Ulster Road, Blockhouse Bay"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
+                                <input
+                                    type="text"
+                                    value={city}
+                                    onChange={(e) => setCity(e.target.value)}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
+                                    placeholder="Auckland"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Postcode</label>
+                                <input
+                                    type="text"
+                                    value={postcode}
+                                    onChange={(e) => setPostcode(e.target.value)}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
+                                    placeholder="1050"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Region</label>
+                                <select
+                                    value={regionId}
+                                    onChange={(e) => setRegionId(e.target.value)}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
+                                >
+                                    <option value="">Select region...</option>
+                                    {regions.map(r => (
+                                        <option key={r.id} value={r.id}>{r.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Job Type *</label>
+                                <select
+                                    value={jobType}
+                                    onChange={(e) => setJobType(e.target.value)}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
+                                >
+                                    <option value="">Select job type...</option>
+                                    <option value="Residential">Residential</option>
+                                    <option value="Commercial">Commercial</option>
+                                    <option value="Industrial">Industrial</option>
+                                    <option value="Retrofit">Retrofit</option>
+                                </select>
+                            </div>
                         </div>
 
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Site Address *</label>
-                            <input
-                                type="text"
-                                value={siteAddress}
-                                onChange={(e) => setSiteAddress(e.target.value)}
-                                className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
-                                placeholder="8 Ulster Road, Blockhouse Bay"
-                            />
-                        </div>
-
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Region *</label>
-                            <select
-                                value={regionId}
-                                onChange={(e) => setRegionId(e.target.value)}
-                                className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
-                            >
-                                <option value="">Select region...</option>
-                                {regions.map(r => (
-                                    <option key={r.id} value={r.id}>{r.name}</option>
-                                ))}
-                            </select>
-                        </div>
-
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Job Type *</label>
-                            <select
-                                value={jobType}
-                                onChange={(e) => setJobType(e.target.value)}
-                                className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
-                            >
-                                <option value="">Select job type...</option>
-                                <option value="New Build">New Build</option>
-                                <option value="Renovation">Renovation</option>
-                                <option value="Retrofit">Retrofit</option>
-                                <option value="Commercial">Commercial</option>
-                            </select>
-                        </div>
-
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Sales Rep</label>
-                            <select
-                                value={salesRepId}
-                                onChange={(e) => setSalesRepId(e.target.value)}
-                                className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
-                            >
-                                <option value="">Select sales rep...</option>
-                                {salesReps.map(sr => (
-                                    <option key={sr.id} value={sr.id}>{sr.name}</option>
-                                ))}
-                            </select>
-                        </div>
-
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Follow-Up Date</label>
-                            <input
-                                type="date"
-                                value={followUpDate}
-                                onChange={(e) => setFollowUpDate(e.target.value)}
-                                className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
+                        <div className="mt-4">
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                            <textarea
+                                value={notes}
+                                onChange={(e) => setNotes(e.target.value)}
+                                rows={3}
+                                className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
+                                placeholder="Add any additional notes or special instructions..."
                             />
                         </div>
                     </div>
