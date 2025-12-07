@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { Search, Plus, Trash2, X } from 'lucide-react';
+import { Search, Plus, Trash2, X, Upload, FileText } from 'lucide-react';
 import ClientDetailsForm from '@/components/ClientDetailsForm';
 
 // Types
@@ -90,6 +90,11 @@ export default function CreateRecommendation() {
     const [productSearch, setProductSearch] = useState<{ [key: string]: string }>({});
     const [showProductSuggestions, setShowProductSuggestions] = useState<{ [key: string]: boolean }>({});
     const [generalNotes, setGeneralNotes] = useState('');
+    
+    // File attachments
+    const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
+    const [uploadedFileUrls, setUploadedFileUrls] = useState<string[]>([]);
+    const [uploadingFile, setUploadingFile] = useState(false);
 
     useEffect(() => {
         loadLookupData();
@@ -348,6 +353,59 @@ export default function CreateRecommendation() {
         updateLineItem(sectionId, lineItemId, 'product_id', product.id);
         setProductSearch({ ...productSearch, [`${sectionId}-${lineItemId}`]: product.product_description });
         setShowProductSuggestions({ ...showProductSuggestions, [`${sectionId}-${lineItemId}`]: false });
+    };
+
+    // File attachment handlers
+    const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = e.target.files;
+        if (!files || files.length === 0) return;
+
+        setUploadingFile(true);
+        const newFiles = Array.from(files);
+        
+        try {
+            // For now, just add files to state - we'll upload when saving
+            setAttachedFiles(prev => [...prev, ...newFiles]);
+        } catch (err) {
+            console.error('Error selecting files:', err);
+            alert('Error selecting files');
+        } finally {
+            setUploadingFile(false);
+            // Reset input
+            e.target.value = '';
+        }
+    };
+
+    const removeFile = (index: number) => {
+        setAttachedFiles(prev => prev.filter((_, i) => i !== index));
+    };
+
+    const uploadFilesToStorage = async (recommendationId: string): Promise<string[]> => {
+        const uploadedUrls: string[] = [];
+        
+        for (const file of attachedFiles) {
+            const fileName = `${recommendationId}/${Date.now()}_${file.name}`;
+            
+            const { data, error } = await supabase.storage
+                .from('recommendation-attachments')
+                .upload(fileName, file);
+
+            if (error) {
+                console.error('Error uploading file:', error);
+                throw new Error(`Failed to upload ${file.name}`);
+            }
+
+            if (data) {
+                // Get public URL
+                const { data: urlData } = supabase.storage
+                    .from('recommendation-attachments')
+                    .getPublicUrl(fileName);
+                
+                uploadedUrls.push(urlData.publicUrl);
+            }
+        }
+        
+        return uploadedUrls;
     };
 
     const saveDraft = async () => {
@@ -682,6 +740,61 @@ export default function CreateRecommendation() {
                         rows={4}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC]"
                     />
+                </div>
+
+                {/* File Attachments */}
+                <div className="bg-white rounded-lg shadow p-6 mb-6">
+                    <h2 className="text-lg font-semibold text-gray-800 mb-4">Attachments</h2>
+                    <p className="text-sm text-gray-600 mb-4">Attach photos, floor plans, assessment reports, or other relevant documents</p>
+                    
+                    {/* File Upload Button */}
+                    <div className="mb-4">
+                        <label className="inline-flex items-center px-4 py-2 bg-[#0066CC] hover:bg-[#0052a3] text-white rounded-lg cursor-pointer">
+                            <Upload className="w-4 h-4 mr-2" />
+                            {uploadingFile ? 'Uploading...' : 'Attach Files'}
+                            <input
+                                type="file"
+                                multiple
+                                accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                                onChange={handleFileSelect}
+                                disabled={uploadingFile}
+                                className="hidden"
+                            />
+                        </label>
+                        <span className="ml-3 text-sm text-gray-500">
+                            Supported: PDF, JPG, PNG, DOC, DOCX (max 10MB each)
+                        </span>
+                    </div>
+
+                    {/* File List */}
+                    {attachedFiles.length > 0 && (
+                        <div className="space-y-2">
+                            {attachedFiles.map((file, index) => (
+                                <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
+                                    <div className="flex items-center gap-3">
+                                        <FileText className="w-5 h-5 text-gray-500" />
+                                        <div>
+                                            <p className="text-sm font-medium text-gray-800">{file.name}</p>
+                                            <p className="text-xs text-gray-500">
+                                                {(file.size / 1024).toFixed(2)} KB
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={() => removeFile(index)}
+                                        className="p-1 hover:bg-gray-200 rounded"
+                                        title="Remove file"
+                                    >
+                                        <X className="w-4 h-4 text-gray-600" />
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    {attachedFiles.length === 0 && (
+                        <p className="text-sm text-gray-500 italic">No files attached yet</p>
+                    )}
                 </div>
 
                 {/* Action Buttons */}
