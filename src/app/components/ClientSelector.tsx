@@ -16,8 +16,9 @@ interface Client {
   email: string
   phone: string
   company_id: string | null
-  companies?: { name: string }[] | null   // <-- array, matches Supabase join
+  companies?: { name: string }[] | null
 }
+
 
 export default function ClientSelector({ onClientSelected }: ClientSelectorProps) {
   const router = useRouter()
@@ -95,42 +96,53 @@ export default function ClientSelector({ onClientSelected }: ClientSelectorProps
     }
   }
 
-  async function searchClients(term: string) {
-    try {
-      setLoading(true)
-      const searchLower = term.toLowerCase()
+async function searchClients(term: string) {
+  try {
+    setLoading(true)
+    const searchLower = term.toLowerCase()
 
-      const { data, error } = await supabase
-        .from('clients')
-        .select(
-          `
-          id,
-          first_name,
-          last_name,
-          email,
-          phone,
-          company_id,
-          companies (name)
-        `
-        )
-        .or(
-          `first_name.ilike.%${searchLower}%,` +
-            `last_name.ilike.%${searchLower}%,` +
-            `email.ilike.%${searchLower}%,` +
-            `phone.ilike.%${searchLower}%`
-        )
-        .limit(10)
+    const { data, error } = await supabase
+      .from('clients')
+      .select(`
+        id,
+        first_name,
+        last_name,
+        email,
+        phone,
+        company_id,
+        companies (name)
+      `)
+      .or(
+        `first_name.ilike.%${searchLower}%,` +
+        `last_name.ilike.%${searchLower}%,` +
+        `email.ilike.%${searchLower}%,` +
+        `phone.ilike.%${searchLower}%`
+      )
+      .limit(10)
 
-      if (error) throw error
+    if (error) throw error
 
-      setClients((data || []) as Client[])
-      setShowDropdown(true)
-    } catch (err) {
-      console.error('Error searching clients:', err)
-    } finally {
-      setLoading(false)
-    }
+    const typedData: Client[] = (data || []).map((c: any) => ({
+      id: String(c.id),
+      first_name: String(c.first_name ?? ''),
+      last_name: String(c.last_name ?? ''),
+      email: String(c.email ?? ''),
+      phone: String(c.phone ?? ''),
+      company_id: c.company_id ?? null,
+      companies: (c.companies || []).map((co: any) => ({
+        name: String(co.name ?? ''),
+      })),
+    }))
+
+    setClients(typedData)
+    setShowDropdown(true)
+  } catch (err) {
+    console.error('Error searching clients:', err)
+  } finally {
+    setLoading(false)
   }
+}
+
 
   const handleClientSelect = (client: Client) => {
     setSelectedClient(client)
@@ -151,11 +163,11 @@ export default function ClientSelector({ onClientSelected }: ClientSelectorProps
   }
 
   const getCompanyName = (client: Client) => {
-    if (client.companies && client.companies.length > 0) {
-      return client.companies[0].name || '—'
-    }
-    return '—'
+  if (client.companies && client.companies.length > 0) {
+    return client.companies[0].name || '—'
   }
+  return '—'
+}
 
   return (
     <div className="space-y-2">
