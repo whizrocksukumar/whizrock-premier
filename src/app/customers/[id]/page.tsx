@@ -14,12 +14,13 @@ interface CustomerDetail {
   address_line_2: string | null
   city: string | null
   postcode: string | null
+  region_id: string | null
   status: string | null
   follow_up_date: string | null
   client_type_id: string | null
   created_at: string
   companies?: {
-    name: string
+    company_name: string
     address_line_1: string | null
     address_line_2: string | null
     city: string | null
@@ -30,6 +31,9 @@ interface CustomerDetail {
   } | null
   client_types?: {
     type_name: string
+  } | null
+  regions?: {
+    name: string
   } | null
 }
 
@@ -61,7 +65,7 @@ async function getCustomer(id: string) {
     if (customer.company_id) {
       const { data: company } = await supabase
         .from('companies')
-        .select('name, address_line_1, address_line_2, city, postal_code, phone, email, website')
+        .select('company_name, address_line_1, address_line_2, city, postal_code, phone, email, website')
         .eq('id', customer.company_id)
         .single()
       companyData = company || null
@@ -78,11 +82,23 @@ async function getCustomer(id: string) {
       clientTypeName = clientType?.type_name || null
     }
 
+    // Try to get region if region_id exists
+    let regionData = null
+    if (customer.region_id) {
+      const { data: region } = await supabase
+        .from('regions')
+        .select('name')
+        .eq('id', customer.region_id)
+        .single()
+      regionData = region || null
+    }
+
     // Combine all data
     const enrichedCustomer = {
       ...customer,
       companies: companyData,
-      client_types: clientTypeName ? { type_name: clientTypeName } : null
+      client_types: clientTypeName ? { type_name: clientTypeName } : null,
+      regions: regionData
     }
 
     return { data: enrichedCustomer, error: null }
@@ -205,7 +221,7 @@ export default async function CustomerDetailPage({
   const relatedData = await getCustomerRelatedData(customer.id)
   
   const fullName = `${customer.first_name} ${customer.last_name}`
-  const companyName = customer.companies?.name || '—'
+  const companyName = customer.companies?.company_name || '—'
   const clientType = customer.client_types?.type_name || '—'
   const contactType = customer.contact_type || '—'
   
@@ -266,7 +282,7 @@ export default async function CustomerDetailPage({
             <p className="text-sm text-gray-600 mt-1">
               {customer.email} • {customer.phone || '—'} • {customer.companies ? (
                 <Link href={`/companies/${customer.company_id}`} className="text-[#0066CC] hover:underline">
-                  {customer.companies.name}
+                  {customer.companies.company_name}
                 </Link>
               ) : 'No Company'}
             </p>
@@ -359,7 +375,7 @@ export default async function CustomerDetailPage({
                   <p className="font-medium text-gray-900">
                     {customer.companies ? (
                       <Link href={`/companies/${customer.company_id}`} className="text-[#0066CC] hover:underline">
-                        {customer.companies.name}
+                        {customer.companies.company_name}
                       </Link>
                     ) : '—'}
                   </p>
@@ -392,6 +408,13 @@ export default async function CustomerDetailPage({
                   </label>
                   <p className="font-medium" style={{ color: 'var(--color-neutral-900)' }}>
                     {displayAddress || '—'}
+                  </p>
+                </div>
+
+                <div>
+                  <label className="form-label">Region</label>
+                  <p className="font-medium" style={{ color: 'var(--color-neutral-900)' }}>
+                    {customer.regions?.name || '—'}
                   </p>
                 </div>
 
@@ -554,9 +577,11 @@ export default async function CustomerDetailPage({
               </Link>
             </div>
           )}
-        </div>        {/* Jobs Section */}
+        </div>
+
+        {/* Jobs Section */}
         {relatedData.jobs.length > 0 && (
-          <div className="card">
+          <div className="card mt-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="card-title">Recent Jobs</h2>
               <Briefcase className="w-5 h-5" style={{ color: 'var(--color-neutral-400)' }} />

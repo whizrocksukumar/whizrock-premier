@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
-import { Search, Plus, ChevronDown } from 'lucide-react';
+import { Search, Plus, ChevronDown, X, ArrowLeft } from 'lucide-react';
 
 // Types
 interface Client {
@@ -20,8 +20,47 @@ interface Client {
     follow_up_date?: string;
 }
 
+interface Company {
+    id: string;
+    name: string;
+}
+
+interface CustomerFormData {
+    first_name: string;
+    last_name: string;
+    email: string;
+    phone: string;
+    company_id: string;
+    address_line_1: string;
+    address_line_2: string;
+    city: string;
+    postcode: string;
+    region: string;
+    status: string;
+}
+
+interface CompanyFormData {
+    name: string;
+    industry: string;
+    phone: string;
+    email: string;
+}
+
 type SortField = 'first_name' | 'last_name' | 'company_name' | 'site_address' | 'email' | 'phone' | 'status' | 'follow_up_date';
 type SortDirection = 'asc' | 'desc';
+
+const REGIONS = [
+    'Auckland',
+    'Wellington',
+    'Christchurch',
+    'Tauranga',
+    'Hamilton',
+    'Dunedin',
+    'Palmerston North',
+    'Rotorua',
+    'Nelson',
+    'Invercargill'
+];
 
 export default function CustomersPage() {
     const router = useRouter();
@@ -37,9 +76,43 @@ export default function CustomersPage() {
     const [pagination, setPagination] = useState({ page: 1, pageSize: 20, total: 0 });
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
+    // Drawer state
+    const [drawerOpen, setDrawerOpen] = useState(false);
+    const [saving, setSaving] = useState(false);
+    const [formError, setFormError] = useState<string | null>(null);
+
+    // Company state
+    const [companies, setCompanies] = useState<Company[]>([]);
+    const [showCompanyForm, setShowCompanyForm] = useState(false);
+    const [savingCompany, setSavingCompany] = useState(false);
+    const [companyError, setCompanyError] = useState<string | null>(null);
+
+    // Form data
+    const [customerForm, setCustomerForm] = useState<CustomerFormData>({
+        first_name: '',
+        last_name: '',
+        email: '',
+        phone: '',
+        company_id: '',
+        address_line_1: '',
+        address_line_2: '',
+        city: '',
+        postcode: '',
+        region: '',
+        status: 'active'
+    });
+
+    const [companyForm, setCompanyForm] = useState<CompanyFormData>({
+        name: '',
+        industry: '',
+        phone: '',
+        email: ''
+    });
+
     // Fetch clients on mount and when filters change
     useEffect(() => {
         fetchClients();
+        fetchCompanies();
     }, [searchTerm, statusFilter, sortField, sortDirection, pagination.page]);
 
     const fetchClients = async () => {
@@ -54,16 +127,8 @@ export default function CustomersPage() {
                 .order('last_name', { ascending: true })
                 .limit(50);
 
-            console.log('Supabase response:', { data, error: fetchError });
-
-            if (fetchError) {
-                console.error('Supabase error:', fetchError);
-                throw fetchError;
-            }
-
-            if (!data) {
-                throw new Error('No data returned from Supabase');
-            }
+            if (fetchError) throw fetchError;
+            if (!data) throw new Error('No data returned from Supabase');
 
             // Get unique company IDs
             const companyIds = [...new Set(data.map(c => c.company_id).filter(Boolean))];
@@ -73,12 +138,12 @@ export default function CustomersPage() {
             if (companyIds.length > 0) {
                 const { data: companies } = await supabase
                     .from('companies')
-                    .select('id, company_name')
+                    .select('id, name')
                     .in('id', companyIds);
                 
                 if (companies) {
                     companies.forEach(company => {
-                        companyMap[company.id] = company.company_name;
+                        companyMap[company.id] = company.name;
                     });
                 }
             }
@@ -96,7 +161,6 @@ export default function CustomersPage() {
                 follow_up_date: client.follow_up_date || '',
             }));
 
-            console.log('Transformed data:', transformedData);
             setClients(transformedData);
             setPagination(prev => ({ ...prev, total: data.length }));
             setSelectedIds(new Set());
@@ -105,6 +169,171 @@ export default function CustomersPage() {
             setError(err instanceof Error ? err.message : 'Failed to fetch customers');
         } finally {
             setLoading(false);
+        }
+    };
+
+    const fetchCompanies = async () => {
+        try {
+            const { data, error: fetchError } = await supabase
+                .from('companies')
+                .select('id, name')
+                .order('name', { ascending: true });
+
+            if (fetchError) throw fetchError;
+            setCompanies(data || []);
+        } catch (err) {
+            console.error('Error fetching companies:', err);
+        }
+    };
+
+    const openDrawer = () => {
+        // Reset form
+        setCustomerForm({
+            first_name: '',
+            last_name: '',
+            email: '',
+            phone: '',
+            company_id: '',
+            address_line_1: '',
+            address_line_2: '',
+            city: '',
+            postcode: '',
+            region: '',
+            status: 'active'
+        });
+        setFormError(null);
+        setShowCompanyForm(false);
+        setDrawerOpen(true);
+    };
+
+    const closeDrawer = () => {
+        setDrawerOpen(false);
+        setShowCompanyForm(false);
+        setFormError(null);
+        setCompanyError(null);
+    };
+
+    const handleCustomerFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+        const { name, value } = e.target;
+        setCustomerForm(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleCompanyFormChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const { name, value } = e.target;
+        setCompanyForm(prev => ({ ...prev, [name]: value }));
+    };
+
+    const validateCustomerForm = (): boolean => {
+        if (!customerForm.first_name.trim()) {
+            setFormError('First name is required');
+            return false;
+        }
+        if (!customerForm.last_name.trim()) {
+            setFormError('Last name is required');
+            return false;
+        }
+        if (!customerForm.email.trim()) {
+            setFormError('Email is required');
+            return false;
+        }
+        if (!customerForm.email.includes('@')) {
+            setFormError('Please enter a valid email address');
+            return false;
+        }
+        if (!customerForm.phone.trim()) {
+            setFormError('Phone is required');
+            return false;
+        }
+        if (!customerForm.address_line_1.trim()) {
+            setFormError('Address is required');
+            return false;
+        }
+        if (!customerForm.region) {
+            setFormError('Region is required');
+            return false;
+        }
+        return true;
+    };
+
+    const handleSubmitCustomer = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setFormError(null);
+
+        if (!validateCustomerForm()) return;
+
+        setSaving(true);
+
+        try {
+            const { data, error: insertError } = await supabase
+                .from('clients')
+                .insert({
+                    first_name: customerForm.first_name.trim(),
+                    last_name: customerForm.last_name.trim(),
+                    email: customerForm.email.trim(),
+                    phone: customerForm.phone.trim(),
+                    company_id: customerForm.company_id || null,
+                    address_line_1: customerForm.address_line_1.trim(),
+                    address_line_2: customerForm.address_line_2.trim() || null,
+                    city: customerForm.city.trim() || null,
+                    postcode: customerForm.postcode.trim() || null,
+                    region: customerForm.region,
+                    status: customerForm.status
+                })
+                .select()
+                .single();
+
+            if (insertError) throw insertError;
+
+            // Refresh clients list
+            await fetchClients();
+            closeDrawer();
+        } catch (err: any) {
+            console.error('Error creating customer:', err);
+            setFormError(err.message || 'Failed to create customer');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleSubmitCompany = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setCompanyError(null);
+
+        if (!companyForm.name.trim()) {
+            setCompanyError('Company name is required');
+            return;
+        }
+
+        setSavingCompany(true);
+
+        try {
+            const { data, error: insertError } = await supabase
+                .from('companies')
+                .insert({
+                    name: companyForm.name.trim(),
+                    industry: companyForm.industry.trim() || null,
+                    phone: companyForm.phone.trim() || null,
+                    email: companyForm.email.trim() || null
+                })
+                .select()
+                .single();
+
+            if (insertError) throw insertError;
+
+            // Add to companies list
+            setCompanies(prev => [...prev, { id: data.id, name: data.name }].sort((a, b) => a.name.localeCompare(b.name)));
+            
+            // Auto-select the new company
+            setCustomerForm(prev => ({ ...prev, company_id: data.id }));
+            
+            // Reset company form and hide it
+            setCompanyForm({ name: '', industry: '', phone: '', email: '' });
+            setShowCompanyForm(false);
+        } catch (err: any) {
+            console.error('Error creating company:', err);
+            setCompanyError(err.message || 'Failed to create company');
+        } finally {
+            setSavingCompany(false);
         }
     };
 
@@ -203,9 +432,9 @@ export default function CustomersPage() {
                 <div className="flex items-center justify-between">
                     <div>
                         <h1 className="text-2xl font-semibold text-[#0066CC]">
-                            Customers
+                            Contacts
                         </h1>
-                        <p className="text-sm text-gray-500 mt-1">Manage your customer database</p>
+                        <p className="text-sm text-gray-500 mt-1">Manage your customer contacts</p>
                     </div>
                     {/* User Icon and Email */}
                     <div className="flex items-center gap-3">
@@ -229,7 +458,7 @@ export default function CustomersPage() {
                             <Search className="absolute left-3 top-2.5 w-5 h-5 text-gray-400" />
                             <input
                                 type="text"
-                                placeholder="Search customers..."
+                                placeholder="Search contacts..."
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
                                 className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-[#0066CC] focus:border-transparent text-sm"
@@ -245,13 +474,13 @@ export default function CustomersPage() {
                         <button className="px-4 py-2 text-sm border border-gray-300 rounded hover:bg-gray-50 transition-colors">
                             Import
                         </button>
-                        <Link
-                            href="/customers/new"
+                        <button
+                            onClick={openDrawer}
                             className="px-4 py-2 text-sm bg-[#0066CC] text-white rounded hover:bg-[#0052a3] transition-colors flex items-center gap-2"
                         >
                             <Plus className="w-4 h-4" />
-                            New Customer
-                        </Link>
+                            New Contact
+                        </button>
                     </div>
                 </div>
             </div>
@@ -311,14 +540,14 @@ export default function CustomersPage() {
                     </div>
                 )}
 
-                <div className="text-sm text-gray-600">
-                    Showing {filteredClients.length} of {clients.length} customers
+                <div className="text-sm text-gray-600 mb-4">
+                    Showing {filteredClients.length} of {clients.length} contacts
                 </div>
 
                 {loading ? (
                     <div className="flex items-center justify-center py-12 bg-white rounded shadow">
                         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0066CC]"></div>
-                        <span className="ml-3 text-gray-600">Loading customers...</span>
+                        <span className="ml-3 text-gray-600">Loading contacts...</span>
                     </div>
                 ) : (
                     <>
@@ -386,7 +615,7 @@ export default function CustomersPage() {
                                     {clients.length === 0 ? (
                                         <tr>
                                             <td colSpan={9} className="px-4 py-8 text-center text-gray-500">
-                                                No customers found
+                                                No contacts found
                                             </td>
                                         </tr>
                                     ) : (
@@ -522,6 +751,382 @@ export default function CustomersPage() {
                     </>
                 )}
             </div>
+
+            {/* ===== ADD CUSTOMER DRAWER ===== */}
+            {drawerOpen && (
+                <div className="fixed inset-0 z-50">
+                    {/* Backdrop */}
+                    <div
+                        className="absolute inset-0 bg-black bg-opacity-50"
+                        onClick={closeDrawer}
+                    ></div>
+
+                    {/* Drawer Panel */}
+                    <div className="absolute right-0 top-0 h-full w-[600px] bg-white shadow-xl overflow-y-auto">
+                        {/* Drawer Header */}
+                        <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 z-10">
+                            <div className="flex items-center justify-between">
+                                <h2 className="text-xl font-semibold text-[#0066CC]">Add New Contact</h2>
+                                <button
+                                    onClick={closeDrawer}
+                                    className="p-2 hover:bg-gray-100 rounded-lg"
+                                >
+                                    <X className="w-5 h-5 text-gray-600" />
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Drawer Content */}
+                        <form onSubmit={handleSubmitCustomer} className="p-6 space-y-6">
+                            
+                            {/* Error */}
+                            {formError && (
+                                <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                                    {formError}
+                                </div>
+                            )}
+
+                            {/* Personal Information */}
+                            <div>
+                                <h3 className="text-sm font-semibold text-gray-800 mb-4 pb-2 border-b border-gray-200">
+                                    Personal Information
+                                </h3>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                                            First Name <span className="text-red-500">*</span>
+                                        </label>
+                                        <input
+                                            type="text"
+                                            name="first_name"
+                                            value={customerForm.first_name}
+                                            onChange={handleCustomerFormChange}
+                                            placeholder="John"
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC] text-sm"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                                            Last Name <span className="text-red-500">*</span>
+                                        </label>
+                                        <input
+                                            type="text"
+                                            name="last_name"
+                                            value={customerForm.last_name}
+                                            onChange={handleCustomerFormChange}
+                                            placeholder="Smith"
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC] text-sm"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                                            Email <span className="text-red-500">*</span>
+                                        </label>
+                                        <input
+                                            type="email"
+                                            name="email"
+                                            value={customerForm.email}
+                                            onChange={handleCustomerFormChange}
+                                            placeholder="john.smith@example.com"
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC] text-sm"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                                            Phone <span className="text-red-500">*</span>
+                                        </label>
+                                        <input
+                                            type="tel"
+                                            name="phone"
+                                            value={customerForm.phone}
+                                            onChange={handleCustomerFormChange}
+                                            placeholder="+64 21 123 4567"
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC] text-sm"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Company Information */}
+                            <div>
+                                <h3 className="text-sm font-semibold text-gray-800 mb-4 pb-2 border-b border-gray-200">
+                                    Company Information
+                                </h3>
+                                
+                                {!showCompanyForm ? (
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                                            Company
+                                        </label>
+                                        <div className="flex gap-2">
+                                            <select
+                                                name="company_id"
+                                                value={customerForm.company_id}
+                                                onChange={handleCustomerFormChange}
+                                                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC] text-sm"
+                                            >
+                                                <option value="">-- Select a company --</option>
+                                                {companies.map(company => (
+                                                    <option key={company.id} value={company.id}>
+                                                        {company.name}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowCompanyForm(true)}
+                                                className="px-3 py-2 bg-[#0066CC] hover:bg-[#0052a3] text-white rounded-lg transition-colors flex items-center gap-1 text-sm font-medium whitespace-nowrap"
+                                            >
+                                                <Plus className="w-4 h-4" />
+                                                New
+                                            </button>
+                                        </div>
+                                        <p className="text-xs text-gray-500 mt-1">Leave empty if this is a residential customer</p>
+                                    </div>
+                                ) : (
+                                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                                        <div className="flex items-center justify-between mb-3">
+                                            <h4 className="text-sm font-semibold text-blue-900">Add New Company</h4>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setShowCompanyForm(false);
+                                                    setCompanyError(null);
+                                                    setCompanyForm({ name: '', industry: '', phone: '', email: '' });
+                                                }}
+                                                className="text-sm text-blue-700 hover:text-blue-900 underline"
+                                            >
+                                                Cancel
+                                            </button>
+                                        </div>
+
+                                        {companyError && (
+                                            <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm mb-3">
+                                                {companyError}
+                                            </div>
+                                        )}
+
+                                        <div className="space-y-3">
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                                    Company Name <span className="text-red-500">*</span>
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    name="name"
+                                                    value={companyForm.name}
+                                                    onChange={handleCompanyFormChange}
+                                                    placeholder="ABC Construction Ltd"
+                                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC] text-sm"
+                                                />
+                                            </div>
+
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                                    Industry
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    name="industry"
+                                                    value={companyForm.industry}
+                                                    onChange={handleCompanyFormChange}
+                                                    placeholder="e.g., Construction, Property Management"
+                                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC] text-sm"
+                                                />
+                                            </div>
+
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                                    Phone
+                                                </label>
+                                                <input
+                                                    type="tel"
+                                                    name="phone"
+                                                    value={companyForm.phone}
+                                                    onChange={handleCompanyFormChange}
+                                                    placeholder="+64 9 123 4567"
+                                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC] text-sm"
+                                                />
+                                            </div>
+
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                                    Email
+                                                </label>
+                                                <input
+                                                    type="email"
+                                                    name="email"
+                                                    value={companyForm.email}
+                                                    onChange={handleCompanyFormChange}
+                                                    placeholder="contact@company.com"
+                                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC] text-sm"
+                                                />
+                                            </div>
+
+                                            <button
+                                                type="button"
+                                                onClick={handleSubmitCompany}
+                                                disabled={savingCompany}
+                                                className="w-full px-4 py-2 bg-[#0066CC] hover:bg-[#0052a3] text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium text-sm"
+                                            >
+                                                {savingCompany ? 'Adding...' : 'Add Company'}
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Address Information */}
+                            <div>
+                                <h3 className="text-sm font-semibold text-gray-800 mb-4 pb-2 border-b border-gray-200">
+                                    Address Information
+                                </h3>
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                                            Address Line 1 <span className="text-red-500">*</span>
+                                        </label>
+                                        <input
+                                            type="text"
+                                            name="address_line_1"
+                                            value={customerForm.address_line_1}
+                                            onChange={handleCustomerFormChange}
+                                            placeholder="123 Main Street"
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC] text-sm"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                                            Address Line 2
+                                        </label>
+                                        <input
+                                            type="text"
+                                            name="address_line_2"
+                                            value={customerForm.address_line_2}
+                                            onChange={handleCustomerFormChange}
+                                            placeholder="Apt, suite, unit (optional)"
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC] text-sm"
+                                        />
+                                    </div>
+
+                                    <div className="grid grid-cols-3 gap-4">
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                                City
+                                            </label>
+                                            <input
+                                                type="text"
+                                                name="city"
+                                                value={customerForm.city}
+                                                onChange={handleCustomerFormChange}
+                                                placeholder="Auckland"
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC] text-sm"
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                                Postcode
+                                            </label>
+                                            <input
+                                                type="text"
+                                                name="postcode"
+                                                value={customerForm.postcode}
+                                                onChange={handleCustomerFormChange}
+                                                placeholder="1010"
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC] text-sm"
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                                Region <span className="text-red-500">*</span>
+                                            </label>
+                                            <select
+                                                name="region"
+                                                value={customerForm.region}
+                                                onChange={handleCustomerFormChange}
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC] text-sm"
+                                            >
+                                                <option value="">-- Select --</option>
+                                                {REGIONS.map(region => (
+                                                    <option key={region} value={region}>
+                                                        {region}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Status */}
+                            <div>
+                                <h3 className="text-sm font-semibold text-gray-800 mb-4 pb-2 border-b border-gray-200">
+                                    Status
+                                </h3>
+                                <div className="flex gap-6">
+                                    <label className="flex items-center cursor-pointer">
+                                        <input
+                                            type="radio"
+                                            name="status"
+                                            value="active"
+                                            checked={customerForm.status === 'active'}
+                                            onChange={handleCustomerFormChange}
+                                            className="w-4 h-4 text-[#0066CC]"
+                                        />
+                                        <span className="ml-2 text-sm text-gray-700">Active</span>
+                                    </label>
+                                    <label className="flex items-center cursor-pointer">
+                                        <input
+                                            type="radio"
+                                            name="status"
+                                            value="inactive"
+                                            checked={customerForm.status === 'inactive'}
+                                            onChange={handleCustomerFormChange}
+                                            className="w-4 h-4 text-[#0066CC]"
+                                        />
+                                        <span className="ml-2 text-sm text-gray-700">Inactive</span>
+                                    </label>
+                                    <label className="flex items-center cursor-pointer">
+                                        <input
+                                            type="radio"
+                                            name="status"
+                                            value="prospect"
+                                            checked={customerForm.status === 'prospect'}
+                                            onChange={handleCustomerFormChange}
+                                            className="w-4 h-4 text-[#0066CC]"
+                                        />
+                                        <span className="ml-2 text-sm text-gray-700">Prospect</span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            {/* Buttons */}
+                            <div className="flex gap-4 justify-end pt-4 border-t border-gray-200 sticky bottom-0 bg-white">
+                                <button
+                                    type="button"
+                                    onClick={closeDrawer}
+                                    className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium text-sm"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={saving}
+                                    className="px-6 py-2 bg-[#0066CC] hover:bg-[#0052a3] text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium text-sm"
+                                >
+                                    {saving ? 'Saving...' : 'Save Contact'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

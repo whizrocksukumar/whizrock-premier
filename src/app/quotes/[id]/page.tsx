@@ -2,6 +2,7 @@ import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
 import { ArrowLeft, Edit, FileText, User, Mail, Phone, Building } from 'lucide-react'
 import QuoteSendButton from '@/components/QuoteSendButton'
+import CreateJobButton from '@/components/CreateJobButton'
 
 interface QuoteDetail {
   id: string
@@ -238,6 +239,11 @@ export default async function QuoteDetailPage({
             {quote.valid_until && (<><span className="text-sm text-gray-600">•</span><span className="text-sm text-gray-600">Valid Until: {formatDate(quote.valid_until)}</span></>)}
           </div>
           <div className="flex items-center gap-2">
+            <CreateJobButton 
+              quoteId={quote.id}
+              quoteNumber={quote.quote_number || 'Quote'}
+              quoteStatus={quote.status}
+            />
             <QuoteSendButton quote={{
               ...quote,
               customer_name: customerName,

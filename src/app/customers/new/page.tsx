@@ -1,423 +1,462 @@
-'use client';
+'use client'
 
-import { useState, useEffect } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import Link from 'next/link';
-import { supabase } from '@/lib/supabase';
-import { ArrowLeft, Building, User, Mail, Phone, MapPin } from 'lucide-react';
+import { useState, useEffect } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import Link from 'next/link'
+import { supabase } from '@/lib/supabase'
+import { ArrowLeft, Plus } from 'lucide-react'
+import AddCompanyModal from '@/components/AddCompanyModal'
 
-// Types
+interface FormData {
+  first_name: string
+  last_name: string
+  email: string
+  phone: string
+  company_id: string
+  address_line_1: string
+  address_line_2: string
+  city: string
+  postcode: string
+  region: string
+  status: string
+}
+
 interface Company {
-    id: string;
-    name: string;
+  id: string
+  name: string
 }
 
-interface Region {
-    id: string;
-    name: string;
-}
+const REGIONS = [
+  'Auckland',
+  'Wellington',
+  'Christchurch',
+  'Tauranga',
+  'Hamilton',
+  'Dunedin',
+  'Palmerston North',
+  'Rotorua',
+  'Nelson',
+  'Invercargill'
+]
 
-export default function AddCustomerPage() {
-    const router = useRouter();
-    const searchParams = useSearchParams();
-    const [loading, setLoading] = useState(true);
-    const [saving, setSaving] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+export default function NewCustomerPage() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const redirectTo = searchParams.get('redirectTo')
 
-    // Form state - Personal Information
-    const [firstName, setFirstName] = useState('');
-    const [lastName, setLastName] = useState('');
-    const [email, setEmail] = useState('');
-    const [phone, setPhone] = useState('');
-    
-    // Company Information
-    const [companyId, setCompanyId] = useState(searchParams.get('company_id') || '');
-    const [newCompanyName, setNewCompanyName] = useState('');
-    const [contactType, setContactType] = useState('Primary Contact');
-    
-    // Address Information
-    const [addressLine1, setAddressLine1] = useState('');
-    const [addressLine2, setAddressLine2] = useState('');
-    const [city, setCity] = useState('');
-    const [postalCode, setPostalCode] = useState('');
-    const [regionId, setRegionId] = useState('');
-    
-    // Status - always Active for new customers
-    const status = 'Active';
+  const [companies, setCompanies] = useState<Company[]>([])
+  const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [showCompanyModal, setShowCompanyModal] = useState(false)
 
-    // Lookup data
-    const [companies, setCompanies] = useState<Company[]>([]);
-    const [regions, setRegions] = useState<Region[]>([]);
+  const [formData, setFormData] = useState<FormData>({
+    first_name: '',
+    last_name: '',
+    email: '',
+    phone: '',
+    company_id: '',
+    address_line_1: '',
+    address_line_2: '',
+    city: '',
+    postcode: '',
+    region: '',
+    status: 'active'
+  })
 
-    useEffect(() => {
-        loadLookupData();
-    }, []);
+  useEffect(() => {
+    fetchCompanies()
+  }, [])
 
-    const loadLookupData = async () => {
-        try {
-            setLoading(true);
-            
-            // Load companies and regions in parallel
-            const [companiesRes, regionsRes] = await Promise.all([
-                supabase.from('companies').select('id, name').order('name'),
-                supabase.from('regions').select('id, name').order('name')
-            ]);
+  const fetchCompanies = async () => {
+    try {
+      setLoading(true)
+      const { data, error: fetchError } = await supabase
+        .from('companies')
+        .select('id, name')
+        .order('name', { ascending: true })
 
-            if (companiesRes.data) setCompanies(companiesRes.data);
-            if (regionsRes.data) setRegions(regionsRes.data);
-            
-        } catch (err) {
-            console.error('Error loading lookup data:', err);
-            setError('Failed to load form data');
-        } finally {
-            setLoading(false);
-        }
-    };
+      if (fetchError) throw fetchError
+      setCompanies(data || [])
+    } catch (err) {
+      console.error('Error fetching companies:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
 
-    const createOrSelectCompany = async (): Promise<string | null> => {
-        if (!companyId && !newCompanyName) {
-            // Company is optional - return null
-            return null;
-        }
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }))
+  }
 
-        if (companyId) {
-            return companyId;
-        }
+  const handleCompanyAdded = (newCompany: { id: string; name: string }) => {
+    setCompanies(prev => [...prev, newCompany].sort((a, b) => a.name.localeCompare(b.name)))
+    setFormData(prev => ({ ...prev, company_id: newCompany.id }))
+  }
 
-        // Create new company
-        const { data, error: createError } = await supabase
-            .from('companies')
-            .insert({ name: newCompanyName })
-            .select('id')
-            .single();
+  const validateForm = (): boolean => {
+    if (!formData.first_name.trim()) {
+      setError('First name is required')
+      return false
+    }
+    if (!formData.last_name.trim()) {
+      setError('Last name is required')
+      return false
+    }
+    if (!formData.email.trim()) {
+      setError('Email is required')
+      return false
+    }
+    if (!formData.email.includes('@')) {
+      setError('Please enter a valid email address')
+      return false
+    }
+    if (!formData.phone.trim()) {
+      setError('Phone is required')
+      return false
+    }
+    if (!formData.address_line_1.trim()) {
+      setError('Address is required')
+      return false
+    }
+    if (!formData.region) {
+      setError('Region is required')
+      return false
+    }
+    return true
+  }
 
-        if (createError) {
-            throw new Error('Failed to create company');
-        }
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError(null)
 
-        return data?.id || null;
-    };
-
-    const handleSave = async () => {
-        if (!firstName || !lastName || !email || !phone) {
-            setError('Please fill in all required fields (First Name, Last Name, Email, Phone)');
-            return;
-        }
-
-        try {
-            setSaving(true);
-            setError(null);
-
-            const finalCompanyId = await createOrSelectCompany();
-
-            const { error: saveError } = await supabase
-                .from('clients')
-                .insert({
-                    first_name: firstName,
-                    last_name: lastName,
-                    email,
-                    phone,
-                    company_id: finalCompanyId,
-                    contact_type: contactType,
-                    address_line_1: addressLine1 || null,
-                    address_line_2: addressLine2 || null,
-                    city: city || null,
-                    postal_code: postalCode || null,
-                    region_id: regionId || null,
-                    status,
-                })
-                .select();
-
-            if (saveError) throw saveError;
-
-            // Redirect back to customers list
-            router.push('/customers');
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to save customer');
-        } finally {
-            setSaving(false);
-        }
-    };
-
-    if (loading) {
-        return (
-            <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-                <div className="text-center">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#0066CC] mx-auto mb-4"></div>
-                    <p className="text-gray-700">Loading...</p>
-                </div>
-            </div>
-        );
+    if (!validateForm()) {
+      return
     }
 
-    return (
-        <div className="min-h-screen bg-gray-50">
-            {/* Header */}
-            <div className="bg-white border-b border-gray-200 px-6 py-3">
-                <div className="flex items-center justify-between">
-                    <div>
-                        <Link 
-                            href="/customers" 
-                            className="text-sm text-gray-600 hover:text-gray-900 flex items-center gap-1 mb-1"
-                        >
-                            <ArrowLeft className="w-4 h-4" />
-                            Back to Customers
-                        </Link>
-                        <h1 className="text-xl font-bold text-gray-900">Add New Customer</h1>
-                    </div>
-                    {/* User Icon */}
-                    <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-sm font-medium">
-                            U
-                        </div>
-                        <div className="text-right">
-                            <p className="text-sm text-gray-700">user@premier.local</p>
-                        </div>
-                        <button className="ml-2 text-xs text-[#0066CC] hover:underline">Logout</button>
-                    </div>
-                </div>
-            </div>
+    setSaving(true)
 
-            {/* Form */}
-            <div className="max-w-7xl mx-auto p-4">
-                {error && (
-                    <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2">
-                        <div className="flex-shrink-0 w-4 h-4 text-red-600 mt-0.5">⚠</div>
-                        <p className="text-red-700 text-sm">{error}</p>
-                    </div>
-                )}
+    try {
+      const { data, error: insertError } = await supabase
+        .from('clients')
+        .insert({
+          first_name: formData.first_name.trim(),
+          last_name: formData.last_name.trim(),
+          email: formData.email.trim(),
+          phone: formData.phone.trim(),
+          company_id: formData.company_id || null,
+          address_line_1: formData.address_line_1.trim(),
+          address_line_2: formData.address_line_2.trim() || null,
+          city: formData.city.trim() || null,
+          postcode: formData.postcode.trim() || null,
+          region: formData.region,
+          status: formData.status
+        })
+        .select()
+        .single()
 
-                <form onSubmit={(e) => { e.preventDefault(); handleSave(); }}>
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
-                        {/* Personal Information */}
-                        <div className="bg-white rounded-lg shadow">
-                            <div className="px-4 py-3 border-b border-gray-200 flex items-center gap-2">
-                                <User className="w-4 h-4 text-[#0066CC]" />
-                                <h2 className="text-base font-semibold text-gray-900">Personal Information</h2>
-                            </div>
-                            <div className="p-4">
-                                <div className="space-y-4">
-                                    <div>
-                                        <label className="block text-xs font-medium text-gray-700 mb-1">
-                                            First Name <span className="text-red-500">*</span>
-                                        </label>
-                                        <input
-                                            type="text"
-                                            value={firstName}
-                                            onChange={(e) => setFirstName(e.target.value)}
-                                            placeholder="John"
-                                            required
-                                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-medium text-gray-700 mb-1">
-                                            Last Name <span className="text-red-500">*</span>
-                                        </label>
-                                        <input
-                                            type="text"
-                                            value={lastName}
-                                            onChange={(e) => setLastName(e.target.value)}
-                                            placeholder="Doe"
-                                            required
-                                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-medium text-gray-700 mb-1 flex items-center gap-1">
-                                            <Mail className="w-3 h-3" />
-                                            Email <span className="text-red-500">*</span>
-                                        </label>
-                                        <input
-                                            type="email"
-                                            value={email}
-                                            onChange={(e) => setEmail(e.target.value)}
-                                            placeholder="john@example.com"
-                                            required
-                                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-medium text-gray-700 mb-1 flex items-center gap-1">
-                                            <Phone className="w-3 h-3" />
-                                            Phone <span className="text-red-500">*</span>
-                                        </label>
-                                        <input
-                                            type="tel"
-                                            value={phone}
-                                            onChange={(e) => setPhone(e.target.value)}
-                                            placeholder="+64 21 123 4567"
-                                            required
-                                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
-                                        />
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+      if (insertError) throw insertError
 
-                        {/* Company Information */}
-                        <div className="bg-white rounded-lg shadow">
-                            <div className="px-4 py-3 border-b border-gray-200 flex items-center gap-2">
-                                <Building className="w-4 h-4 text-[#0066CC]" />
-                                <h2 className="text-base font-semibold text-gray-900">Company Information</h2>
-                            </div>
-                            <div className="p-4">
-                                <div className="space-y-4">
-                                    <div>
-                                        <label className="block text-xs font-medium text-gray-700 mb-1">
-                                            Company
-                                        </label>
-                                        <select
-                                            value={companyId}
-                                            onChange={(e) => {
-                                                setCompanyId(e.target.value);
-                                                setNewCompanyName('');
-                                            }}
-                                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
-                                        >
-                                            <option value="">Select existing company...</option>
-                                            {companies.map((company) => (
-                                                <option key={company.id} value={company.id}>
-                                                    {company.name}
-                                                </option>
-                                            ))}
-                                        </select>
-                                        <div className="mt-2">
-                                            <input
-                                                type="text"
-                                                value={newCompanyName}
-                                                onChange={(e) => {
-                                                    setNewCompanyName(e.target.value);
-                                                    setCompanyId('');
-                                                }}
-                                                placeholder="Or create new company..."
-                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0066CC] focus:border-transparent text-sm"
-                                            />
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-medium text-gray-700 mb-1">
-                                            Contact Type
-                                        </label>
-                                        <select
-                                            value={contactType}
-                                            onChange={(e) => setContactType(e.target.value)}
-                                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
-                                        >
-                                            <option value="Primary Contact">Primary Contact</option>
-                                            <option value="Secondary Contact">Secondary Contact</option>
-                                            <option value="Billing Contact">Billing Contact</option>
-                                            <option value="Property Manager">Property Manager</option>
-                                            <option value="Other">Other</option>
-                                        </select>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+      if (redirectTo) {
+        router.push(`${redirectTo}?newClientId=${data.id}`)
+      } else {
+        router.push('/customers')
+      }
+    } catch (err: any) {
+      console.error('Error creating customer:', err)
+      setError(err.message || 'Failed to create customer')
+    } finally {
+      setSaving(false)
+    }
+  }
 
-                        {/* Address Information */}
-                        <div className="bg-white rounded-lg shadow">
-                            <div className="px-4 py-3 border-b border-gray-200 flex items-center gap-2">
-                                <MapPin className="w-4 h-4 text-[#0066CC]" />
-                                <h2 className="text-base font-semibold text-gray-900">Address Information</h2>
-                            </div>
-                            <div className="p-4">
-                                <div className="space-y-4">
-                                    <div>
-                                        <label className="block text-xs font-medium text-gray-700 mb-1">
-                                            Address Line 1
-                                        </label>
-                                        <input
-                                            type="text"
-                                            value={addressLine1}
-                                            onChange={(e) => setAddressLine1(e.target.value)}
-                                            placeholder="123 Main Street"
-                                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-medium text-gray-700 mb-1">
-                                            Address Line 2
-                                        </label>
-                                        <input
-                                            type="text"
-                                            value={addressLine2}
-                                            onChange={(e) => setAddressLine2(e.target.value)}
-                                            placeholder="Apt, suite, unit (optional)"
-                                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-medium text-gray-700 mb-1">
-                                            City
-                                        </label>
-                                        <input
-                                            type="text"
-                                            value={city}
-                                            onChange={(e) => setCity(e.target.value)}
-                                            placeholder="Auckland"
-                                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-medium text-gray-700 mb-1">
-                                            Postal Code
-                                        </label>
-                                        <input
-                                            type="text"
-                                            value={postalCode}
-                                            onChange={(e) => setPostalCode(e.target.value)}
-                                            placeholder="1010"
-                                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-medium text-gray-700 mb-1">
-                                            Region
-                                        </label>
-                                        <select
-                                            value={regionId}
-                                            onChange={(e) => setRegionId(e.target.value)}
-                                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
-                                        >
-                                            <option value="">Select region...</option>
-                                            {regions.map((region) => (
-                                                <option key={region.id} value={region.id}>
-                                                    {region.name}
-                                                </option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Action Buttons */}
-                    <div className="flex items-center justify-end gap-3 mt-4">
-                        <Link
-                            href="/customers"
-                            className="px-5 py-2 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-                        >
-                            Cancel
-                        </Link>
-                        <button
-                            type="submit"
-                            disabled={saving}
-                            className="px-5 py-2 text-sm bg-[#0066CC] hover:bg-[#0052a3] text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                        >
-                            {saving ? (
-                                <>
-                                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
-                                    Saving...
-                                </>
-                            ) : (
-                                'Save Customer'
-                            )}
-                        </button>
-                    </div>
-                </form>
-            </div>
+  return (
+    <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
+      {/* Card Container */}
+      <div className="w-full max-w-2xl bg-white rounded-lg shadow-lg border border-gray-200">
+        
+        {/* Header */}
+        <div className="flex items-center gap-4 px-6 py-4 border-b border-gray-200 bg-gray-50 rounded-t-lg">
+          <button
+            onClick={() => router.back()}
+            className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
+          >
+            <ArrowLeft className="w-5 h-5 text-gray-600" />
+          </button>
+          <div>
+            <h1 className="text-2xl font-semibold text-[#0066CC]">Add New Customer</h1>
+            <p className="text-sm text-gray-500 mt-0.5">Create a new customer record</p>
+          </div>
         </div>
-    );
+
+        {/* Form */}
+        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+          
+          {/* Error */}
+          {error && (
+            <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+              {error}
+            </div>
+          )}
+
+          {/* Personal Information */}
+          <div>
+            <h3 className="text-sm font-semibold text-gray-800 mb-4 pb-2 border-b border-gray-200">
+              Personal Information
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  First Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  name="first_name"
+                  value={formData.first_name}
+                  onChange={handleChange}
+                  placeholder="John"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC] text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Last Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  name="last_name"
+                  value={formData.last_name}
+                  onChange={handleChange}
+                  placeholder="Smith"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC] text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Email <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="email"
+                  name="email"
+                  value={formData.email}
+                  onChange={handleChange}
+                  placeholder="john.smith@example.com"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC] text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Phone <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="tel"
+                  name="phone"
+                  value={formData.phone}
+                  onChange={handleChange}
+                  placeholder="+64 21 123 4567"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC] text-sm"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Company Information */}
+          <div>
+            <h3 className="text-sm font-semibold text-gray-800 mb-4 pb-2 border-b border-gray-200">
+              Company Information
+            </h3>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Company
+              </label>
+              <div className="flex gap-2">
+                <select
+                  name="company_id"
+                  value={formData.company_id}
+                  onChange={handleChange}
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC] text-sm"
+                >
+                  <option value="">-- Select a company --</option>
+                  {companies.map(company => (
+                    <option key={company.id} value={company.id}>
+                      {company.name}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => setShowCompanyModal(true)}
+                  className="px-3 py-2 bg-[#0066CC] hover:bg-[#0052a3] text-white rounded-lg transition-colors flex items-center gap-1 text-sm font-medium"
+                  title="Add new company"
+                >
+                  <Plus className="w-4 h-4" />
+                  New
+                </button>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">Leave empty if this is a residential customer</p>
+            </div>
+          </div>
+
+          {/* Address Information */}
+          <div>
+            <h3 className="text-sm font-semibold text-gray-800 mb-4 pb-2 border-b border-gray-200">
+              Address Information
+            </h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Address Line 1 <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  name="address_line_1"
+                  value={formData.address_line_1}
+                  onChange={handleChange}
+                  placeholder="123 Main Street"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC] text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Address Line 2
+                </label>
+                <input
+                  type="text"
+                  name="address_line_2"
+                  value={formData.address_line_2}
+                  onChange={handleChange}
+                  placeholder="Apt, suite, unit (optional)"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC] text-sm"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    City
+                  </label>
+                  <input
+                    type="text"
+                    name="city"
+                    value={formData.city}
+                    onChange={handleChange}
+                    placeholder="Auckland"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC] text-sm"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Postcode
+                  </label>
+                  <input
+                    type="text"
+                    name="postcode"
+                    value={formData.postcode}
+                    onChange={handleChange}
+                    placeholder="1010"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC] text-sm"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Region <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    name="region"
+                    value={formData.region}
+                    onChange={handleChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC] text-sm"
+                  >
+                    <option value="">-- Select a region --</option>
+                    {REGIONS.map(region => (
+                      <option key={region} value={region}>
+                        {region}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Status */}
+          <div>
+            <h3 className="text-sm font-semibold text-gray-800 mb-4 pb-2 border-b border-gray-200">
+              Status
+            </h3>
+            <div className="flex gap-6">
+              <label className="flex items-center cursor-pointer">
+                <input
+                  type="radio"
+                  name="status"
+                  value="active"
+                  checked={formData.status === 'active'}
+                  onChange={handleChange}
+                  className="w-4 h-4 text-[#0066CC]"
+                />
+                <span className="ml-2 text-sm text-gray-700">Active</span>
+              </label>
+              <label className="flex items-center cursor-pointer">
+                <input
+                  type="radio"
+                  name="status"
+                  value="inactive"
+                  checked={formData.status === 'inactive'}
+                  onChange={handleChange}
+                  className="w-4 h-4 text-[#0066CC]"
+                />
+                <span className="ml-2 text-sm text-gray-700">Inactive</span>
+              </label>
+              <label className="flex items-center cursor-pointer">
+                <input
+                  type="radio"
+                  name="status"
+                  value="prospect"
+                  checked={formData.status === 'prospect'}
+                  onChange={handleChange}
+                  className="w-4 h-4 text-[#0066CC]"
+                />
+                <span className="ml-2 text-sm text-gray-700">Prospect</span>
+              </label>
+            </div>
+          </div>
+
+          {/* Buttons */}
+          <div className="flex gap-4 justify-end pt-4 border-t border-gray-200">
+            <button
+              type="button"
+              onClick={() => router.back()}
+              className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium text-sm"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="px-6 py-2 bg-[#0066CC] hover:bg-[#0052a3] text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium text-sm"
+            >
+              {saving ? 'Saving...' : 'Save Customer'}
+            </button>
+          </div>
+        </form>
+      </div>
+
+      {/* Modal */}
+      <AddCompanyModal
+        isOpen={showCompanyModal}
+        onClose={() => setShowCompanyModal(false)}
+        onCompanyAdded={handleCompanyAdded}
+      />
+    </div>
+  )
 }

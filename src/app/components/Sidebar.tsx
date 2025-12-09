@@ -5,12 +5,13 @@ import { usePathname } from 'next/navigation'
 import Image from 'next/image'
 import {
   Home, Users, FileText, ClipboardList, Package,
-  Wrench, Calendar, Box, Settings, AlertTriangle
+  Wrench, Calendar, Box, Settings, AlertTriangle, Building2
 } from 'lucide-react'
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: Home },
-  { href: '/customers', label: 'Customers', icon: Users },
+  { href: '/customers', label: 'Contacts', icon: Users },
+  { href: '/companies', label: 'Companies', icon: Building2 },
   { href: '/opportunities', label: 'Opportunities', icon: FileText },
   { href: '/assessments', label: 'Assessments', icon: ClipboardList },
   { href: '/va-workspace', label: 'VA Workspace', icon: Package },

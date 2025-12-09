@@ -111,7 +111,7 @@ export default function OpportunitiesPage() {
     const [sendToVAModalOpen, setSendToVAModalOpen] = useState(false);
     const [opportunityToSend, setOpportunityToSend] = useState<Opportunity | null>(null);
     const [vaList, setVaList] = useState<Array<{id: string, first_name: string, last_name: string, email: string}>>([]);
-    const [selectedVA, setSelectedVA] = useState<string>('');
+    const [selectedVA, setSelectedVA] = useState<string>('16bc0e92-2bbd-4e89-95a6-5f82e849047d');
     const [sendingToVA, setSendingToVA] = useState(false);
 
     useEffect(() => {
@@ -143,16 +143,23 @@ export default function OpportunitiesPage() {
     };
 
     const fetchVAList = async () => {
-        const { data, error } = await supabase
-            .from('team_members')
-            .select('id, first_name, last_name, email')
-            .eq('role', 'VA')
-            .eq('is_active', true);
+    const { data, error } = await supabase
+        .from('team_members')
+        .select('id, first_name, last_name, email')
+        .eq('role', 'VA')
+        // .eq('is_active', true);
 
-        if (!error && data) {
-            setVaList(data);
+    if (!error && data) {
+        console.log('VA List fetched:', data); // DEBUG
+        setVaList(data);
+        const maria = data.find(va => va.id === '16bc0e92-2bbd-4e89-95a6-5f82e849047d');
+        console.log('Maria found:', maria); // DEBUG
+        if (maria) {
+            console.log('Setting selectedVA to:', maria.id); // DEBUG
+            setSelectedVA(maria.id);
         }
-    };
+    }
+};
 
     const filterOpportunities = () => {
         let filtered = opportunities;
@@ -1060,7 +1067,7 @@ export default function OpportunitiesPage() {
                         onClick={() => {
                             setSendToVAModalOpen(false);
                             setOpportunityToSend(null);
-                            setSelectedVA('');
+                            setSelectedVA('16bc0e92-2bbd-4e89-95a6-5f82e849047d');
                         }}
                     ></div>
 
@@ -1126,17 +1133,17 @@ export default function OpportunitiesPage() {
                                     Select VA <span className="text-red-500">*</span>
                                 </label>
                                 <select
-                                    value={selectedVA}
-                                    onChange={(e) => setSelectedVA(e.target.value)}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC]"
-                                >
-                                    <option value="">-- Select a VA --</option>
-                                    {vaList.map(va => (
-                                        <option key={va.id} value={va.id}>
-                                            {va.first_name} {va.last_name} ({va.email})
-                                        </option>
-                                    ))}
-                                </select>
+    value={selectedVA || ''}
+    onChange={(e) => setSelectedVA(e.target.value)}
+    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC]"
+>
+    <option value="">-- Select a VA --</option>
+    {vaList.map(va => (
+        <option key={va.id} value={va.id}>
+            {va.first_name} {va.last_name} ({va.email})
+        </option>
+    ))}
+</select>
                             </div>
 
                             {/* What Will Happen */}

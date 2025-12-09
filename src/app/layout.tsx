@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
 import Sidebar from './components/Sidebar';
+import HelpMenu from '@/components/HelpMenu';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -22,10 +23,18 @@ export default function RootLayout({
         {/* Sidebar */}
         <Sidebar />
 
-        {/* Main content area */}
-        <main className="flex-1 overflow-y-auto">
-          {children}
-        </main>
+        {/* Main content area with header */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Header Bar */}
+          <header className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-end shadow-sm">
+            <HelpMenu />
+          </header>
+
+          {/* Main content */}
+          <main className="flex-1 overflow-y-auto">
+            {children}
+          </main>
+        </div>
       </body>
     </html>
   );

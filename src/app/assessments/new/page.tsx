@@ -1,368 +1,180 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
-import { ClientDetailsForm } from '@/app/components/PhotoUploader'
 import { supabase } from '@/lib/supabase'
-import { ArrowLeft } from 'lucide-react'
-
-interface ClientData {
-  firstName: string
-  lastName: string
-  email: string
-  phone?: string
-  company?: string
-  siteAddress: string
-  region: string
-  postcode?: string
-}
-
-interface Installer {
-  id: string
-  name: string
-}
-
-interface Enquiry {
-  id: string
-  enquiry_number: string
-  customer_name: string
-}
+import { ArrowLeft, Calendar } from 'lucide-react'
+import Link from 'next/link'
+import ClientSelector from '@/components/ClientSelector'
 
 export default function NewAssessmentPage() {
   const router = useRouter()
-  const [loading, setLoading] = useState(false)
-  const [installers, setInstallers] = useState<Installer[]>([])
-  const [enquiries, setEnquiries] = useState<Enquiry[]>([])
+  const [selectedClient, setSelectedClient] = useState<any>(null)
+  const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const [clientData, setClientData] = useState<ClientData>({
-    firstName: '',
-    lastName: '',
-    email: '',
-    phone: '',
-    company: '',
-    siteAddress: '',
-    region: '',
-    postcode: ''
+  const [formData, setFormData] = useState({
+    scheduled_date: '',
+    scheduled_time: '',
+    notes: ''
   })
 
-  const [assessmentData, setAssessmentData] = useState({
-    scheduledDate: '',
-    scheduledTime: '',
-    assignedInstallerId: '',
-    notes: '',
-    enquiryId: ''
-  })
-
-  const [errors, setErrors] = useState<Record<string, string>>({})
-
-  useEffect(() => {
-    loadInstallers()
-    loadEnquiries()
-  }, [])
-
-  const loadInstallers = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('team_members')
-        .select('id, name')
-        .eq('role', 'Installer')
-        .eq('status', 'active')
-        .order('name')
-
-      if (error) throw error
-      setInstallers(data || [])
-    } catch (err) {
-      console.error('Error loading installers:', err)
-    }
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }))
   }
 
-  const loadEnquiries = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('enquiries')
-        .select('id, enquiry_number, customer_name')
-        .neq('status', 'Completed')
-        .order('created_at', { ascending: false })
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError(null)
 
-      if (error) throw error
-      setEnquiries(data || [])
-    } catch (err) {
-      console.error('Error loading enquiries:', err)
-    }
-  }
-
-  const validateForm = (): boolean => {
-    const newErrors: Record<string, string> = {}
-
-    // Client details validation handled by ClientDetailsForm
-    if (!clientData.firstName) newErrors.firstName = 'First name is required'
-    if (!clientData.lastName) newErrors.lastName = 'Last name is required'
-    if (!clientData.email) newErrors.email = 'Email is required'
-    if (!clientData.siteAddress) newErrors.siteAddress = 'Site address is required'
-    if (!clientData.region) newErrors.region = 'Region is required'
-
-    // Assessment details validation
-    if (!assessmentData.scheduledDate) {
-      newErrors.scheduledDate = 'Scheduled date is required'
-    } else {
-      const selectedDate = new Date(assessmentData.scheduledDate)
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
-      if (selectedDate < today) {
-        newErrors.scheduledDate = 'Date cannot be in the past'
-      }
-    }
-
-    if (!assessmentData.scheduledTime) {
-      newErrors.scheduledTime = 'Scheduled time is required'
-    } else {
-      const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/
-      if (!timeRegex.test(assessmentData.scheduledTime)) {
-        newErrors.scheduledTime = 'Invalid time format (use HH:MM)'
-      }
-    }
-
-    if (!assessmentData.assignedInstallerId) {
-      newErrors.assignedInstallerId = 'Please assign an installer'
-    }
-
-    if (assessmentData.notes && assessmentData.notes.length > 500) {
-      newErrors.notes = 'Notes cannot exceed 500 characters'
-    }
-
-    setErrors(newErrors)
-    return Object.keys(newErrors).length === 0
-  }
-
-  const generateReferenceNumber = async (): Promise<string> => {
-    const year = new Date().getFullYear()
-    
-    try {
-      const { data, error } = await supabase
-        .from('assessments')
-        .select('reference_number')
-        .like('reference_number', `ASS-${year}%`)
-        .order('reference_number', { ascending: false })
-        .limit(1)
-
-      if (error) throw error
-
-      let nextNumber = 1
-      if (data && data.length > 0) {
-        const lastRef = data[0].reference_number
-        const lastNum = parseInt(lastRef.split('-')[2])
-        nextNumber = lastNum + 1
-      }
-
-      return `ASS-${year}-${String(nextNumber).padStart(4, '0')}`
-    } catch (err) {
-      console.error('Error generating reference number:', err)
-      return `ASS-${year}-${String(Math.floor(Math.random() * 9999)).padStart(4, '0')}`
-    }
-  }
-
-  const handleSubmit = async () => {
-    if (!validateForm()) {
-      setError('Please fix all validation errors before submitting')
+    if (!selectedClient) {
+      setError('Please select or create a client')
       return
     }
 
-    setLoading(true)
-    setError(null)
+    if (!formData.scheduled_date || !formData.scheduled_time) {
+      setError('Please fill in scheduled date and time')
+      return
+    }
+
+    setSaving(true)
 
     try {
-      const referenceNumber = await generateReferenceNumber()
+      // Generate reference number
+      const refNumber = `ASS-${Date.now().toString().slice(-8)}`
 
-      const { error: insertError } = await supabase
+      const { data, error: insertError } = await supabase
         .from('assessments')
         .insert({
-          reference_number: referenceNumber,
-          customer_name: `${clientData.firstName} ${clientData.lastName}`,
-          customer_email: clientData.email,
-          customer_phone: clientData.phone || null,
-          customer_company: clientData.company || null,
-          site_address: clientData.siteAddress,
-          city: clientData.region,
-          region_id: clientData.region,
-          postcode: clientData.postcode || null,
-          scheduled_date: assessmentData.scheduledDate,
-          scheduled_time: assessmentData.scheduledTime,
-          assigned_installer_id: assessmentData.assignedInstallerId,
+          reference_number: refNumber,
+          client_id: selectedClient.id,
+          site_address: selectedClient.address_line_1 || '',
+          scheduled_date: formData.scheduled_date,
+          scheduled_time: formData.scheduled_time,
           status: 'Scheduled',
-          notes: assessmentData.notes || null,
-          enquiry_id: assessmentData.enquiryId || null,
+          notes: formData.notes,
           created_at: new Date().toISOString()
         })
+        .select()
+        .single()
 
       if (insertError) throw insertError
 
+      // Redirect to assessments list
       router.push('/assessments')
     } catch (err: any) {
-      console.error('Error scheduling assessment:', err)
-      setError(`Error scheduling assessment: ${err.message || 'Unknown error'}`)
-      setLoading(false)
+      console.error('Error creating assessment:', err)
+      setError(err.message || 'Failed to create assessment')
+    } finally {
+      setSaving(false)
     }
   }
 
   return (
-    <div className="page-content">
-      <div className="page-header">
-        <Link href="/assessments" className="btn-ghost btn-sm mb-4">
-          <ArrowLeft className="w-4 h-4" />
-          Back to Assessments
-        </Link>
-        <h1 className="page-title">Schedule New Assessment</h1>
-        <p className="page-subtitle">Create a free assessment for a potential customer</p>
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <div className="bg-white border-b border-gray-200 px-6 py-4">
+        <div className="flex items-center gap-4">
+          <Link href="/assessments" className="p-2 hover:bg-gray-100 rounded-lg">
+            <ArrowLeft className="w-5 h-5 text-gray-600" />
+          </Link>
+          <div>
+            <h1 className="text-2xl font-semibold text-[#0066CC]">Schedule New Assessment</h1>
+            <p className="text-sm text-gray-500 mt-1">Free site assessment for potential customers</p>
+          </div>
+        </div>
       </div>
 
-      {error && (
-        <div className="card mb-6" style={{ backgroundColor: 'var(--color-accent-error)', color: 'white', padding: 'var(--space-4)' }}>
-          <p className="font-medium">{error}</p>
-        </div>
-      )}
-
-      <div className="space-y-6">
-        {/* Section 1: Client Details */}
-        <ClientDetailsForm
-          data={clientData}
-          onChange={setClientData}
-          readOnly={false}
-          title="Client Details"
-        />
-
-        {/* Section 2: Assessment Details */}
-        <div className="card">
-          <div className="card-header">
-            <h2 className="card-title">Assessment Details</h2>
+      {/* Form */}
+      <div className="p-6 max-w-2xl mx-auto">
+        {error && (
+          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
+            {error}
           </div>
-          <div className="card-body">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="form-group">
-                <label className="form-label form-label-required">
-                  Scheduled Date
-                </label>
-                <input
-                  type="date"
-                  value={assessmentData.scheduledDate}
-                  onChange={(e) => setAssessmentData({ ...assessmentData, scheduledDate: e.target.value })}
-                  className={`form-input ${errors.scheduledDate ? 'error' : ''}`}
-                  min={new Date().toISOString().split('T')[0]}
-                />
-                {errors.scheduledDate && (
-                  <span className="form-error">{errors.scheduledDate}</span>
-                )}
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Step 1: Select or Create Client */}
+          <div className="bg-white rounded-lg shadow p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Step 1: Select or Create Client</h2>
+            <ClientSelector onClientSelected={setSelectedClient} />
+          </div>
+
+          {/* Step 2: Assessment Details */}
+          {selectedClient && (
+            <div className="bg-white rounded-lg shadow p-6">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">Step 2: Assessment Details</h2>
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Scheduled Date <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      name="scheduled_date"
+                      value={formData.scheduled_date}
+                      onChange={handleChange}
+                      required
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Scheduled Time <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="time"
+                      name="scheduled_time"
+                      value={formData.scheduled_time}
+                      onChange={handleChange}
+                      required
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC]"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Notes
+                  </label>
+                  <textarea
+                    name="notes"
+                    value={formData.notes}
+                    onChange={handleChange}
+                    rows={4}
+                    placeholder="Add any additional notes about this assessment..."
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC]"
+                  />
+                </div>
               </div>
-
-              <div className="form-group">
-                <label className="form-label form-label-required">
-                  Scheduled Time
-                </label>
-                <input
-                  type="time"
-                  value={assessmentData.scheduledTime}
-                  onChange={(e) => setAssessmentData({ ...assessmentData, scheduledTime: e.target.value })}
-                  className={`form-input ${errors.scheduledTime ? 'error' : ''}`}
-                />
-                {errors.scheduledTime && (
-                  <span className="form-error">{errors.scheduledTime}</span>
-                )}
-              </div>
             </div>
+          )}
 
-            <div className="form-group">
-              <label className="form-label form-label-required">
-                Assigned Installer
-              </label>
-              <select
-                value={assessmentData.assignedInstallerId}
-                onChange={(e) => setAssessmentData({ ...assessmentData, assignedInstallerId: e.target.value })}
-                className={`form-select ${errors.assignedInstallerId ? 'error' : ''}`}
+          {/* Action Buttons */}
+          {selectedClient && (
+            <div className="flex gap-4 justify-end">
+              <Link
+                href="/assessments"
+                className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
               >
-                <option value="">Select an installer...</option>
-                {installers.map((installer) => (
-                  <option key={installer.id} value={installer.id}>
-                    {installer.name}
-                  </option>
-                ))}
-              </select>
-              {errors.assignedInstallerId && (
-                <span className="form-error">{errors.assignedInstallerId}</span>
-              )}
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">
-                Notes
-              </label>
-              <textarea
-                value={assessmentData.notes}
-                onChange={(e) => setAssessmentData({ ...assessmentData, notes: e.target.value })}
-                className={`form-textarea ${errors.notes ? 'error' : ''}`}
-                placeholder="Add any additional notes or special instructions..."
-                rows={4}
-                maxLength={500}
-              />
-              <span className="form-help">
-                {assessmentData.notes.length}/500 characters
-              </span>
-              {errors.notes && (
-                <span className="form-error">{errors.notes}</span>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Section 3: Link to Enquiry (Optional) */}
-        <div className="card">
-          <div className="card-header">
-            <h2 className="card-title">Link to Enquiry (Optional)</h2>
-          </div>
-          <div className="card-body">
-            <div className="form-group">
-              <label className="form-label">
-                Related Enquiry
-              </label>
-              <select
-                value={assessmentData.enquiryId}
-                onChange={(e) => setAssessmentData({ ...assessmentData, enquiryId: e.target.value })}
-                className="form-select"
+                Cancel
+              </Link>
+              <button
+                type="submit"
+                disabled={saving}
+                className="px-6 py-2 bg-[#0066CC] hover:bg-[#0052a3] text-white rounded-lg disabled:opacity-50 flex items-center gap-2"
               >
-                <option value="">None - New customer</option>
-                {enquiries.map((enquiry) => (
-                  <option key={enquiry.id} value={enquiry.id}>
-                    {enquiry.enquiry_number} - {enquiry.customer_name}
-                  </option>
-                ))}
-              </select>
-              <span className="form-help">
-                Link this assessment to an existing enquiry if applicable
-              </span>
+                <Calendar className="w-4 h-4" />
+                {saving ? 'Scheduling...' : 'Schedule Assessment'}
+              </button>
             </div>
-          </div>
-        </div>
-
-        {/* Action Buttons */}
-        <div className="flex gap-3 justify-end">
-          <Link href="/assessments" className="btn-secondary">
-            Cancel
-          </Link>
-          <button
-            onClick={handleSubmit}
-            disabled={loading}
-            className="btn-primary"
-          >
-            {loading ? (
-              <>
-                <div className="spinner" style={{ width: '1rem', height: '1rem', borderWidth: '2px' }}></div>
-                Scheduling...
-              </>
-            ) : (
-              'Schedule Assessment'
-            )}
-          </button>
-        </div>
+          )}
+        </form>
       </div>
     </div>
   )
