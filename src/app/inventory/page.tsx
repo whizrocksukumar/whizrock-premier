@@ -197,11 +197,11 @@ export default function InventoryPage() {
           </p>
         </div>
         <div className="flex gap-3">
-          <button disabled title="Coming Soon" className="bg-gray-100 text-gray-400 px-4 py-2 rounded-lg cursor-not-allowed opacity-50 flex items-center gap-2">
+          <button disabled title="Coming Soon - Phase 2" className="bg-gray-100 text-gray-600 px-4 py-2 rounded-lg cursor-not-allowed flex items-center gap-2 border border-gray-300">
             <History className="w-5 h-5" />
             Stock History
           </button>
-          <button disabled title="Coming Soon" className="bg-gray-100 text-gray-400 px-4 py-2 rounded-lg cursor-not-allowed opacity-50 flex items-center gap-2">
+          <button disabled title="Coming Soon - Phase 2" className="bg-gray-100 text-gray-600 px-4 py-2 rounded-lg cursor-not-allowed flex items-center gap-2 border border-gray-300">
             <Settings className="w-5 h-5" />
             Adjust Stock
           </button>

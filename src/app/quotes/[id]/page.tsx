@@ -172,15 +172,15 @@ export default function QuoteDetailPage() {
           </Link>
 
           <div className="flex items-center gap-2">
-            <button disabled title="Coming Soon" className="inline-flex items-center gap-2 px-3 py-2 border border-gray-300 rounded text-xs font-medium text-gray-400 bg-gray-50 cursor-not-allowed opacity-50">
+            <button disabled title="Coming Soon - Phase 2" className="inline-flex items-center gap-2 px-3 py-2 border border-gray-300 rounded text-xs font-medium text-gray-600 bg-gray-100 cursor-not-allowed">
               <Printer className="w-4 h-4" />
               Print
             </button>
-            <button disabled title="Coming Soon" className="inline-flex items-center gap-2 px-3 py-2 border border-gray-300 rounded text-xs font-medium text-gray-400 bg-gray-50 cursor-not-allowed opacity-50">
+            <button disabled title="Coming Soon - Phase 2" className="inline-flex items-center gap-2 px-3 py-2 border border-gray-300 rounded text-xs font-medium text-gray-600 bg-gray-100 cursor-not-allowed">
               <Mail className="w-4 h-4" />
               Email
             </button>
-            <button disabled title="Coming Soon" className="inline-flex items-center gap-2 px-3 py-2 border border-gray-300 rounded text-xs font-medium text-gray-400 bg-gray-50 cursor-not-allowed opacity-50">
+            <button disabled title="Coming Soon - Phase 2" className="inline-flex items-center gap-2 px-3 py-2 border border-gray-300 rounded text-xs font-medium text-gray-600 bg-gray-100 cursor-not-allowed">
               <Download className="w-4 h-4" />
               PDF
             </button>
