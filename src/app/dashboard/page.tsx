@@ -111,7 +111,7 @@ export default function DashboardPage() {
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="month" />
                 <YAxis />
-                <Tooltip formatter={(value) => `$${value}K`} />
+                <Tooltip formatter={(value) => `${Number(value).toFixed(1)}%`} />
                 <Legend />
                 <Line type="monotone" dataKey="revenue" stroke="#0066CC" name="Actual" strokeWidth={2} dot={{ fill: '#0066CC' }} />
                 <Line type="monotone" dataKey="target" stroke="#ccc" name="Target" strokeWidth={2} strokeDasharray="5 5" />
