@@ -197,20 +197,14 @@ export default function InventoryPage() {
           </p>
         </div>
         <div className="flex gap-3">
-          <Link
-            href="/inventory/movements"
-            className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 flex items-center gap-2"
-          >
+          <button disabled title="Coming Soon" className="bg-gray-100 text-gray-400 px-4 py-2 rounded-lg cursor-not-allowed opacity-50 flex items-center gap-2">
             <History className="w-5 h-5" />
             Stock History
-          </Link>
-          <Link
-            href="/inventory/adjust"
-            className="bg-[#0066CC] text-white px-4 py-2 rounded-lg hover:bg-[#0052a3] flex items-center gap-2"
-          >
+          </button>
+          <button disabled title="Coming Soon" className="bg-gray-100 text-gray-400 px-4 py-2 rounded-lg cursor-not-allowed opacity-50 flex items-center gap-2">
             <Settings className="w-5 h-5" />
             Adjust Stock
-          </Link>
+          </button>
         </div>
       </div>
 
