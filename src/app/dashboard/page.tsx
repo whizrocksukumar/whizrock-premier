@@ -147,9 +147,7 @@ export default function DashboardPage() {
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" angle={-45} textAnchor="end" height={80} interval={0} tick={{ fontSize: 12 }} />
                 <YAxis />
-                <Tooltip
-                    formatter={(value: ValueType) => [`${Number(value).toFixed(1)}%`, 'Margin %']}
-                  />
+                <Tooltip formatter={(value: any) => [`$${Number(value)}K`, 'Revenue']} />
                 <Bar dataKey="margin" fill="#8b5cf6" name="Margin %" />
               </BarChart>
             </ResponsiveContainer>
