@@ -133,7 +133,7 @@ export default function DashboardPage() {
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" angle={-45} textAnchor="end" height={80} interval={0} tick={{ fontSize: 12 }} />
                 <YAxis />
-                <Tooltip formatter={(value: ValueType) => [`$${Number(value)}K`, 'Revenue']} />
+                <Tooltip formatter={(value: any) => [`$${Number(value).toFixed(1)}K`, 'Revenue']} />
                 <Bar dataKey="revenue" fill="#0066CC" name="Revenue" />
               </BarChart>
             </ResponsiveContainer>
@@ -147,7 +147,7 @@ export default function DashboardPage() {
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" angle={-45} textAnchor="end" height={80} interval={0} tick={{ fontSize: 12 }} />
                 <YAxis />
-                <Tooltip formatter={(value: any) => [`$${Number(value)}K`, 'Revenue']} />
+                <Tooltip formatter={(value: any) => [`${Number(value).toFixed(1)}%`, 'Margin']} />
                 <Bar dataKey="margin" fill="#8b5cf6" name="Margin %" />
               </BarChart>
             </ResponsiveContainer>
