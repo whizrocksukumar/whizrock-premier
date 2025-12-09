@@ -154,14 +154,14 @@ export default function DashboardPage() {
           </div>
 
           {/* Conversion Funnel */}
-          <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
+            <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
               <h2 className="text-lg font-bold text-gray-900 mb-4">Conversion Funnel</h2>
               <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={conversionFunnel} layout="vertical">
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis type="number" />
                   <YAxis dataKey="stage" type="category" width={100} />
-                  <Tooltip formatter={(value: any) => [`${Number(value)}`, 'Count']} />
+                  <Tooltip formatter={(value: any) => [Number(value), 'Count']} />
                   <Bar dataKey="value" fill="#0066CC" name="Count" />
                 </BarChart>
               </ResponsiveContainer>
