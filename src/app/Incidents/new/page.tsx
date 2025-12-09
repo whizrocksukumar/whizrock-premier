@@ -179,7 +179,7 @@ export default function NewIncidentPage() {
           created_by: 'current-user-id' // TODO: Replace with actual user ID
         })
 
-      router.push(`/Incidents/${incident.id}`)
+      router.push(`/incidents/${incident.id}`)
 
     } catch (err: any) {
       console.error('Error creating incident:', err)
@@ -194,7 +194,7 @@ export default function NewIncidentPage() {
       {/* Header */}
       <div className="mb-6">
         <button
-          onClick={() => router.push('/Incidents')}
+          onClick={() => router.push('/incidents')}
           className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-4"
         >
           <ArrowLeft className="w-4 h-4" />
@@ -442,7 +442,7 @@ export default function NewIncidentPage() {
           </button>
           <button
             type="button"
-            onClick={() => router.push('/Incidents')}
+            onClick={() => router.push('/incidents')}
             className="bg-gray-200 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-300"
           >
             Cancel

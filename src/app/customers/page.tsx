@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
-import { Search, Plus, ChevronDown, X, ArrowLeft } from 'lucide-react';
+import { Search, Plus, X } from 'lucide-react';
 
 // Types
 interface Client {
@@ -15,12 +15,18 @@ interface Client {
     phone: string;
     company_id: string;
     company_name?: string;
+    region_name?: string;
     site_address?: string;
     status: string;
     follow_up_date?: string;
 }
 
 interface Company {
+    id: string;
+    name: string;
+}
+
+interface Region {
     id: string;
     name: string;
 }
@@ -35,32 +41,19 @@ interface CustomerFormData {
     address_line_2: string;
     city: string;
     postcode: string;
-    region: string;
+    region_id: string;
     status: string;
 }
 
 interface CompanyFormData {
-    name: string;
+    company_name: string;
     industry: string;
     phone: string;
     email: string;
 }
 
-type SortField = 'first_name' | 'last_name' | 'company_name' | 'site_address' | 'email' | 'phone' | 'status' | 'follow_up_date';
+type SortField = 'first_name' | 'last_name' | 'company_name' | 'site_address' | 'region_name' | 'email' | 'phone' | 'status' | 'follow_up_date';
 type SortDirection = 'asc' | 'desc';
-
-const REGIONS = [
-    'Auckland',
-    'Wellington',
-    'Christchurch',
-    'Tauranga',
-    'Hamilton',
-    'Dunedin',
-    'Palmerston North',
-    'Rotorua',
-    'Nelson',
-    'Invercargill'
-];
 
 export default function CustomersPage() {
     const router = useRouter();
@@ -83,6 +76,7 @@ export default function CustomersPage() {
 
     // Company state
     const [companies, setCompanies] = useState<Company[]>([]);
+    const [regions, setRegions] = useState<Region[]>([]);
     const [showCompanyForm, setShowCompanyForm] = useState(false);
     const [savingCompany, setSavingCompany] = useState(false);
     const [companyError, setCompanyError] = useState<string | null>(null);
@@ -98,12 +92,12 @@ export default function CustomersPage() {
         address_line_2: '',
         city: '',
         postcode: '',
-        region: '',
+        region_id: '',
         status: 'active'
     });
 
     const [companyForm, setCompanyForm] = useState<CompanyFormData>({
-        name: '',
+        company_name: '',
         industry: '',
         phone: '',
         email: ''
@@ -113,6 +107,7 @@ export default function CustomersPage() {
     useEffect(() => {
         fetchClients();
         fetchCompanies();
+        fetchRegions();
     }, [searchTerm, statusFilter, sortField, sortDirection, pagination.page]);
 
     const fetchClients = async () => {
@@ -133,17 +128,35 @@ export default function CustomersPage() {
             // Get unique company IDs
             const companyIds = [...new Set(data.map(c => c.company_id).filter(Boolean))];
             
+            // Get unique region IDs
+            const regionIds = [...new Set(data.map(c => c.region_id).filter(Boolean))];
+            
             // Fetch company names
             const companyMap: Record<string, string> = {};
             if (companyIds.length > 0) {
                 const { data: companies } = await supabase
                     .from('companies')
-                    .select('id, name')
+                    .select('id, company_name')
                     .in('id', companyIds);
                 
                 if (companies) {
                     companies.forEach(company => {
-                        companyMap[company.id] = company.name;
+                        companyMap[company.id] = company.company_name;
+                    });
+                }
+            }
+
+            // Fetch region names
+            const regionMap: Record<string, string> = {};
+            if (regionIds.length > 0) {
+                const { data: regions } = await supabase
+                    .from('regions')
+                    .select('id, name')
+                    .in('id', regionIds);
+                
+                if (regions) {
+                    regions.forEach(region => {
+                        regionMap[region.id] = region.name;
                     });
                 }
             }
@@ -156,6 +169,7 @@ export default function CustomersPage() {
                 phone: client.phone || '',
                 company_id: client.company_id,
                 company_name: client.company_id ? (companyMap[client.company_id] || '—') : '—',
+                region_name: client.region_id ? (regionMap[client.region_id] || '—') : '—',
                 site_address: client.address_line_1 || '—',
                 status: client.status || 'Active',
                 follow_up_date: client.follow_up_date || '',
@@ -176,13 +190,34 @@ export default function CustomersPage() {
         try {
             const { data, error: fetchError } = await supabase
                 .from('companies')
+                .select('id, company_name')
+                .order('company_name', { ascending: true });
+
+            if (fetchError) throw fetchError;
+            
+            // Map company_name to name for dropdown
+            const mappedCompanies = (data || []).map(company => ({
+                id: company.id,
+                name: company.company_name
+            }));
+            
+            setCompanies(mappedCompanies);
+        } catch (err) {
+            console.error('Error fetching companies:', err);
+        }
+    };
+
+    const fetchRegions = async () => {
+        try {
+            const { data, error: fetchError } = await supabase
+                .from('regions')
                 .select('id, name')
                 .order('name', { ascending: true });
 
             if (fetchError) throw fetchError;
-            setCompanies(data || []);
+            setRegions(data || []);
         } catch (err) {
-            console.error('Error fetching companies:', err);
+            console.error('Error fetching regions:', err);
         }
     };
 
@@ -198,7 +233,7 @@ export default function CustomersPage() {
             address_line_2: '',
             city: '',
             postcode: '',
-            region: '',
+            region_id: '',
             status: 'active'
         });
         setFormError(null);
@@ -248,7 +283,7 @@ export default function CustomersPage() {
             setFormError('Address is required');
             return false;
         }
-        if (!customerForm.region) {
+        if (!customerForm.region_id) {
             setFormError('Region is required');
             return false;
         }
@@ -276,7 +311,7 @@ export default function CustomersPage() {
                     address_line_2: customerForm.address_line_2.trim() || null,
                     city: customerForm.city.trim() || null,
                     postcode: customerForm.postcode.trim() || null,
-                    region: customerForm.region,
+                    region_id: customerForm.region_id,
                     status: customerForm.status
                 })
                 .select()
@@ -299,7 +334,7 @@ export default function CustomersPage() {
         e.preventDefault();
         setCompanyError(null);
 
-        if (!companyForm.name.trim()) {
+        if (!companyForm.company_name.trim()) {
             setCompanyError('Company name is required');
             return;
         }
@@ -310,7 +345,7 @@ export default function CustomersPage() {
             const { data, error: insertError } = await supabase
                 .from('companies')
                 .insert({
-                    name: companyForm.name.trim(),
+                    company_name: companyForm.company_name.trim(),
                     industry: companyForm.industry.trim() || null,
                     phone: companyForm.phone.trim() || null,
                     email: companyForm.email.trim() || null
@@ -321,13 +356,13 @@ export default function CustomersPage() {
             if (insertError) throw insertError;
 
             // Add to companies list
-            setCompanies(prev => [...prev, { id: data.id, name: data.name }].sort((a, b) => a.name.localeCompare(b.name)));
+            setCompanies(prev => [...prev, { id: data.id, name: data.company_name }].sort((a, b) => a.name.localeCompare(b.name)));
             
             // Auto-select the new company
             setCustomerForm(prev => ({ ...prev, company_id: data.id }));
             
             // Reset company form and hide it
-            setCompanyForm({ name: '', industry: '', phone: '', email: '' });
+            setCompanyForm({ company_name: '', industry: '', phone: '', email: '' });
             setShowCompanyForm(false);
         } catch (err: any) {
             console.error('Error creating company:', err);
@@ -585,6 +620,9 @@ export default function CustomersPage() {
                                         >
                                             Site Address <SortArrow field="site_address" />
                                         </th>
+                                        <th className="text-left px-4 py-3 text-xs font-semibold whitespace-nowrap">
+                                            Region
+                                        </th>
                                         <th
                                             className="text-left px-4 py-3 text-xs font-semibold whitespace-nowrap cursor-pointer hover:bg-[#0055aa]"
                                             onClick={() => handleSort('phone')}
@@ -614,7 +652,7 @@ export default function CustomersPage() {
                                 <tbody className="divide-y divide-gray-200">
                                     {clients.length === 0 ? (
                                         <tr>
-                                            <td colSpan={9} className="px-4 py-8 text-center text-gray-500">
+                                            <td colSpan={10} className="px-4 py-8 text-center text-gray-500">
                                                 No contacts found
                                             </td>
                                         </tr>
@@ -672,6 +710,9 @@ export default function CustomersPage() {
                                                 </td>
                                                 <td className="px-4 py-3 text-sm text-gray-700 max-w-[200px] truncate" title={client.site_address}>
                                                     {client.site_address}
+                                                </td>
+                                                <td className="px-4 py-3 text-sm text-gray-700">
+                                                    {client.region_name || '—'}
                                                 </td>
                                                 <td className="px-4 py-3 text-sm text-gray-700">
                                                     {client.phone}
@@ -895,7 +936,7 @@ export default function CustomersPage() {
                                                 onClick={() => {
                                                     setShowCompanyForm(false);
                                                     setCompanyError(null);
-                                                    setCompanyForm({ name: '', industry: '', phone: '', email: '' });
+                                                    setCompanyForm({ company_name: '', industry: '', phone: '', email: '' });
                                                 }}
                                                 className="text-sm text-blue-700 hover:text-blue-900 underline"
                                             >
@@ -916,8 +957,8 @@ export default function CustomersPage() {
                                                 </label>
                                                 <input
                                                     type="text"
-                                                    name="name"
-                                                    value={companyForm.name}
+                                                    name="company_name"
+                                                    value={companyForm.company_name}
                                                     onChange={handleCompanyFormChange}
                                                     placeholder="ABC Construction Ltd"
                                                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC] text-sm"
@@ -1047,15 +1088,15 @@ export default function CustomersPage() {
                                                 Region <span className="text-red-500">*</span>
                                             </label>
                                             <select
-                                                name="region"
-                                                value={customerForm.region}
+                                                name="region_id"
+                                                value={customerForm.region_id}
                                                 onChange={handleCustomerFormChange}
                                                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC] text-sm"
                                             >
                                                 <option value="">-- Select --</option>
-                                                {REGIONS.map(region => (
-                                                    <option key={region} value={region}>
-                                                        {region}
+                                                {regions.map(region => (
+                                                    <option key={region.id} value={region.id}>
+                                                        {region.name}
                                                     </option>
                                                 ))}
                                             </select>

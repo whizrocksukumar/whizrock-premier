@@ -1,399 +1,339 @@
-import { supabase } from '@/lib/supabase'
+'use client'
+
+import { useEffect, useState } from 'react'
+import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Edit, FileText, User, Mail, Phone, Building } from 'lucide-react'
-import QuoteSendButton from '@/components/QuoteSendButton'
-import CreateJobButton from '@/components/CreateJobButton'
+import { supabase } from '@/lib/supabase'
+import { ArrowLeft, Mail, Printer, Edit, Download, Send, CheckCircle } from 'lucide-react'
+
+interface QuoteLineItem {
+  id: string
+  quote_id: string
+  product_id: string | null
+  product_code: string
+  description: string
+  quantity: number
+  unit: string
+  unit_cost: number
+  unit_price: number
+  line_total: number
+  sort_order: number
+}
 
 interface QuoteDetail {
   id: string
   quote_number: string
-  client_id: string | null
-  customer_first_name: string | null
-  customer_last_name: string | null
-  customer_email: string | null
-  customer_phone: string | null
-  customer_company: string | null
-  site_address: string | null
-  city: string | null
-  postcode: string | null
-  region_id: string | null
-  job_type: string | null
   status: string
-  quote_date: string | null
-  valid_until: string | null
-  subtotal: number | null
-  gst_amount: number | null
-  total_amount: number | null
-  margin_percentage: number | null
+  client_id: string | null
+  quote_date: string
+  valid_until: string
+  total_cost: number
+  total_sell: number
+  gst_amount: number
+  total_amount: number
+  gross_profit: number
+  gp_percent: number
   notes: string | null
-  assessment_id: string | null
-  created_at: string
-  clients?: {
-    first_name: string
-    last_name: string
-    email: string
-    phone: string | null
-    companies?: {
-      name: string
-    } | null
-  } | null
-  regions?: {
-    name: string
-  } | null
-  assessments?: {
-    reference_number: string
-    scheduled_date: string
-  } | null
-}
-
-async function getQuote(id: string) {
-  try {
-    // Get quote with basic data
-    const { data: quote, error: quoteError } = await supabase
-      .from('quotes')
-      .select('*')
-      .eq('id', id)
-      .single()
-
-    if (quoteError || !quote) {
-      console.error('Quote fetch error:', quoteError)
-      return { data: null, error: quoteError?.message || 'Quote not found' }
-    }
-
-    // Get client info if client_id exists
-    let clientData = null
-    let companyData = null
-    if (quote.client_id) {
-      const { data: client } = await supabase
-        .from('clients')
-        .select('first_name, last_name, email, phone, company_id')
-        .eq('id', quote.client_id)
-        .single()
-      
-      clientData = client
-
-      // Get company if company_id exists
-      if (client?.company_id) {
-        const { data: company } = await supabase
-          .from('companies')
-          .select('name')
-          .eq('id', client.company_id)
-          .single()
-        companyData = company
-      }
-    }
-
-    // Get assessment if assessment_id exists
-    let assessmentData = null
-    if (quote.assessment_id) {
-      const { data: assessment } = await supabase
-        .from('assessments')
-        .select('reference_number, scheduled_date')
-        .eq('id', quote.assessment_id)
-        .single()
-      assessmentData = assessment
-    }
-
-    return { 
-      data: {
-        ...quote,
-        clients: clientData,
-        company: companyData,
-        assessments: assessmentData
-      }, 
-      error: null 
-    }
-  } catch (err) {
-    console.error('Unexpected error:', err)
-    return { data: null, error: 'An unexpected error occurred' }
-  }
-}
-
-async function getQuoteLineItems(quoteId: string) {
-  try {
-    // Fetch sections first
-    const { data: sections, error: sectionsError } = await supabase
-      .from('quote_sections')
-      .select('*')
-      .eq('quote_id', quoteId)
-      .order('sort_order', { ascending: true })
-
-    if (sectionsError) {
-      console.error('Sections fetch error:', sectionsError)
-      return []
-    }
-
-    if (!sections || sections.length === 0) {
-      return []
-    }
-
-    // Fetch items for each section
-    const sectionsWithItems = await Promise.all(
-      sections.map(async (section) => {
-        const { data: items, error: itemsError } = await supabase
-          .from('quote_items')
-          .select('*')
-          .eq('section_id', section.id)
-          .order('sort_order', { ascending: true })
-
-        if (itemsError) {
-          console.error('Items fetch error:', itemsError)
-          return { ...section, items: [] }
-        }
-
-        return { ...section, items: items || [] }
-      })
-    )
-
-    return sectionsWithItems
-  } catch (err) {
-    console.error('Error fetching line items:', err)
-    return []
-  }
-}
-
-// Helper functions
-const formatDate = (dateString: string | null) => {
-  if (!dateString) return '—'
-  return new Date(dateString).toLocaleDateString('en-NZ', { year: 'numeric', month: 'long', day: 'numeric' })
-}
-
-const formatCurrency = (amount: number | null | undefined) => {
-  if (!amount) return '$0.00'
-  return new Intl.NumberFormat('en-NZ', { style: 'currency', currency: 'NZD' }).format(amount)
-}
-
-const getStatusBadge = (status: string | null) => {
-  if (!status) return 'badge'
-  const s = status.toLowerCase()
-  if (s === 'accepted' || s === 'won') return 'status-accepted'
-  if (s === 'rejected' || s === 'lost' || s === 'cancelled') return 'badge'
-  if (s === 'sent') return 'status-sent'
-  if (s === 'draft') return 'status-pending'
-  return 'badge'
-}
-
-export default async function QuoteDetailPage({
-  params
-}: {
-  params: Promise<{ id: string }>
-}) {
-  const { id } = await params
-  const { data: quote, error } = await getQuote(id)
-  const lineItems = quote ? await getQuoteLineItems(quote.id) : []
   
+  // Denormalized fields
+  customer_first_name: string
+  customer_last_name: string
+  customer_email: string
+  customer_phone: string
+  customer_company: string
+  site_address: string
+  city: string
+  postcode: string
+}
+
+export default function QuoteDetailPage() {
+  const params = useParams()
+  const router = useRouter()
+  const quoteId = params.id as string
+
+  const [quote, setQuote] = useState<QuoteDetail | null>(null)
+  const [lineItems, setLineItems] = useState<QuoteLineItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    fetchQuoteDetails()
+  }, [quoteId])
+
+  const fetchQuoteDetails = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+
+      // Fetch quote
+      const { data: quoteData, error: quoteError } = await supabase
+        .from('quotes')
+        .select('*')
+        .eq('id', quoteId)
+        .single()
+
+      if (quoteError) throw quoteError
+      if (!quoteData) {
+        setError('Quote not found')
+        return
+      }
+
+      setQuote(quoteData)
+
+      // Fetch line items
+      const { data: itemsData, error: itemsError } = await supabase
+        .from('quote_line_items')
+        .select('*')
+        .eq('quote_id', quoteId)
+        .order('sort_order')
+
+      if (itemsError) throw itemsError
+      setLineItems(itemsData || [])
+    } catch (err) {
+      console.error('Error fetching quote:', err)
+      setError(err instanceof Error ? err.message : 'Failed to load quote')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleSendToCustomer = async () => {
+    if (!quote) return
+    try {
+      const { error: updateError } = await supabase
+        .from('quotes')
+        .update({ status: 'Sent' })
+        .eq('id', quoteId)
+
+      if (updateError) throw updateError
+      fetchQuoteDetails()
+      alert('Quote marked as sent')
+    } catch (err) {
+      console.error('Error sending quote:', err)
+      alert('Failed to send quote')
+    }
+  }
+
+  const formatDate = (dateString: string) => {
+    if (!dateString) return '—'
+    return new Date(dateString).toLocaleDateString('en-NZ', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    })
+  }
+
+  const getStatusBadge = (status: string) => {
+    const statusColors: { [key: string]: string } = {
+      'Draft': 'bg-gray-100 text-gray-800',
+      'Sent': 'bg-blue-100 text-blue-800',
+      'Accepted': 'bg-green-100 text-green-800',
+      'Won': 'bg-green-100 text-green-800',
+      'Lost': 'bg-red-100 text-red-800',
+      'Expired': 'bg-orange-100 text-orange-800',
+    }
+    return statusColors[status] || 'bg-gray-100 text-gray-800'
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#0066CC]"></div>
+      </div>
+    )
+  }
+
   if (error || !quote) {
     return (
-      <div className="page-content">
-        <div className="page-header">
-          <Link href="/quotes" className="btn-ghost btn-sm mb-4">
+      <div className="min-h-screen bg-gray-50">
+        <div className="bg-white border-b border-gray-200 px-6 py-4">
+          <Link href="/quotes" className="flex items-center gap-2 text-[#0066CC] hover:underline text-sm">
             <ArrowLeft className="w-4 h-4" />
             Back to Quotes
           </Link>
-          <h1 className="page-title">Quote Not Found</h1>
         </div>
-        <div className="card">
-          <div className="empty-state">
-            <div className="empty-state-icon">⚠️</div>
-            <div className="empty-state-title">Quote not found</div>
-            <p className="empty-state-description">{error || 'The quote you are looking for does not exist.'}</p>
-            <Link href="/quotes" className="btn-primary">Back to Quotes</Link>
+        <div className="p-6">
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+            {error || 'Quote not found'}
           </div>
         </div>
       </div>
     )
   }
 
-  const customerName = quote.customer_first_name && quote.customer_last_name
-    ? `${quote.customer_first_name} ${quote.customer_last_name}`
-    : quote.clients ? `${quote.clients.first_name} ${quote.clients.last_name}` : '—'
-
-  const customerEmail = quote.customer_email || quote.clients?.email || '—'
-  const customerPhone = quote.customer_phone || quote.clients?.phone || '—'
-  const companyName = quote.customer_company || quote.company?.name || '—'
-
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Header */}
       <div className="bg-white border-b border-gray-200 px-6 py-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <Link href="/quotes" className="text-sm text-gray-600 hover:text-gray-900 flex items-center gap-1 mb-2">
-              <ArrowLeft className="w-4 h-4" />Back to Quotes
+        <div className="max-w-7xl mx-auto flex items-center justify-between">
+          <Link href="/quotes" className="flex items-center gap-2 text-[#0066CC] hover:underline text-sm">
+            <ArrowLeft className="w-4 h-4" />
+            Back to Quotes
+          </Link>
+
+          <div className="flex items-center gap-2">
+            <button className="inline-flex items-center gap-2 px-3 py-2 border border-gray-300 rounded text-xs font-medium text-gray-700 hover:bg-gray-50">
+              <Printer className="w-4 h-4" />
+              Print
+            </button>
+            <button className="inline-flex items-center gap-2 px-3 py-2 border border-gray-300 rounded text-xs font-medium text-gray-700 hover:bg-gray-50">
+              <Mail className="w-4 h-4" />
+              Email
+            </button>
+            <button className="inline-flex items-center gap-2 px-3 py-2 border border-gray-300 rounded text-xs font-medium text-gray-700 hover:bg-gray-50">
+              <Download className="w-4 h-4" />
+              PDF
+            </button>
+            <Link href={`/quotes/${quoteId}/edit`} className="inline-flex items-center gap-2 px-3 py-2 border border-gray-300 rounded text-xs font-medium text-gray-700 hover:bg-gray-50">
+              <Edit className="w-4 h-4" />
+              Edit
             </Link>
-            <h1 className="text-2xl font-bold text-gray-900">{quote.quote_number || 'Quote'}</h1>
-            <p className="text-sm text-gray-600 mt-1">{customerName} • {customerEmail}</p>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white font-medium">U</div>
-            <div className="text-right"><p className="text-sm text-gray-700">user@premier.local</p></div>
-            <button className="ml-2 text-xs text-[#0066CC] hover:underline">Logout</button>
+            {quote.status === 'Draft' && (
+              <button onClick={handleSendToCustomer} className="inline-flex items-center gap-2 px-3 py-2 bg-[#0066CC] text-white rounded text-xs font-medium hover:bg-[#0052a3]">
+                <Send className="w-4 h-4" />
+                Send
+              </button>
+            )}
           </div>
         </div>
       </div>
 
-      <div className="bg-white border-b border-gray-200 px-6 py-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className={getStatusBadge(quote.status)}>{quote.status}</span>
-            {quote.quote_date && (<><span className="text-sm text-gray-600">•</span><span className="text-sm text-gray-600">Created: {formatDate(quote.quote_date)}</span></>)}
-            {quote.valid_until && (<><span className="text-sm text-gray-600">•</span><span className="text-sm text-gray-600">Valid Until: {formatDate(quote.valid_until)}</span></>)}
-          </div>
-          <div className="flex items-center gap-2">
-            <CreateJobButton 
-              quoteId={quote.id}
-              quoteNumber={quote.quote_number || 'Quote'}
-              quoteStatus={quote.status}
-            />
-            <QuoteSendButton quote={{
-              ...quote,
-              customer_name: customerName,
-              customer_email: customerEmail,
-              customer_phone: customerPhone,
-              customer_company: companyName,
-              sections: lineItems
-            }} />
-            <Link href={`/quotes/${quote.id}/edit`} className="px-4 py-2 text-sm bg-[#0066CC] text-white rounded hover:bg-[#0052a3] transition-colors flex items-center gap-2">
-              <Edit className="w-4 h-4" />Edit
-            </Link>
-          </div>
-        </div>
-      </div>
-
-      <div className="p-6">
-        {/* Three Compact Cards in One Row - Equal Height */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
-          {/* Quote Details Card */}
-          <div className="card h-full flex flex-col p-4">
-            <h2 className="text-sm font-semibold text-gray-700 mb-2">Quote Details</h2>
-            <div className="space-y-1.5 flex-1 text-xs">
-              <div className="flex justify-between"><span className="text-gray-500">Quote #:</span><span className="font-medium text-gray-900">{quote.quote_number || '—'}</span></div>
-              <div className="flex justify-between items-center"><span className="text-gray-500">Status:</span><span className={getStatusBadge(quote.status)}>{quote.status}</span></div>
-              <div className="flex justify-between"><span className="text-gray-500">Quote Date:</span><span className="font-medium text-gray-900">{formatDate(quote.quote_date)}</span></div>
-              <div className="flex justify-between"><span className="text-gray-500">Valid Until:</span><span className="font-medium text-gray-900">{formatDate(quote.valid_until)}</span></div>
-              <div className="flex justify-between"><span className="text-gray-500">Job Type:</span><span className="font-medium text-gray-900">{quote.job_type || '—'}</span></div>
-              <div className="flex justify-between"><span className="text-gray-500">City:</span><span className="font-medium text-gray-900">{quote.city || '—'}</span></div>
-              <div className="flex flex-col gap-0.5"><span className="text-gray-500">Site Address:</span><span className="font-medium text-gray-900">{[quote.site_address, quote.city, quote.postcode].filter(Boolean).join(', ') || '—'}</span></div>
-              {quote.assessment_id && quote.assessments && (
-                <div className="flex flex-col gap-0.5 pt-1"><span className="text-gray-500">Assessment:</span>
-                  <Link href={`/assessments/${quote.assessment_id}`} className="text-[#0066CC] hover:underline font-medium flex items-center gap-1">
-                    <FileText className="w-3 h-3" />{quote.assessments.reference_number}
-                  </Link>
-                </div>
-              )}
+      {/* Main Content */}
+      <div className="p-6 max-w-7xl mx-auto">
+        {/* Compact Header Card */}
+        <div className="bg-white rounded-lg shadow mb-6 p-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+            <div>
+              <p className="text-gray-600 font-medium">Quote #</p>
+              <p className="text-lg font-bold text-[#0066CC]">{quote.quote_number}</p>
+            </div>
+            <div>
+              <p className="text-gray-600 font-medium">Status</p>
+              <span className={`inline-block px-2 py-1 text-xs font-semibold rounded ${getStatusBadge(quote.status)}`}>
+                {quote.status}
+              </span>
+            </div>
+            <div>
+              <p className="text-gray-600 font-medium">Quote Date</p>
+              <p className="font-medium">{formatDate(quote.quote_date)}</p>
+            </div>
+            <div>
+              <p className="text-gray-600 font-medium">Valid Until</p>
+              <p className="font-medium">{formatDate(quote.valid_until)}</p>
+            </div>
+            <div>
+              <p className="text-gray-600 font-medium">Client</p>
+              <p className="font-medium">{quote.customer_first_name} {quote.customer_last_name}</p>
+            </div>
+            <div>
+              <p className="text-gray-600 font-medium">Email</p>
+              <p className="font-medium text-sm">{quote.customer_email || '—'}</p>
+            </div>
+            <div>
+              <p className="text-gray-600 font-medium">Phone</p>
+              <p className="font-medium">{quote.customer_phone || '—'}</p>
+            </div>
+            <div>
+              <p className="text-gray-600 font-medium">Address</p>
+              <p className="font-medium text-sm">{quote.site_address || '—'}</p>
             </div>
           </div>
-
-          {/* Customer Information Card */}
-          <div className="card h-full flex flex-col p-4">
-            <h2 className="text-sm font-semibold text-gray-700 mb-2">Customer Information</h2>
-            <div className="space-y-1.5 flex-1 text-xs">
-              <div className="flex items-center gap-2"><User className="w-3.5 h-3.5 text-gray-400" /><span className="font-medium text-gray-900">{customerName}</span></div>
-              <div className="flex items-center gap-2"><Mail className="w-3.5 h-3.5 text-gray-400" /><span className="font-medium text-gray-900">{customerEmail}</span></div>
-              <div className="flex items-center gap-2"><Phone className="w-3.5 h-3.5 text-gray-400" /><span className="font-medium text-gray-900">{customerPhone}</span></div>
-              <div className="flex items-center gap-2"><Building className="w-3.5 h-3.5 text-gray-400" /><span className="font-medium text-gray-900">{companyName}</span></div>
-              {quote.client_id && (
-                <div className="mt-auto pt-2 border-t border-gray-200">
-                  <Link href={`/customers/${quote.client_id}`} className="text-[#0066CC] hover:underline flex items-center gap-1">
-                    View Full Profile →
-                  </Link>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Financial Summary Card */}
-          <div className="card h-full flex flex-col p-4">
-            <h2 className="text-sm font-semibold text-gray-700 mb-2">Financial Summary</h2>
-            <div className="space-y-1.5 flex-1 text-xs">
-              <div className="flex justify-between items-center"><span className="text-gray-500">Subtotal</span><span className="font-medium text-gray-900">{formatCurrency(quote.subtotal)}</span></div>
-              <div className="flex justify-between items-center"><span className="text-gray-500">GST (15%)</span><span className="font-medium text-gray-900">{formatCurrency(quote.gst_amount)}</span></div>
-              <div className="flex justify-between items-center pt-2 mt-auto border-t border-gray-200"><span className="font-semibold text-gray-900">Total (Inc GST)</span><span className="font-bold text-sm text-[#0066CC]">{formatCurrency(quote.total_amount)}</span></div>
-              {quote.margin_percentage !== null && (<div className="flex justify-between items-center pt-1.5 border-t border-gray-200"><span className="text-gray-500">Margin</span><span className="font-medium text-green-600">{quote.margin_percentage.toFixed(1)}%</span></div>)}
-            </div>
-          </div>
-        </div>
-
-        {/* Quote Notes - Full Width */}
-        {quote.notes && (
-          <div className="card mb-6">
-            <h2 className="card-title text-base mb-2">Notes</h2>
-            <p className="text-sm text-gray-600 whitespace-pre-wrap">{quote.notes}</p>
-          </div>
-        )}
-
-        {/* Line Items Section - Full Width Below Cards */}
-        <div className="card">
-          <h2 className="card-title mb-4">Quote Line Items</h2>
-          
-          {lineItems.length > 0 ? (
-            <div className="space-y-4">
-              {lineItems.map((section: any) => (
-                <div key={section.id} className="border border-gray-200 rounded-lg overflow-hidden">
-                  {/* Section Header */}
-                  <div 
-                    className="px-4 py-3 font-semibold text-sm"
-                    style={{ 
-                      backgroundColor: section.section_color || '#f3f4f6',
-                      color: '#000'
-                    }}
-                  >
-                    {section.custom_name || 'Section'}
-                  </div>
-                  
-                  {/* Section Items */}
-                  {section.items && section.items.length > 0 ? (
-                    <div className="overflow-x-auto">
-                      <table className="w-full">
-                        <thead className="bg-gray-50 border-b border-gray-200">
-                          <tr>
-                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
-                            <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Area (m²)</th>
-                            <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Qty</th>
-                            <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Unit Price</th>
-                            <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Line Total</th>
-                            <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Margin</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-200">
-                          {section.items.map((item: any) => (
-                            <tr key={item.id} className="hover:bg-gray-50">
-                              <td className="px-4 py-3 text-sm text-gray-900">
-                                {item.marker && <span className="font-medium text-gray-600">{item.marker} - </span>}
-                                {item.description || '—'}
-                              </td>
-                              <td className="px-4 py-3 text-sm text-right text-gray-900">
-                                {item.area_sqm ? item.area_sqm.toFixed(2) : '—'}
-                              </td>
-                              <td className="px-4 py-3 text-sm text-right text-gray-900">
-                                {item.packs_required || '—'}
-                              </td>
-                              <td className="px-4 py-3 text-sm text-right text-gray-900">
-                                {formatCurrency(item.sell_price)}
-                              </td>
-                              <td className="px-4 py-3 text-sm text-right font-medium text-gray-900">
-                                {formatCurrency(item.line_sell)}
-                              </td>
-                              <td className="px-4 py-3 text-sm text-right text-gray-600">
-                                {item.margin_percent ? `${item.margin_percent.toFixed(1)}%` : '—'}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : (
-                    <div className="p-4 text-center text-sm text-gray-500">
-                      No items in this section
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-8 text-gray-500">
-              <p>No line items added yet</p>
+          {quote.notes && (
+            <div className="mt-4 pt-4 border-t border-gray-200">
+              <p className="text-gray-600 font-medium mb-1">Notes</p>
+              <p className="text-sm text-gray-700">{quote.notes}</p>
             </div>
           )}
+        </div>
+
+        {/* Line Items */}
+        <div className="bg-white rounded-lg shadow mb-6">
+          <div className="p-4">
+            <h2 className="text-base font-semibold text-gray-900 mb-4">LINE ITEMS</h2>
+
+            {lineItems.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-200">
+                      <th className="px-3 py-2 text-left font-semibold text-gray-700">Description</th>
+                      <th className="px-3 py-2 text-center font-semibold text-gray-700">Qty</th>
+                      <th className="px-3 py-2 text-center font-semibold text-gray-700">Unit</th>
+                      <th className="px-3 py-2 text-right font-semibold text-gray-700">Unit Cost</th>
+                      <th className="px-3 py-2 text-right font-semibold text-gray-700">Unit Price</th>
+                      <th className="px-3 py-2 text-right font-semibold text-gray-700">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {lineItems.map((item) => (
+                      <tr key={item.id} className="border-b border-gray-200 hover:bg-gray-50">
+                        <td className="px-3 py-2">
+                          <p className="font-medium text-gray-900">{item.description}</p>
+                          <p className="text-xs text-gray-500">{item.product_code}</p>
+                        </td>
+                        <td className="px-3 py-2 text-center text-gray-700">{item.quantity}</td>
+                        <td className="px-3 py-2 text-center text-gray-700">{item.unit}</td>
+                        <td className="px-3 py-2 text-right text-gray-700">${item.unit_cost.toFixed(2)}</td>
+                        <td className="px-3 py-2 text-right text-gray-700">${item.unit_price.toFixed(2)}</td>
+                        <td className="px-3 py-2 text-right font-semibold text-gray-900">${item.line_total.toFixed(2)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <p className="text-gray-500 text-sm">No line items added</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Totals */}
+        <div className="bg-white rounded-lg shadow p-4">
+          <div className="flex justify-end">
+            <div className="w-72">
+              <div className="space-y-2 mb-3">
+                <div className="flex justify-between py-1 border-b border-gray-200">
+                  <span className="text-sm text-gray-700">Total Cost (Ex GST)</span>
+                  <span className="text-sm font-semibold">${(quote.total_cost || 0).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-gray-200">
+                  <span className="text-sm text-gray-700">Total Sell (Ex GST)</span>
+                  <span className="text-sm font-semibold">${(quote.total_sell || 0).toFixed(2)}</span>
+                </div>
+              </div>
+
+              <div className="bg-gray-50 p-3 rounded space-y-2 mb-3">
+                <div className="flex justify-between py-1">
+                  <span className="text-sm font-medium text-gray-700">Subtotal</span>
+                  <span className="text-sm font-semibold">${(quote.total_sell || 0).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between py-1 border-t border-gray-200">
+                  <span className="text-sm font-medium text-gray-700">GST (15%)</span>
+                  <span className="text-sm font-semibold">${(quote.gst_amount || 0).toFixed(2)}</span>
+                </div>
+              </div>
+
+              <div className="bg-[#0066CC] text-white p-3 rounded mb-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm font-semibold">TOTAL</span>
+                  <span className="text-xl font-bold">${(quote.total_amount || 0).toFixed(2)}</span>
+                </div>
+              </div>
+
+              <div className="border-t border-gray-200 pt-3 space-y-1">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-700">Gross Profit</span>
+                  <span className="font-semibold text-green-600">${(quote.gross_profit || 0).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-700">GP %</span>
+                  <span className="font-semibold text-green-600">{(quote.gp_percent || 0).toFixed(1)}%</span>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>

@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { X, Mail, Printer, Download, FileText, DollarSign } from 'lucide-react';
-import { generateQuotePDF, downloadPDF, printPDF, sendQuoteByEmail } from '@/lib/pdf/quote-pdf-utils';
+// import { generateQuotePDF, downloadPDF, printPDF, sendQuoteByEmail } from '@/lib/pdf/quote-pdf-utils';
 
 interface QuoteSendModalProps {
   isOpen: boolean;

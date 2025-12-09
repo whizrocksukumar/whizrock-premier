@@ -107,7 +107,7 @@ export default function AssessmentsPage() {
       if (companyIds.length > 0) {
         const { data: companies } = await supabase
           .from('companies')
-          .select('id, name')
+          .select('id, company_name')
           .in('id', companyIds)
 
         if (companies) {
@@ -143,7 +143,7 @@ export default function AssessmentsPage() {
           contactName = `${client.first_name} ${client.last_name}`
 
           if (client.company_id && companyMap[client.company_id]) {
-            companyName = companyMap[client.company_id].name
+            companyName = companyMap[client.company_id].company_name
           }
         }
 
