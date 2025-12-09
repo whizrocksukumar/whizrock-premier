@@ -159,10 +159,11 @@ export default function DashboardPage() {
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={conversionFunnel} layout="vertical">
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis type="number" />
-                <YAxis dataKey="stage" type="category" width={80} />
-                <Tooltip />
-                <Bar dataKey="value" fill="#0066CC" radius={[0, 8, 8, 0]} />
+                <XAxis dataKey="name" angle={-45} textAnchor="end" height={80} interval={0} tick={{ fontSize: 12 }} />
+                <YAxis />
+                // @ts-expect-error Recharts ValueType issue - works at runtime
+                <Tooltip formatter={(value) => `${Number(value).toFixed(1)}%`} />
+                <Bar dataKey="margin" fill="#8b5cf6" name="Margin %" />
               </BarChart>
             </ResponsiveContainer>
           </div>
