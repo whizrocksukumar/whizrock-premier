@@ -104,7 +104,10 @@ export default async function CompanyPage({
         </Link>
 
         <h1 className="text-xl font-semibold mt-4">Company Not Found</h1>
-        <p className="text-gray-600 mt-2">{error || "Invalid company ID."}</p>
+        <p className="text-gray-600 mt-2">
+  {typeof error === "string" ? error : error?.message || "Invalid company ID."}
+</p>
+
       </div>
     )
   }
