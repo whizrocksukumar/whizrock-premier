@@ -109,22 +109,27 @@ export default function ClientSelector({ onClientSelected }: ClientSelectorProps
         )
         .limit(10)
 
-      if (error) throw error
-      setClients(data || [])
-      setShowDropdown(true)
-    } catch (err) {
-      console.error('Error searching clients:', err)
-    } finally {
-      setLoading(false)
-    }
-  }
+   if (error) throw error
 
-  const handleClientSelect = (client: Client) => {
-    setSelectedClient(client)
-    setSearchTerm('')
-    setShowDropdown(false)
-    onClientSelected(client)
-  }
+const typedData: Client[] = (data || []).map((c: any) => ({
+  id: String(c.id),
+  first_name: String(c.first_name ?? ''),
+  last_name: String(c.last_name ?? ''),
+  email: String(c.email ?? ''),
+  phone: String(c.phone ?? ''),
+  company_id: c.company_id ?? null,
+  companies: (c.companies || []).map((co: any) => ({
+    name: String(co.name ?? ''),
+  })),
+}))
+
+setClients(typedData)
+setShowDropdown(true)
+} catch (err) {
+  console.error('Error searching clients:', err)
+} finally {
+  setLoading(false)
+}
 
   const handleClearSelection = () => {
     setSelectedClient(null)
