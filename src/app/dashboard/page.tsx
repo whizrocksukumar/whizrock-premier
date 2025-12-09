@@ -1,5 +1,6 @@
 'use client';
 
+import type { ValueType } from 'recharts/types/component/DefaultTooltipContent'
 import { TrendingUp, Users, FileText, Zap, ArrowUpRight, ArrowDownRight, Calendar, MapPin, AlertCircle, CheckCircle, Wrench } from 'lucide-react';
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
@@ -60,17 +61,17 @@ export default function DashboardPage() {
       {/* Demo Banner */}
       <div className="bg-amber-50 border-b-2 border-amber-300 px-6 py-3">
         <div className="max-w-7xl mx-auto">
-          <p className="text-amber-900 text-sm font-medium">
-            📊 <strong>Demo Mode:</strong> This dashboard displays sample data to demonstrate capabilities. Production version will display live business metrics.
-          </p>
+         <p className="text-amber-900 text-sm font-medium">
+           📊 <strong>Demo Mode:</strong> This dashboard displays sample data to demonstrate capabilities. Production version will display live business metrics.
+         </p>
         </div>
       </div>
 
       {/* Header */}
       <div className="bg-white border-b border-gray-200 px-6 py-6 sticky top-0 z-40">
         <div className="max-w-7xl mx-auto">
-          <h1 className="text-3xl font-bold text-gray-900 mb-1">Dashboard</h1>
-          <p className="text-gray-600">Strategic overview of your business performance</p>
+         <h1 className="text-3xl font-bold text-gray-900 mb-1">Dashboard</h1>
+         <p className="text-gray-600">Strategic overview of your business performance</p>
         </div>
       </div>
 
@@ -111,9 +112,12 @@ export default function DashboardPage() {
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="month" />
                 <YAxis />
-                <Tooltip 
-                formatter={(value: number | string) => [`${Number(value).toFixed(1)}%`, 'Margin %']} 
-/>
+                <Tooltip
+                  formatter={(value: ValueType) => {
+                    const num = typeof value === 'number' ? value : Number(value);
+                    return [num, 'Revenue'];
+                  }}
+                />
                 <Legend />
                 <Line type="monotone" dataKey="revenue" stroke="#0066CC" name="Actual" strokeWidth={2} dot={{ fill: '#0066CC' }} />
                 <Line type="monotone" dataKey="target" stroke="#ccc" name="Target" strokeWidth={2} strokeDasharray="5 5" />
@@ -129,13 +133,13 @@ export default function DashboardPage() {
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" angle={-45} textAnchor="end" height={80} interval={0} tick={{ fontSize: 12 }} />
                 <YAxis />
-                <Tooltip formatter={(value) => `$${value}K`} />
+                <Tooltip formatter={(value: ValueType) => [`$${Number(value)}K`, 'Revenue']} />
                 <Bar dataKey="revenue" fill="#0066CC" name="Revenue" />
               </BarChart>
             </ResponsiveContainer>
           </div>
 
-          {/* Margin by Region */}
+          {/* Margin by Region - FIXED LINE 144 */}
           <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
             <h2 className="text-lg font-bold text-gray-900 mb-4">Profit Margin by Region</h2>
             <ResponsiveContainer width="100%" height={300}>
@@ -143,7 +147,7 @@ export default function DashboardPage() {
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" angle={-45} textAnchor="end" height={80} interval={0} tick={{ fontSize: 12 }} />
                 <YAxis />
-                <Tooltip formatter={(value) => `${value.toFixed(1)}%`} />
+                <Tooltip formatter={(value: ValueType) => [`${Number(value).toFixed(1)}%`, 'Margin %']} />
                 <Bar dataKey="margin" fill="#8b5cf6" name="Margin %" />
               </BarChart>
             </ResponsiveContainer>
@@ -210,15 +214,15 @@ export default function DashboardPage() {
             <div className="divide-y divide-gray-200">
               {upcomingAssessments.map((assessment, idx) => (
                 <div key={idx} className="p-4 hover:bg-gray-50">
-                  <p className="font-semibold text-gray-900 text-sm mb-1">{assessment.client}</p>
-                  <p className="text-xs text-gray-600 mb-1 flex items-center gap-1">
-                    <Calendar className="w-3 h-3" />
-                    {assessment.date}
-                  </p>
-                  <p className="text-xs text-gray-500 flex items-center gap-1">
-                    <MapPin className="w-3 h-3" />
-                    {assessment.address}
-                  </p>
+                 <p className="font-semibold text-gray-900 text-sm mb-1">{assessment.client}</p>
+                 <p className="text-xs text-gray-600 mb-1 flex items-center gap-1">
+                   <Calendar className="w-3 h-3" />
+                   {assessment.date}
+                 </p>
+                 <p className="text-xs text-gray-500 flex items-center gap-1">
+                   <MapPin className="w-3 h-3" />
+                   {assessment.address}
+                 </p>
                 </div>
               ))}
             </div>
