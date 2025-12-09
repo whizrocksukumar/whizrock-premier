@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { ArrowLeft, Plus } from 'lucide-react'
-import AddCompanyModal from '@/components/AddCompanyModal'
+// import AddCompanyModal from '@/components/AddCompanyModal'
 
 interface FormData {
   first_name: string
