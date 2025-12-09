@@ -1,8 +1,8 @@
 'use client';
 
 import type { ValueType } from 'recharts/types/component/DefaultTooltipContent'
-import { TrendingUp, Users, FileText, Zap, ArrowUpRight, ArrowDownRight, Calendar, MapPin, AlertCircle, CheckCircle, Wrench } from 'lucide-react';
-import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { TrendingUp, FileText, Zap, ArrowUpRight, ArrowDownRight, Calendar, MapPin, AlertCircle, CheckCircle, Wrench } from 'lucide-react';
+import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 export default function DashboardPage() {
   // KPI data - expanded with tasks and installations
@@ -113,9 +113,9 @@ export default function DashboardPage() {
                 <XAxis dataKey="month" />
                 <YAxis />
                 <Tooltip
-                  formatter={(value: ValueType) => {
-                    const num = typeof value === 'number' ? value : Number(value);
-                    return [num, 'Revenue'];
+                  formatter={(value: any) => {
+                    const num = Number(value);
+                    return [`$${num.toFixed(1)}K`, 'Revenue'];
                   }}
                 />
                 <Legend />
@@ -139,7 +139,7 @@ export default function DashboardPage() {
             </ResponsiveContainer>
           </div>
 
-          {/* Margin by Region - FIXED LINE 144 */}
+          {/* Margin by Region */}
           <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
             <h2 className="text-lg font-bold text-gray-900 mb-4">Profit Margin by Region</h2>
             <ResponsiveContainer width="100%" height={300}>
@@ -154,18 +154,18 @@ export default function DashboardPage() {
           </div>
 
           {/* Conversion Funnel */}
-            <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
-              <h2 className="text-lg font-bold text-gray-900 mb-4">Conversion Funnel</h2>
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={conversionFunnel} layout="vertical">
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis type="number" />
-                  <YAxis dataKey="stage" type="category" width={100} />
-                  <Tooltip formatter={(value: any) => [Number(value), 'Count']} />
-                  <Bar dataKey="value" fill="#0066CC" name="Count" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+          <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
+            <h2 className="text-lg font-bold text-gray-900 mb-4">Conversion Funnel</h2>
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={conversionFunnel} layout="vertical">
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis type="number" />
+                <YAxis dataKey="stage" type="category" width={100} />
+                <Tooltip formatter={(value: any) => [Number(value), 'Count']} />
+                <Bar dataKey="value" fill="#0066CC" name="Count" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
         </div>
 
         {/* Bottom Section - Recent Activity */}
