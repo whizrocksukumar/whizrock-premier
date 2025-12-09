@@ -5,8 +5,8 @@ import { supabase } from '@/lib/supabase'
 import { Search, Plus, X } from 'lucide-react'
 import { useRouter, useSearchParams } from 'next/navigation'
 
-interface ClientSelectorProps {
-  onClientSelected: (client: Client | null) => void
+interface Company {
+  name: string
 }
 
 interface Client {
@@ -16,20 +16,25 @@ interface Client {
   email: string
   phone: string
   company_id: string | null
-  companies?: { name: string }[] | null
+  companies?: Company[] | null
 }
 
+interface ClientSelectorProps {
+  onClientSelected: (client: Client | null) => void
+}
 
 export default function ClientSelector({ onClientSelected }: ClientSelectorProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
+
   const [searchTerm, setSearchTerm] = useState('')
   const [clients, setClients] = useState<Client[]>([])
   const [selectedClient, setSelectedClient] = useState<Client | null>(null)
   const [showDropdown, setShowDropdown] = useState(false)
   const [loading, setLoading] = useState(false)
-  const searchInputRef = useRef<HTMLInputElement>(null)
-  const dropdownRef = useRef<HTMLDivElement>(null)
+
+  const searchInputRef = useRef<HTMLInputElement | null>(null)
+  const dropdownRef = useRef<HTMLDivElement | null>(null)
 
   // Check if returning from /customers/new with new client ID
   useEffect(() => {
@@ -37,19 +42,26 @@ export default function ClientSelector({ onClientSelected }: ClientSelectorProps
     if (newClientId) {
       fetchClient(newClientId)
       // Clean up the URL
-      window.history.replaceState({}, '', '/assessments/new')
+      if (typeof window !== 'undefined') {
+        window.history.replaceState({}, '', '/assessments/new')
+      }
     }
   }, [searchParams])
 
   // Close dropdown when clicking outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target as Node) &&
-        searchInputRef.current &&
-        !searchInputRef.current.contains(event.target as Node)
-      ) {
+      const target = event.target as Node | null
+      const dropdownEl = dropdownRef.current
+      const inputEl = searchInputRef.current
+
+      if (!target) return
+
+      const clickedOutsideDropdown =
+        dropdownEl && !dropdownEl.contains(target)
+      const clickedOutsideInput = inputEl && !inputEl.contains(target)
+
+      if (clickedOutsideDropdown && clickedOutsideInput) {
         setShowDropdown(false)
       }
     }
@@ -61,7 +73,7 @@ export default function ClientSelector({ onClientSelected }: ClientSelectorProps
   // Fuzzy search clients
   useEffect(() => {
     if (searchTerm.length > 0) {
-      searchClients(searchTerm)
+      void searchClients(searchTerm)
     } else {
       setClients([])
       setShowDropdown(false)
@@ -87,8 +99,22 @@ export default function ClientSelector({ onClientSelected }: ClientSelectorProps
         .single()
 
       if (error) throw error
+      if (!data) return
 
-      const client = data as Client
+      const client: Client = {
+        id: String(data.id),
+        first_name: String(data.first_name ?? ''),
+        last_name: String(data.last_name ?? ''),
+        email: String(data.email ?? ''),
+        phone: String(data.phone ?? ''),
+        company_id: data.company_id ?? null,
+        companies: Array.isArray(data.companies)
+          ? data.companies.map((co: { name?: string }) => ({
+              name: String(co.name ?? ''),
+            }))
+          : null,
+      }
+
       setSelectedClient(client)
       onClientSelected(client)
     } catch (err) {
@@ -96,55 +122,56 @@ export default function ClientSelector({ onClientSelected }: ClientSelectorProps
     }
   }
 
-async function searchClients(term: string) {
-  try {
-    setLoading(true)
-    const searchLower = term.toLowerCase()
+  async function searchClients(term: string) {
+    try {
+      setLoading(true)
+      const searchLower = term.toLowerCase()
 
-    const { data, error } = await supabase
-      .from('clients')
-      .select(`
-        id,
-        first_name,
-        last_name,
-        email,
-        phone,
-        company_id,
-        companies (name)
-      `)
-      .or(
-        `first_name.ilike.%${searchLower}%,` +
-        `last_name.ilike.%${searchLower}%,` +
-        `email.ilike.%${searchLower}%,` +
-        `phone.ilike.%${searchLower}%`
-      )
-      .limit(10)
+      const { data, error } = await supabase
+        .from('clients')
+        .select(`
+          id,
+          first_name,
+          last_name,
+          email,
+          phone,
+          company_id,
+          companies (name)
+        `)
+        .or(
+          [
+            `first_name.ilike.%${searchLower}%`,
+            `last_name.ilike.%${searchLower}%`,
+            `email.ilike.%${searchLower}%`,
+            `phone.ilike.%${searchLower}%`,
+          ].join(',')
+        )
+        .limit(10)
 
-   if (error) throw error
+      if (error) throw error
 
-const typedData: Client[] = (data || []).map((c: any) => ({
-  id: String(c.id),
-  first_name: String(c.first_name ?? ''),
-  last_name: String(c.last_name ?? ''),
-  email: String(c.email ?? ''),
-  phone: String(c.phone ?? ''),
-  company_id: c.company_id ?? null,
-  companies: (c.companies || []).map((co: any) => ({
-    name: String(co.name ?? ''),
-  })),
-}))
+      const typedData: Client[] = (data ?? []).map((c: any) => ({
+        id: String(c.id),
+        first_name: String(c.first_name ?? ''),
+        last_name: String(c.last_name ?? ''),
+        email: String(c.email ?? ''),
+        phone: String(c.phone ?? ''),
+        company_id: c.company_id ?? null,
+        companies: Array.isArray(c.companies)
+          ? c.companies.map((co: any) => ({
+              name: String(co?.name ?? ''),
+            }))
+          : null,
+      }))
 
-setClients(typedData)
-setShowDropdown(true)
-
-
-  } catch (err) {
-    console.error('Error searching clients:', err)
-  } finally {
-    setLoading(false)
+      setClients(typedData)
+      setShowDropdown(true)
+    } catch (err) {
+      console.error('Error searching clients:', err)
+    } finally {
+      setLoading(false)
+    }
   }
-}
-
 
   const handleClientSelect = (client: Client) => {
     setSelectedClient(client)
@@ -165,11 +192,11 @@ setShowDropdown(true)
   }
 
   const getCompanyName = (client: Client) => {
-  if (client.companies && client.companies.length > 0) {
-    return client.companies[0].name || '—'
+    if (client.companies && client.companies.length > 0) {
+      return client.companies[0]?.name || '—'
+    }
+    return '—'
   }
-  return '—'
-}
 
   return (
     <div className="space-y-2">
@@ -180,13 +207,15 @@ setShowDropdown(true)
               {selectedClient.first_name} {selectedClient.last_name}
             </p>
             <p className="text-xs text-gray-600 mt-0.5">
-              {getCompanyName(selectedClient)} | {selectedClient.phone} | {selectedClient.email}
+              {getCompanyName(selectedClient)} | {selectedClient.phone} |{' '}
+              {selectedClient.email}
             </p>
           </div>
           <button
             onClick={handleClearSelection}
             className="p-1 hover:bg-blue-100 rounded"
             title="Clear selection"
+            type="button"
           >
             <X className="w-4 h-4 text-gray-600" />
           </button>
@@ -220,6 +249,7 @@ setShowDropdown(true)
                   <button
                     onClick={handleCreateNewClient}
                     className="flex items-center justify-center gap-1 w-full px-3 py-2 text-[#0066CC] hover:bg-blue-50 text-sm font-medium"
+                    type="button"
                   >
                     <Plus className="w-4 h-4" />
                     Create New Client
@@ -232,12 +262,14 @@ setShowDropdown(true)
                       key={client.id}
                       onClick={() => handleClientSelect(client)}
                       className="w-full text-left px-3 py-2 hover:bg-gray-50 border-b border-gray-100 last:border-b-0 transition-colors"
+                      type="button"
                     >
                       <div className="text-sm font-medium text-gray-900">
                         {client.first_name} {client.last_name}
                       </div>
                       <div className="text-xs text-gray-600 mt-0.5">
-                        {getCompanyName(client)} | {client.phone} | {client.email}
+                        {getCompanyName(client)} | {client.phone} |{' '}
+                        {client.email}
                       </div>
                     </button>
                   ))}
@@ -245,6 +277,7 @@ setShowDropdown(true)
                     <button
                       onClick={handleCreateNewClient}
                       className="w-full flex items-center justify-center gap-1 px-3 py-2 text-[#0066CC] hover:bg-blue-50 text-sm font-medium rounded"
+                      type="button"
                     >
                       <Plus className="w-4 h-4" />
                       Create New Client
