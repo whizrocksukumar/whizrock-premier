@@ -1,6 +1,7 @@
 'use client';
 
 import { TrendingUp, FileText, Zap, ArrowUpRight, ArrowDownRight, Calendar, MapPin, AlertCircle, CheckCircle, Wrench } from 'lucide-react';
+import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 export default function DashboardPage() {
   // KPI data - expanded with tasks and installations
@@ -14,13 +15,31 @@ export default function DashboardPage() {
     { label: 'Installations This Week', value: '12', subtitle: 'Scheduled', trend: 'up', icon: CheckCircle, color: 'bg-gradient-to-br from-cyan-50 to-cyan-100 border-cyan-200' }
   ];
 
+  // Regional data
   const regionalData = [
-    { name: 'West Auckland', revenue: '$52K', margin: '35.2%' },
-    { name: 'Rodney', revenue: '$48.5K', margin: '33.8%' },
-    { name: 'North Shore', revenue: '$61.2K', margin: '36.4%' },
-    { name: 'Central', revenue: '$55.8K', margin: '32.1%' },
-    { name: 'South', revenue: '$42.3K', margin: '31.9%' },
-    { name: 'East', revenue: '$24.7K', margin: '28.7%' }
+    { name: 'West Auckland', revenue: 52, quotes: 8, margin: 35.2 },
+    { name: 'Rodney', revenue: 48.5, quotes: 7, margin: 33.8 },
+    { name: 'North Shore', revenue: 61.2, quotes: 9, margin: 36.4 },
+    { name: 'Central', revenue: 55.8, quotes: 8, margin: 32.1 },
+    { name: 'South', revenue: 42.3, quotes: 6, margin: 31.9 },
+    { name: 'East', revenue: 24.7, quotes: 4, margin: 28.7 }
+  ];
+
+  // Revenue trend
+  const revenueTrend = [
+    { month: 'Aug', revenue: 45, target: 50 },
+    { month: 'Sep', revenue: 52, target: 55 },
+    { month: 'Oct', revenue: 48.5, target: 55 },
+    { month: 'Nov', revenue: 61.2, target: 60 },
+    { month: 'Dec', revenue: 77.8, target: 70 }
+  ];
+
+  // Conversion funnel
+  const conversionFunnel = [
+    { stage: 'Enquiries', value: 145, percentage: 100 },
+    { stage: 'Assessments', value: 98, percentage: 67.6 },
+    { stage: 'Quotes', value: 67, percentage: 46.2 },
+    { stage: 'Converted', value: 46, percentage: 31.7 }
   ];
 
   const recentQuotes = [
@@ -81,25 +100,70 @@ export default function DashboardPage() {
           })}
         </div>
 
-        {/* Regional Performance - Simple Cards Instead of Charts */}
-        <div className="mb-8">
-          <h2 className="text-xl font-bold text-gray-900 mb-4">Regional Performance</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {regionalData.map((region, idx) => (
-              <div key={idx} className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
-                <h3 className="font-bold text-gray-900 mb-3">{region.name}</h3>
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-600">Revenue</span>
-                    <span className="text-lg font-bold text-[#0066CC]">{region.revenue}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-600">Margin</span>
-                    <span className="text-lg font-bold text-purple-600">{region.margin}</span>
-                  </div>
-                </div>
-              </div>
-            ))}
+        {/* Charts Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+
+          {/* Revenue Trend Chart */}
+          <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
+            <h2 className="text-lg font-bold text-gray-900 mb-4">Revenue Trend</h2>
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={revenueTrend}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="month" />
+                <YAxis />
+                <Tooltip
+                  formatter={(value: any) => {
+                    const num = Number(value);
+                    return [`$${num.toFixed(1)}K`, 'Revenue'];
+                  }}
+                />
+                <Legend />
+                <Line type="monotone" dataKey="revenue" stroke="#0066CC" name="Actual" strokeWidth={2} dot={{ fill: '#0066CC' }} />
+                <Line type="monotone" dataKey="target" stroke="#ccc" name="Target" strokeWidth={2} strokeDasharray="5 5" />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Regional Revenue Chart */}
+          <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
+            <h2 className="text-lg font-bold text-gray-900 mb-4">Regional Revenue Comparison</h2>
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={regionalData}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="name" angle={-45} textAnchor="end" height={80} interval={0} tick={{ fontSize: 12 }} />
+                <YAxis />
+                <Tooltip formatter={(value: any) => [`$${Number(value).toFixed(1)}K`, 'Revenue']} />
+                <Bar dataKey="revenue" fill="#0066CC" name="Revenue" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Margin by Region */}
+          <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
+            <h2 className="text-lg font-bold text-gray-900 mb-4">Profit Margin by Region</h2>
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={regionalData}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="name" angle={-45} textAnchor="end" height={80} interval={0} tick={{ fontSize: 12 }} />
+                <YAxis />
+                <Tooltip formatter={(value: any) => [`${Number(value).toFixed(1)}%`, 'Margin']} />
+                <Bar dataKey="margin" fill="#8b5cf6" name="Margin %" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Conversion Funnel */}
+          <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
+            <h2 className="text-lg font-bold text-gray-900 mb-4">Conversion Funnel</h2>
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={conversionFunnel} layout="vertical">
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis type="number" />
+                <YAxis dataKey="stage" type="category" width={100} />
+                <Tooltip formatter={(value: any) => [Number(value), 'Count']} />
+                <Bar dataKey="value" fill="#0066CC" name="Count" />
+              </BarChart>
+            </ResponsiveContainer>
           </div>
         </div>
 
