@@ -120,7 +120,7 @@ async function searchClients(term: string) {
       )
       .limit(10)
 
-    if (error) throw error
+   if (error) throw error
 
 const typedData: Client[] = (data || []).map((c: any) => ({
   id: String(c.id),
@@ -136,6 +136,8 @@ const typedData: Client[] = (data || []).map((c: any) => ({
 
 setClients(typedData)
 setShowDropdown(true)
+
+
   } catch (err) {
     console.error('Error searching clients:', err)
   } finally {
