@@ -148,8 +148,8 @@ export default function DashboardPage() {
                 <XAxis dataKey="name" angle={-45} textAnchor="end" height={80} interval={0} tick={{ fontSize: 12 }} />
                 <YAxis />
                 <Tooltip
-                formatter={(value: ValueType) => [`${Number(value).toFixed(1)}%`, 'Margin %']}
-                />
+                    formatter={(value: ValueType) => [`${Number(value).toFixed(1)}%`, 'Margin %']}
+                  />
                 <Bar dataKey="margin" fill="#8b5cf6" name="Margin %" />
               </BarChart>
             </ResponsiveContainer>
@@ -165,7 +165,8 @@ export default function DashboardPage() {
                 <YAxis />
                 // @ts-expect-error Recharts ValueType issue - works at runtime
                 <Tooltip
-                formatter={(value: ValueType) => [`${Number(value).toFixed(1)}%`, 'Revenue']}/>
+                    formatter={(value: ValueType) => [`${Number(value).toFixed(1)}%`, 'Revenue']}
+                  />
                 <Bar dataKey="margin" fill="#8b5cf6" name="Margin %" />
               </BarChart>
             </ResponsiveContainer>
