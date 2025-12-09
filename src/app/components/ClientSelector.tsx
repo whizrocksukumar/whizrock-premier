@@ -6,7 +6,7 @@ import { Search, Plus, X } from 'lucide-react'
 import { useRouter, useSearchParams } from 'next/navigation'
 
 interface ClientSelectorProps {
-  onClientSelected: (client: any) => void
+  onClientSelected: (client: Client | null) => void
 }
 
 interface Client {
@@ -16,9 +16,7 @@ interface Client {
   email: string
   phone: string
   company_id: string | null
-  companies?: {
-    name: string
-  } | null
+  companies?: { name: string }[] | null   // <-- array, matches Supabase join
 }
 
 export default function ClientSelector({ onClientSelected }: ClientSelectorProps) {
@@ -45,10 +43,13 @@ export default function ClientSelector({ onClientSelected }: ClientSelectorProps
   // Close dropdown when clicking outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        if (searchInputRef.current && !searchInputRef.current.contains(event.target as Node)) {
-          setShowDropdown(false)
-        }
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node) &&
+        searchInputRef.current &&
+        !searchInputRef.current.contains(event.target as Node)
+      ) {
+        setShowDropdown(false)
       }
     }
 
@@ -70,16 +71,25 @@ export default function ClientSelector({ onClientSelected }: ClientSelectorProps
     try {
       const { data, error } = await supabase
         .from('clients')
-        .select(`
-          *,
+        .select(
+          `
+          id,
+          first_name,
+          last_name,
+          email,
+          phone,
+          company_id,
           companies (name)
-        `)
+        `
+        )
         .eq('id', clientId)
         .single()
 
       if (error) throw error
-      setSelectedClient(data)
-      onClientSelected(data)
+
+      const client = data as Client
+      setSelectedClient(client)
+      onClientSelected(client)
     } catch (err) {
       console.error('Error fetching client:', err)
     }
@@ -89,10 +99,11 @@ export default function ClientSelector({ onClientSelected }: ClientSelectorProps
     try {
       setLoading(true)
       const searchLower = term.toLowerCase()
-      
+
       const { data, error } = await supabase
         .from('clients')
-        .select(`
+        .select(
+          `
           id,
           first_name,
           last_name,
@@ -100,17 +111,19 @@ export default function ClientSelector({ onClientSelected }: ClientSelectorProps
           phone,
           company_id,
           companies (name)
-        `)
+        `
+        )
         .or(
           `first_name.ilike.%${searchLower}%,` +
-          `last_name.ilike.%${searchLower}%,` +
-          `email.ilike.%${searchLower}%,` +
-          `phone.ilike.%${searchLower}%`
+            `last_name.ilike.%${searchLower}%,` +
+            `email.ilike.%${searchLower}%,` +
+            `phone.ilike.%${searchLower}%`
         )
         .limit(10)
 
       if (error) throw error
-      setClients(data || [])
+
+      setClients((data || []) as Client[])
       setShowDropdown(true)
     } catch (err) {
       console.error('Error searching clients:', err)
@@ -138,13 +151,15 @@ export default function ClientSelector({ onClientSelected }: ClientSelectorProps
   }
 
   const getCompanyName = (client: Client) => {
-    return client.companies?.name || '—'
+    if (client.companies && client.companies.length > 0) {
+      return client.companies[0].name || '—'
+    }
+    return '—'
   }
 
   return (
     <div className="space-y-2">
       {selectedClient ? (
-        // Selected Client Display
         <div className="flex items-center justify-between p-3 bg-blue-50 border border-blue-200 rounded-lg">
           <div>
             <p className="text-sm font-medium text-gray-900">
@@ -163,7 +178,6 @@ export default function ClientSelector({ onClientSelected }: ClientSelectorProps
           </button>
         </div>
       ) : (
-        // Search Input
         <div className="relative" ref={dropdownRef}>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
@@ -178,7 +192,6 @@ export default function ClientSelector({ onClientSelected }: ClientSelectorProps
             />
           </div>
 
-          {/* Dropdown Results */}
           {showDropdown && (
             <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg z-10 max-h-64 overflow-y-auto">
               {loading ? (
@@ -200,7 +213,7 @@ export default function ClientSelector({ onClientSelected }: ClientSelectorProps
                 </div>
               ) : (
                 <>
-                  {clients.map(client => (
+                  {clients.map((client) => (
                     <button
                       key={client.id}
                       onClick={() => handleClientSelect(client)}
