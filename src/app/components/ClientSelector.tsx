@@ -122,20 +122,20 @@ async function searchClients(term: string) {
 
     if (error) throw error
 
-    const typedData: Client[] = (data || []).map((c: any) => ({
-      id: String(c.id),
-      first_name: String(c.first_name ?? ''),
-      last_name: String(c.last_name ?? ''),
-      email: String(c.email ?? ''),
-      phone: String(c.phone ?? ''),
-      company_id: c.company_id ?? null,
-      companies: (c.companies || []).map((co: any) => ({
-        name: String(co.name ?? ''),
-      })),
-    }))
+const typedData: Client[] = (data || []).map((c: any) => ({
+  id: String(c.id),
+  first_name: String(c.first_name ?? ''),
+  last_name: String(c.last_name ?? ''),
+  email: String(c.email ?? ''),
+  phone: String(c.phone ?? ''),
+  company_id: c.company_id ?? null,
+  companies: (c.companies || []).map((co: any) => ({
+    name: String(co.name ?? ''),
+  })),
+}))
 
-    setClients(typedData)
-    setShowDropdown(true)
+setClients(typedData)
+setShowDropdown(true)
   } catch (err) {
     console.error('Error searching clients:', err)
   } finally {
