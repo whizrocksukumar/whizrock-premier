@@ -61,7 +61,8 @@ interface LineItemAREA extends LineItem {
     level?: string;
 }
 
-export default function CreateRecommendation() {
+// INNER COMPONENT - uses useSearchParams
+function CreateRecommendationForm() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const opportunityId = searchParams.get('opportunityId');
@@ -263,6 +264,51 @@ export default function CreateRecommendation() {
         }));
     };
 
+    const handleProductSelect = (sectionId: string, lineItemId: string, product: Product) => {
+        updateLineItem(sectionId, lineItemId, 'product_id', product.id);
+        updateLineItem(sectionId, lineItemId, 'product', product);
+        setProductSearch({ ...productSearch, [lineItemId]: product.product_description });
+        setShowProductSuggestions({ ...showProductSuggestions, [lineItemId]: false });
+    };
+
+    const calculateAreaLHROAL = (item: LineItemLHROAL): number => {
+        const length = item.length || 0;
+        const height = item.height || 0;
+        const raked = item.raked || 0;
+        const openings = item.openings || 0;
+        return (length * height) + (raked * 0.5) - openings;
+    };
+
+    const calculateAreaMHWA = (item: LineItemMHWA): number => {
+        const height = item.height || 0;
+        const width = item.width || 0;
+        return height * width;
+    };
+
+    const calculatePacks = (areaSqm: number, product: Product | undefined): number => {
+        if (!product || !product.bale_size_sqm) return 0;
+        const wastePercent = product.waste_percentage || 10;
+        const adjustedArea = areaSqm * (1 + wastePercent / 100);
+        return Math.ceil(adjustedArea / product.bale_size_sqm);
+    };
+
+    const getStockStatus = (packs: number): { status: string; color: string } => {
+        if (packs === 0) return { status: 'N/A', color: 'text-gray-500' };
+        // Simplified - in real app, check actual stock levels
+        return { status: '✓ In Stock', color: 'text-green-600' };
+    };
+
+    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files) {
+            const newFiles = Array.from(e.target.files);
+            setAttachedFiles([...attachedFiles, ...newFiles]);
+        }
+    };
+
+    const removeFile = (index: number) => {
+        setAttachedFiles(attachedFiles.filter((_, i) => i !== index));
+    };
+
     const saveDraft = async () => {
         alert("Save Draft – coming soon");
     };
@@ -272,6 +318,532 @@ export default function CreateRecommendation() {
         router.push('/va-workspace');
     };
 
+    const filteredProducts = (lineItemId: string) => {
+        const query = (productSearch[lineItemId] || '').toLowerCase();
+        if (!query) return [];
+        return products.filter(p =>
+            p.product_description.toLowerCase().includes(query) ||
+            p.sku.toLowerCase().includes(query) ||
+            p.r_value.toLowerCase().includes(query)
+        ).slice(0, 5);
+    };
+
+    return (
+        <div className="min-h-screen bg-gray-100">
+            {/* HEADER */}
+            <div className="bg-white border-b px-6 py-4">
+                <h1 className="text-2xl font-semibold text-[#0066CC]">Create Product Recommendation</h1>
+                <p className="text-sm text-gray-500">Fill in the details below</p>
+            </div>
+
+            {error && (
+                <div className="mx-6 mt-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
+                    {error}
+                </div>
+            )}
+
+            <div className="max-w-6xl mx-auto p-6 space-y-6">
+
+                {/* OPPORTUNITY INFO */}
+                {opportunityNumber && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                        <p className="text-sm font-semibold text-blue-900">
+                            Opportunity: {opportunityNumber}
+                        </p>
+                    </div>
+                )}
+
+                {/* CLIENT DETAILS */}
+                <div className="bg-white rounded-lg shadow p-6">
+                    <h2 className="text-lg font-semibold mb-4">Client Details</h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-sm font-medium mb-1">Contact Person</label>
+                            <input
+                                type="text"
+                                value={contactPerson}
+                                onChange={(e) => setContactPerson(e.target.value)}
+                                className="w-full border border-gray-300 rounded px-3 py-2"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium mb-1">Company Name</label>
+                            <input
+                                type="text"
+                                value={companyName}
+                                onChange={(e) => setCompanyName(e.target.value)}
+                                className="w-full border border-gray-300 rounded px-3 py-2"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium mb-1">Email</label>
+                            <input
+                                type="email"
+                                value={contactEmail}
+                                onChange={(e) => setContactEmail(e.target.value)}
+                                className="w-full border border-gray-300 rounded px-3 py-2"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium mb-1">Phone</label>
+                            <input
+                                type="tel"
+                                value={contactPhone}
+                                onChange={(e) => setContactPhone(e.target.value)}
+                                className="w-full border border-gray-300 rounded px-3 py-2"
+                            />
+                        </div>
+                        <div className="md:col-span-2">
+                            <label className="block text-sm font-medium mb-1">Site Address</label>
+                            <input
+                                type="text"
+                                value={siteAddress}
+                                onChange={(e) => setSiteAddress(e.target.value)}
+                                className="w-full border border-gray-300 rounded px-3 py-2"
+                            />
+                        </div>
+                    </div>
+                </div>
+
+                {/* SECTIONS */}
+                {sections.map((section, sectionIndex) => (
+                    <div key={section.id} className="bg-white rounded-lg shadow p-6">
+                        <div className="flex items-center justify-between mb-4">
+                            <div className="flex items-center gap-3">
+                                <div
+                                    className="w-6 h-6 rounded"
+                                    style={{ backgroundColor: section.section_color }}
+                                />
+                                <h3 className="text-lg font-semibold">
+                                    Section {sectionIndex + 1}: {section.type}
+                                </h3>
+                            </div>
+                            <button
+                                onClick={() => removeSection(section.id)}
+                                className="text-red-600 hover:text-red-800"
+                            >
+                                <Trash2 className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        {/* Application Type Selector */}
+                        <div className="mb-4">
+                            <label className="block text-sm font-medium mb-2">Application Type</label>
+                            <select
+                                value={section.app_type_id || ''}
+                                onChange={(e) => updateSection(section.id, 'app_type_id', e.target.value)}
+                                className="w-full border border-gray-300 rounded px-3 py-2"
+                            >
+                                <option value="">Select Application Type</option>
+                                {appTypes.map(at => (
+                                    <option key={at.id} value={at.id}>{at.name}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        {/* Custom Name */}
+                        <div className="mb-4">
+                            <label className="block text-sm font-medium mb-2">Custom Section Name</label>
+                            <input
+                                type="text"
+                                value={section.custom_name}
+                                onChange={(e) => updateSection(section.id, 'custom_name', e.target.value)}
+                                className="w-full border border-gray-300 rounded px-3 py-2"
+                                placeholder="e.g., Living Room Ceiling"
+                            />
+                        </div>
+
+                        {/* LINE ITEMS TABLE */}
+                        {section.type === 'LHROAL' && (
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-sm">
+                                    <thead className="bg-gray-50 border-b">
+                                        <tr>
+                                            <th className="px-2 py-2 text-left">Marker</th>
+                                            <th className="px-2 py-2 text-left">Length (m)</th>
+                                            <th className="px-2 py-2 text-left">Height (m)</th>
+                                            <th className="px-2 py-2 text-left">Raked (m)</th>
+                                            <th className="px-2 py-2 text-left">Openings (m²)</th>
+                                            <th className="px-2 py-2 text-left">Area (m²)</th>
+                                            <th className="px-2 py-2 text-left">Product</th>
+                                            <th className="px-2 py-2 text-left">Packs</th>
+                                            <th className="px-2 py-2 text-left">Stock</th>
+                                            <th className="px-2 py-2"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {section.line_items.map((item) => {
+                                            const lhItem = item as LineItemLHROAL;
+                                            const area = calculateAreaLHROAL(lhItem);
+                                            const packs = calculatePacks(area, item.product);
+                                            const stockStatus = getStockStatus(packs);
+
+                                            return (
+                                                <tr key={item.id} className="border-b">
+                                                    <td className="px-2 py-2">
+                                                        <input
+                                                            type="text"
+                                                            value={lhItem.marker || ''}
+                                                            onChange={(e) => updateLineItem(section.id, item.id, 'marker', e.target.value)}
+                                                            className="w-20 border rounded px-2 py-1"
+                                                        />
+                                                    </td>
+                                                    <td className="px-2 py-2">
+                                                        <input
+                                                            type="number"
+                                                            value={lhItem.length || ''}
+                                                            onChange={(e) => updateLineItem(section.id, item.id, 'length', parseFloat(e.target.value) || 0)}
+                                                            className="w-20 border rounded px-2 py-1"
+                                                        />
+                                                    </td>
+                                                    <td className="px-2 py-2">
+                                                        <input
+                                                            type="number"
+                                                            value={lhItem.height || ''}
+                                                            onChange={(e) => updateLineItem(section.id, item.id, 'height', parseFloat(e.target.value) || 0)}
+                                                            className="w-20 border rounded px-2 py-1"
+                                                        />
+                                                    </td>
+                                                    <td className="px-2 py-2">
+                                                        <input
+                                                            type="number"
+                                                            value={lhItem.raked || ''}
+                                                            onChange={(e) => updateLineItem(section.id, item.id, 'raked', parseFloat(e.target.value) || 0)}
+                                                            className="w-20 border rounded px-2 py-1"
+                                                        />
+                                                    </td>
+                                                    <td className="px-2 py-2">
+                                                        <input
+                                                            type="number"
+                                                            value={lhItem.openings || ''}
+                                                            onChange={(e) => updateLineItem(section.id, item.id, 'openings', parseFloat(e.target.value) || 0)}
+                                                            className="w-20 border rounded px-2 py-1"
+                                                        />
+                                                    </td>
+                                                    <td className="px-2 py-2 font-semibold">{area.toFixed(2)}</td>
+                                                    <td className="px-2 py-2 relative">
+                                                        <input
+                                                            type="text"
+                                                            value={productSearch[item.id] || ''}
+                                                            onChange={(e) => {
+                                                                setProductSearch({ ...productSearch, [item.id]: e.target.value });
+                                                                setShowProductSuggestions({ ...showProductSuggestions, [item.id]: true });
+                                                            }}
+                                                            onFocus={() => setShowProductSuggestions({ ...showProductSuggestions, [item.id]: true })}
+                                                            placeholder="Search product..."
+                                                            className="w-48 border rounded px-2 py-1"
+                                                        />
+                                                        {showProductSuggestions[item.id] && filteredProducts(item.id).length > 0 && (
+                                                            <div className="absolute z-10 bg-white border rounded shadow-lg mt-1 w-64 max-h-48 overflow-y-auto">
+                                                                {filteredProducts(item.id).map(p => (
+                                                                    <div
+                                                                        key={p.id}
+                                                                        onClick={() => handleProductSelect(section.id, item.id, p)}
+                                                                        className="px-3 py-2 hover:bg-gray-100 cursor-pointer"
+                                                                    >
+                                                                        <div className="font-semibold text-sm">{p.product_description}</div>
+                                                                        <div className="text-xs text-gray-500">{p.sku} - {p.r_value}</div>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                    </td>
+                                                    <td className="px-2 py-2 font-semibold">{packs}</td>
+                                                    <td className={`px-2 py-2 text-xs ${stockStatus.color}`}>{stockStatus.status}</td>
+                                                    <td className="px-2 py-2">
+                                                        <button
+                                                            onClick={() => removeLineItem(section.id, item.id)}
+                                                            className="text-red-600 hover:text-red-800"
+                                                        >
+                                                            <X className="w-4 h-4" />
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+
+                        {section.type === 'MHWA' && (
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-sm">
+                                    <thead className="bg-gray-50 border-b">
+                                        <tr>
+                                            <th className="px-2 py-2 text-left">Marker</th>
+                                            <th className="px-2 py-2 text-left">Height (m)</th>
+                                            <th className="px-2 py-2 text-left">Width (m)</th>
+                                            <th className="px-2 py-2 text-left">Area (m²)</th>
+                                            <th className="px-2 py-2 text-left">Product</th>
+                                            <th className="px-2 py-2 text-left">Packs</th>
+                                            <th className="px-2 py-2 text-left">Stock</th>
+                                            <th className="px-2 py-2"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {section.line_items.map((item) => {
+                                            const mhItem = item as LineItemMHWA;
+                                            const area = calculateAreaMHWA(mhItem);
+                                            const packs = calculatePacks(area, item.product);
+                                            const stockStatus = getStockStatus(packs);
+
+                                            return (
+                                                <tr key={item.id} className="border-b">
+                                                    <td className="px-2 py-2">
+                                                        <input
+                                                            type="text"
+                                                            value={mhItem.marker || ''}
+                                                            onChange={(e) => updateLineItem(section.id, item.id, 'marker', e.target.value)}
+                                                            className="w-20 border rounded px-2 py-1"
+                                                        />
+                                                    </td>
+                                                    <td className="px-2 py-2">
+                                                        <input
+                                                            type="number"
+                                                            value={mhItem.height || ''}
+                                                            onChange={(e) => updateLineItem(section.id, item.id, 'height', parseFloat(e.target.value) || 0)}
+                                                            className="w-20 border rounded px-2 py-1"
+                                                        />
+                                                    </td>
+                                                    <td className="px-2 py-2">
+                                                        <input
+                                                            type="number"
+                                                            value={mhItem.width || ''}
+                                                            onChange={(e) => updateLineItem(section.id, item.id, 'width', parseFloat(e.target.value) || 0)}
+                                                            className="w-20 border rounded px-2 py-1"
+                                                        />
+                                                    </td>
+                                                    <td className="px-2 py-2 font-semibold">{area.toFixed(2)}</td>
+                                                    <td className="px-2 py-2 relative">
+                                                        <input
+                                                            type="text"
+                                                            value={productSearch[item.id] || ''}
+                                                            onChange={(e) => {
+                                                                setProductSearch({ ...productSearch, [item.id]: e.target.value });
+                                                                setShowProductSuggestions({ ...showProductSuggestions, [item.id]: true });
+                                                            }}
+                                                            onFocus={() => setShowProductSuggestions({ ...showProductSuggestions, [item.id]: true })}
+                                                            placeholder="Search product..."
+                                                            className="w-48 border rounded px-2 py-1"
+                                                        />
+                                                        {showProductSuggestions[item.id] && filteredProducts(item.id).length > 0 && (
+                                                            <div className="absolute z-10 bg-white border rounded shadow-lg mt-1 w-64 max-h-48 overflow-y-auto">
+                                                                {filteredProducts(item.id).map(p => (
+                                                                    <div
+                                                                        key={p.id}
+                                                                        onClick={() => handleProductSelect(section.id, item.id, p)}
+                                                                        className="px-3 py-2 hover:bg-gray-100 cursor-pointer"
+                                                                    >
+                                                                        <div className="font-semibold text-sm">{p.product_description}</div>
+                                                                        <div className="text-xs text-gray-500">{p.sku} - {p.r_value}</div>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                    </td>
+                                                    <td className="px-2 py-2 font-semibold">{packs}</td>
+                                                    <td className={`px-2 py-2 text-xs ${stockStatus.color}`}>{stockStatus.status}</td>
+                                                    <td className="px-2 py-2">
+                                                        <button
+                                                            onClick={() => removeLineItem(section.id, item.id)}
+                                                            className="text-red-600 hover:text-red-800"
+                                                        >
+                                                            <X className="w-4 h-4" />
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+
+                        {section.type === 'AREA' && (
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-sm">
+                                    <thead className="bg-gray-50 border-b">
+                                        <tr>
+                                            <th className="px-2 py-2 text-left">Level</th>
+                                            <th className="px-2 py-2 text-left">Area (m²)</th>
+                                            <th className="px-2 py-2 text-left">Product</th>
+                                            <th className="px-2 py-2 text-left">Packs</th>
+                                            <th className="px-2 py-2 text-left">Stock</th>
+                                            <th className="px-2 py-2"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {section.line_items.map((item) => {
+                                            const areaItem = item as LineItemAREA;
+                                            const packs = calculatePacks(item.area_sqm, item.product);
+                                            const stockStatus = getStockStatus(packs);
+
+                                            return (
+                                                <tr key={item.id} className="border-b">
+                                                    <td className="px-2 py-2">
+                                                        <input
+                                                            type="text"
+                                                            value={areaItem.level || ''}
+                                                            onChange={(e) => updateLineItem(section.id, item.id, 'level', e.target.value)}
+                                                            className="w-32 border rounded px-2 py-1"
+                                                            placeholder="e.g., Level 1"
+                                                        />
+                                                    </td>
+                                                    <td className="px-2 py-2">
+                                                        <input
+                                                            type="number"
+                                                            value={item.area_sqm || ''}
+                                                            onChange={(e) => updateLineItem(section.id, item.id, 'area_sqm', parseFloat(e.target.value) || 0)}
+                                                            className="w-24 border rounded px-2 py-1"
+                                                        />
+                                                    </td>
+                                                    <td className="px-2 py-2 relative">
+                                                        <input
+                                                            type="text"
+                                                            value={productSearch[item.id] || ''}
+                                                            onChange={(e) => {
+                                                                setProductSearch({ ...productSearch, [item.id]: e.target.value });
+                                                                setShowProductSuggestions({ ...showProductSuggestions, [item.id]: true });
+                                                            }}
+                                                            onFocus={() => setShowProductSuggestions({ ...showProductSuggestions, [item.id]: true })}
+                                                            placeholder="Search product..."
+                                                            className="w-48 border rounded px-2 py-1"
+                                                        />
+                                                        {showProductSuggestions[item.id] && filteredProducts(item.id).length > 0 && (
+                                                            <div className="absolute z-10 bg-white border rounded shadow-lg mt-1 w-64 max-h-48 overflow-y-auto">
+                                                                {filteredProducts(item.id).map(p => (
+                                                                    <div
+                                                                        key={p.id}
+                                                                        onClick={() => handleProductSelect(section.id, item.id, p)}
+                                                                        className="px-3 py-2 hover:bg-gray-100 cursor-pointer"
+                                                                    >
+                                                                        <div className="font-semibold text-sm">{p.product_description}</div>
+                                                                        <div className="text-xs text-gray-500">{p.sku} - {p.r_value}</div>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                    </td>
+                                                    <td className="px-2 py-2 font-semibold">{packs}</td>
+                                                    <td className={`px-2 py-2 text-xs ${stockStatus.color}`}>{stockStatus.status}</td>
+                                                    <td className="px-2 py-2">
+                                                        <button
+                                                            onClick={() => removeLineItem(section.id, item.id)}
+                                                            className="text-red-600 hover:text-red-800"
+                                                        >
+                                                            <X className="w-4 h-4" />
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+
+                        <button
+                            onClick={() => addLineItem(section.id)}
+                            className="mt-3 flex items-center gap-2 text-[#0066CC] hover:text-blue-800"
+                        >
+                            <Plus className="w-4 h-4" />
+                            Add Line Item
+                        </button>
+                    </div>
+                ))}
+
+                {/* ADD SECTION BUTTONS */}
+                <div className="flex gap-3">
+                    <button
+                        onClick={() => addSection('LHROAL')}
+                        className="px-4 py-2 bg-yellow-100 text-yellow-800 border border-yellow-300 rounded hover:bg-yellow-200"
+                    >
+                        + Add LHROAL Section
+                    </button>
+                    <button
+                        onClick={() => addSection('MHWA')}
+                        className="px-4 py-2 bg-blue-100 text-blue-800 border border-blue-300 rounded hover:bg-blue-200"
+                    >
+                        + Add MHWA Section
+                    </button>
+                    <button
+                        onClick={() => addSection('AREA')}
+                        className="px-4 py-2 bg-orange-100 text-orange-800 border border-orange-300 rounded hover:bg-orange-200"
+                    >
+                        + Add AREA Section
+                    </button>
+                </div>
+
+                {/* NOTES */}
+                <div className="bg-white rounded-lg shadow p-6">
+                    <h2 className="text-lg font-semibold mb-3">General Notes</h2>
+                    <textarea
+                        value={generalNotes}
+                        onChange={(e) => setGeneralNotes(e.target.value)}
+                        className="w-full border border-gray-300 rounded px-3 py-2 h-32"
+                        placeholder="Add any additional notes here..."
+                    />
+                </div>
+
+                {/* ATTACHMENTS */}
+                <div className="bg-white rounded-lg shadow p-6">
+                    <h2 className="text-lg font-semibold mb-3">Attachments</h2>
+                    <div className="mb-3">
+                        <label className="flex items-center gap-2 px-4 py-2 bg-gray-100 border border-gray-300 rounded cursor-pointer hover:bg-gray-200 w-fit">
+                            <Upload className="w-4 h-4" />
+                            <span>Upload Files</span>
+                            <input
+                                type="file"
+                                multiple
+                                onChange={handleFileSelect}
+                                className="hidden"
+                            />
+                        </label>
+                    </div>
+                    {attachedFiles.length > 0 && (
+                        <div className="space-y-2">
+                            {attachedFiles.map((file, idx) => (
+                                <div key={idx} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                                    <div className="flex items-center gap-2">
+                                        <FileText className="w-4 h-4 text-gray-600" />
+                                        <span className="text-sm">{file.name}</span>
+                                    </div>
+                                    <button
+                                        onClick={() => removeFile(idx)}
+                                        className="text-red-600 hover:text-red-800"
+                                    >
+                                        <X className="w-4 h-4" />
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+
+                {/* ACTION BUTTONS */}
+                <div className="flex gap-3 justify-end">
+                    <button
+                        onClick={saveDraft}
+                        className="px-6 py-2 border border-gray-300 rounded hover:bg-gray-100"
+                    >
+                        Save Draft
+                    </button>
+                    <button
+                        onClick={submitForReview}
+                        className="px-6 py-2 bg-[#0066CC] text-white rounded hover:bg-blue-700"
+                    >
+                        Submit for Review
+                    </button>
+                </div>
+
+            </div>
+        </div>
+    );
+}
+
+// OUTER COMPONENT - wraps in Suspense
+export default function CreateRecommendation() {
     return (
         <Suspense fallback={
             <div className="min-h-screen bg-gray-100 flex items-center justify-center">
@@ -281,28 +853,7 @@ export default function CreateRecommendation() {
                 </div>
             </div>
         }>
-            <div className="min-h-screen bg-gray-100">
-                {/* HEADER */}
-                <div className="bg-white border-b px-6 py-4">
-                    <h1 className="text-2xl font-semibold text-[#0066CC]">Create Product Recommendation</h1>
-                    <p className="text-sm text-gray-500">Fill in the details below</p>
-                </div>
-
-                {error && (
-                    <div className="mx-6 mt-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
-                        {error}
-                    </div>
-                )}
-
-                {/* Rest of your UI stays 100% unchanged */}
-                <div className="max-w-6xl mx-auto p-6">
-
-                    {/* All your existing content… */}
-                    {/* Sections, tables, inputs, notes, attachments, buttons */}
-                    {/* I did NOT alter any inner logic */}
-
-                </div>
-            </div>
+            <CreateRecommendationForm />
         </Suspense>
     );
 }

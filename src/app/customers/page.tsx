@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
-import { Search, Plus, X } from 'lucide-react';
+import { Search, Plus, X, ChevronDown } from 'lucide-react';
 
 // Types
 interface Client {
@@ -31,6 +31,11 @@ interface Region {
     name: string;
 }
 
+interface ClientType {
+    id: string;
+    name: string;
+}
+
 interface CustomerFormData {
     first_name: string;
     last_name: string;
@@ -43,6 +48,7 @@ interface CustomerFormData {
     postcode: string;
     region_id: string;
     status: string;
+    client_type_id: string;
 }
 
 interface CompanyFormData {
@@ -77,9 +83,12 @@ export default function CustomersPage() {
     // Company state
     const [companies, setCompanies] = useState<Company[]>([]);
     const [regions, setRegions] = useState<Region[]>([]);
+    const [clientTypes, setClientTypes] = useState<ClientType[]>([]);
+    const [industries, setIndustries] = useState<string[]>([]);
     const [showCompanyForm, setShowCompanyForm] = useState(false);
     const [savingCompany, setSavingCompany] = useState(false);
     const [companyError, setCompanyError] = useState<string | null>(null);
+    const [industryDropdownOpen, setIndustryDropdownOpen] = useState(false);
 
     // Form data
     const [customerForm, setCustomerForm] = useState<CustomerFormData>({
@@ -93,7 +102,8 @@ export default function CustomersPage() {
         city: '',
         postcode: '',
         region_id: '',
-        status: 'active'
+        status: 'Active',
+        client_type_id: ''
     });
 
     const [companyForm, setCompanyForm] = useState<CompanyFormData>({
@@ -108,6 +118,8 @@ export default function CustomersPage() {
         fetchClients();
         fetchCompanies();
         fetchRegions();
+        fetchClientTypes();
+        fetchIndustries();
     }, [searchTerm, statusFilter, sortField, sortDirection, pagination.page]);
 
     const fetchClients = async () => {
@@ -221,6 +233,39 @@ export default function CustomersPage() {
         }
     };
 
+    const fetchClientTypes = async () => {
+        try {
+            const { data, error: fetchError } = await supabase
+                .from('client_types')
+                .select('id, name')
+                .eq('is_active', true)
+                .order('name', { ascending: true });
+
+            if (fetchError) throw fetchError;
+            setClientTypes(data || []);
+        } catch (err) {
+            console.error('Error fetching client types:', err);
+        }
+    };
+
+    const fetchIndustries = async () => {
+        try {
+            const { data, error: fetchError } = await supabase
+                .from('companies')
+                .select('industry')
+                .not('industry', 'is', null)
+                .order('industry', { ascending: true });
+
+            if (fetchError) throw fetchError;
+            
+            // Get distinct industries
+            const uniqueIndustries = Array.from(new Set((data || []).map(c => c.industry).filter(Boolean)));
+            setIndustries(uniqueIndustries);
+        } catch (err) {
+            console.error('Error fetching industries:', err);
+        }
+    };
+
     const openDrawer = () => {
         // Reset form
         setCustomerForm({
@@ -234,7 +279,8 @@ export default function CustomersPage() {
             city: '',
             postcode: '',
             region_id: '',
-            status: 'active'
+            status: 'Active',
+            client_type_id: ''
         });
         setFormError(null);
         setShowCompanyForm(false);
@@ -312,7 +358,8 @@ export default function CustomersPage() {
                     city: customerForm.city.trim() || null,
                     postcode: customerForm.postcode.trim() || null,
                     region_id: customerForm.region_id,
-                    status: customerForm.status
+                    status: customerForm.status,
+                    client_type_id: customerForm.client_type_id || null
                 })
                 .select()
                 .single();
@@ -357,6 +404,11 @@ export default function CustomersPage() {
 
             // Add to companies list
             setCompanies(prev => [...prev, { id: data.id, name: data.company_name }].sort((a, b) => a.name.localeCompare(b.name)));
+            
+            // Add industry if it's new
+            if (companyForm.industry && !industries.includes(companyForm.industry)) {
+                setIndustries(prev => [...prev, companyForm.industry].sort());
+            }
             
             // Auto-select the new company
             setCustomerForm(prev => ({ ...prev, company_id: data.id }));
@@ -891,6 +943,30 @@ export default function CustomersPage() {
                                 </div>
                             </div>
 
+                            {/* Client Type */}
+                            <div>
+                                <h3 className="text-sm font-semibold text-gray-800 mb-4 pb-2 border-b border-gray-200">
+                                    Client Classification
+                                </h3>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Client Type
+                                </label>
+                                <select
+                                    name="client_type_id"
+                                    value={customerForm.client_type_id}
+                                    onChange={handleCustomerFormChange}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC] text-sm"
+                                >
+                                    <option value="">-- Select client type (optional) --</option>
+                                    {clientTypes.map(type => (
+                                        <option key={type.id} value={type.id}>
+                                            {type.name}
+                                        </option>
+                                    ))}
+                                </select>
+                                <p className="text-xs text-gray-500 mt-1">e.g., EECA, Head Office, Retailer, Builder</p>
+                            </div>
+
                             {/* Company Information */}
                             <div>
                                 <h3 className="text-sm font-semibold text-gray-800 mb-4 pb-2 border-b border-gray-200">
@@ -969,14 +1045,39 @@ export default function CustomersPage() {
                                                 <label className="block text-sm font-medium text-gray-700 mb-1">
                                                     Industry
                                                 </label>
-                                                <input
-                                                    type="text"
-                                                    name="industry"
-                                                    value={companyForm.industry}
-                                                    onChange={handleCompanyFormChange}
-                                                    placeholder="e.g., Construction, Property Management"
-                                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC] text-sm"
-                                                />
+                                                <div className="relative">
+                                                    <input
+                                                        type="text"
+                                                        name="industry"
+                                                        value={companyForm.industry}
+                                                        onChange={handleCompanyFormChange}
+                                                        onFocus={() => setIndustryDropdownOpen(true)}
+                                                        placeholder="e.g., Construction, Property Management"
+                                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC] text-sm"
+                                                    />
+                                                    {industryDropdownOpen && industries.length > 0 && (
+                                                        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg z-20 max-h-48 overflow-y-auto">
+                                                            {industries
+                                                                .filter(ind => 
+                                                                    ind.toLowerCase().includes(companyForm.industry.toLowerCase()) ||
+                                                                    companyForm.industry === ''
+                                                                )
+                                                                .map((industry, index) => (
+                                                                    <button
+                                                                        key={index}
+                                                                        type="button"
+                                                                        onClick={() => {
+                                                                            setCompanyForm(prev => ({ ...prev, industry }));
+                                                                            setIndustryDropdownOpen(false);
+                                                                        }}
+                                                                        className="w-full text-left px-3 py-2 hover:bg-blue-100 text-sm"
+                                                                    >
+                                                                        {industry}
+                                                                    </button>
+                                                                ))}
+                                                        </div>
+                                                    )}
+                                                </div>
                                             </div>
 
                                             <div>
@@ -1115,8 +1216,8 @@ export default function CustomersPage() {
                                         <input
                                             type="radio"
                                             name="status"
-                                            value="active"
-                                            checked={customerForm.status === 'active'}
+                                            value="Active"
+                                            checked={customerForm.status === 'Active'}
                                             onChange={handleCustomerFormChange}
                                             className="w-4 h-4 text-[#0066CC]"
                                         />
@@ -1126,8 +1227,8 @@ export default function CustomersPage() {
                                         <input
                                             type="radio"
                                             name="status"
-                                            value="inactive"
-                                            checked={customerForm.status === 'inactive'}
+                                            value="Inactive"
+                                            checked={customerForm.status === 'Inactive'}
                                             onChange={handleCustomerFormChange}
                                             className="w-4 h-4 text-[#0066CC]"
                                         />
@@ -1137,8 +1238,8 @@ export default function CustomersPage() {
                                         <input
                                             type="radio"
                                             name="status"
-                                            value="prospect"
-                                            checked={customerForm.status === 'prospect'}
+                                            value="Prospect"
+                                            checked={customerForm.status === 'Prospect'}
                                             onChange={handleCustomerFormChange}
                                             className="w-4 h-4 text-[#0066CC]"
                                         />

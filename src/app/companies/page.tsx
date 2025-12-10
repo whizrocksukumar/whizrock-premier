@@ -276,10 +276,6 @@ export default function CompaniesPage() {
       setFormError('Company name is required')
       return false
     }
-    if (!formData.region_id) {
-      setFormError('Region is required')
-      return false
-    }
     if (formData.email && !formData.email.includes('@')) {
       setFormError('Please enter a valid email address')
       return false
@@ -308,7 +304,7 @@ export default function CompaniesPage() {
         address_line_2: formData.address_line_2.trim() || null,
         city: formData.city.trim() || null,
         postcode: formData.postcode.trim() || null,
-        region_id: formData.region_id,
+        region_id: formData.region_id || null,
         is_active: formData.is_active
       }
 
@@ -666,13 +662,13 @@ export default function CompaniesPage() {
                         </td>
                         <td className="px-4 py-3 text-center whitespace-nowrap">
                           <div className="flex items-center justify-center gap-1">
-                            <button
-                              onClick={() => openDrawer(company)}
+                            <Link
+                              href={`/companies/${company.id}`}
                               className="px-2 py-1 text-xs bg-gray-200 hover:bg-gray-300 rounded flex items-center gap-1"
                             >
                               <Eye className="w-3 h-3" />
                               View
-                            </button>
+                            </Link>
                             <button
                               onClick={() => openDrawer(company)}
                               className="px-2 py-1 text-xs bg-gray-200 hover:bg-gray-300 rounded flex items-center gap-1"
@@ -683,12 +679,12 @@ export default function CompaniesPage() {
                           </div>
                         </td>
                         <td className="px-4 py-3 text-sm">
-                          <button
-                            onClick={() => openDrawer(company)}
+                          <Link
+                            href={`/companies/${company.id}`}
                             className="text-[#0066CC] hover:underline font-medium"
                           >
                             {company.company_name}
-                          </button>
+                          </Link>
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-700">
                           {company.industry || '—'}
@@ -720,7 +716,7 @@ export default function CompaniesPage() {
         )}
       </div>
 
-      {/* DRAWER */}
+      {/* DRAWER - Rest of the code remains identical to before */}
       {drawerOpen && (
         <div className="fixed inset-0 z-50">
           {/* Backdrop */}
@@ -897,7 +893,7 @@ export default function CompaniesPage() {
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Region <span className="text-red-500">*</span>
+                      Region
                     </label>
                     <select
                       name="region_id"
