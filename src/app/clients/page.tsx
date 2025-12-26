@@ -727,13 +727,13 @@ export default function CustomersPage() {
                                                 <td className="px-4 py-3 text-center whitespace-nowrap">
                                                     <div className="flex items-center justify-center gap-1">
                                                         <Link
-                                                            href={`/customers/${client.id}`}
+                                                            href={`/clients/${client.id}`}
                                                             className="px-2 py-1 text-xs bg-gray-200 hover:bg-gray-300 rounded"
                                                         >
                                                             View
                                                         </Link>
                                                         <Link
-                                                            href={`/customers/${client.id}/edit`}
+                                                            href={`/clients/${client.id}/edit`}
                                                             className="px-2 py-1 text-xs bg-gray-200 hover:bg-gray-300 rounded"
                                                         >
                                                             Edit
@@ -742,7 +742,7 @@ export default function CustomersPage() {
                                                 </td>
                                                 <td className="px-4 py-3 text-sm">
                                                     <Link
-                                                        href={`/customers/${client.id}`}
+                                                        href={`/clients/${client.id}`}
                                                         className="text-[#0066CC] hover:underline font-medium"
                                                     >
                                                         {client.first_name} {client.last_name}

@@ -368,7 +368,7 @@ export default function AssessmentsPage() {
                         <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
                           {assessment.client_id ? (
                             <Link
-                              href={`/customers/${assessment.client_id}`}
+                              href={`/clients/${assessment.client_id}`}
                               className="text-blue-600 hover:text-blue-800"
                             >
                               {assessment.contactName}

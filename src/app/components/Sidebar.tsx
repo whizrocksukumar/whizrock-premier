@@ -10,7 +10,7 @@ import {
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: Home },
-  { href: '/customers', label: 'Contacts', icon: Users },
+  { href: '/clients', label: 'Clients', icon: Users },
   { href: '/companies', label: 'Companies', icon: Building2 },
   { href: '/opportunities', label: 'Opportunities', icon: FileText },
   { href: '/assessments', label: 'Assessments', icon: ClipboardList },

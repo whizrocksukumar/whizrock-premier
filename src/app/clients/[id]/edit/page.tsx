@@ -116,7 +116,7 @@ export default function EditCustomer({ params }: { params: { id: string } }) {
 
       if (updateError) throw updateError;
 
-      router.push(`/customers/${params.id}`);
+      router.push(`/clients/${params.id}`);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -146,7 +146,7 @@ export default function EditCustomer({ params }: { params: { id: string } }) {
           <div>
             <div className="flex items-center gap-3">
               <Link
-                href={`/customers/${params.id}`}
+                href={`/clients/${params.id}`}
                 className="text-gray-600 hover:text-gray-900"
               >
                 ← Back
@@ -381,7 +381,7 @@ export default function EditCustomer({ params }: { params: { id: string } }) {
             {/* Action Buttons */}
             <div className="flex items-center justify-end gap-3">
               <Link
-                href={`/customers/${params.id}`}
+                href={`/clients/${params.id}`}
                 className="px-4 py-2 border border-gray-300 rounded text-gray-700 hover:bg-gray-50"
               >
                 Cancel

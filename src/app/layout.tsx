@@ -32,8 +32,11 @@ export default function RootLayout({
 
           {/* Main content */}
           <main className="flex-1 overflow-y-auto">
+          <div className="mx-auto w-full max-w-[90%] px-4 py-6">
             {children}
-          </main>
+          </div>
+        </main>
+
         </div>
       </body>
     </html>

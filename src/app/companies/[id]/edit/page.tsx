@@ -372,7 +372,7 @@ export default function CompanyDetailPage({
           {!editMode && (
             <div className="flex items-center gap-2">
               <Link
-                href={`/customers/new?company_id=${company.id}`}
+                href={`/clients/new?company_id=${company.id}`}
                 className="px-4 py-2 text-sm border border-gray-300 rounded hover:bg-gray-50 transition-colors flex items-center gap-2"
               >
                 Add Contact
@@ -685,7 +685,7 @@ export default function CompanyDetailPage({
                     <h2 className="text-lg font-semibold text-gray-900">Activity Summary</h2>
                   </div>
                   <div className="p-6 space-y-3">
-                    <Link href={`/customers?company_id=${company.id}`} className="flex justify-between items-center hover:bg-gray-50 p-2 rounded transition-colors">
+                    <Link href={`/clients?company_id=${company.id}`} className="flex justify-between items-center hover:bg-gray-50 p-2 rounded transition-colors">
                       <span className="text-gray-600">Contacts</span>
                       <span className="font-semibold text-[#0066CC]">{contacts.length}</span>
                     </Link>
@@ -711,7 +711,7 @@ export default function CompanyDetailPage({
               <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
                 <h2 className="text-lg font-semibold text-gray-900">Contacts</h2>
                 <Link
-                  href={`/customers/new?company_id=${company.id}`}
+                  href={`/clients/new?company_id=${company.id}`}
                   className="px-4 py-2 text-sm bg-[#0066CC] text-white rounded hover:bg-[#0052a3] transition-colors flex items-center gap-2"
                 >
                   <Building2 className="w-4 h-4" />
@@ -736,7 +736,7 @@ export default function CompanyDetailPage({
                       {contacts.map((contact: Contact) => (
                         <tr key={contact.id} className="hover:bg-gray-50">
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <Link href={`/customers/${contact.id}`} className="text-[#0066CC] hover:underline font-medium">
+                            <Link href={`/clients/${contact.id}`} className="text-[#0066CC] hover:underline font-medium">
                               {contact.first_name} {contact.last_name}
                             </Link>
                           </td>
@@ -756,7 +756,7 @@ export default function CompanyDetailPage({
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm">
                             <Link
-                              href={`/customers/${contact.id}`}
+                              href={`/clients/${contact.id}`}
                               className="text-[#0066CC] hover:underline"
                             >
                               View
@@ -772,7 +772,7 @@ export default function CompanyDetailPage({
                   <Building2 className="w-12 h-12 mx-auto mb-3 text-gray-300" />
                   <p className="text-gray-500 mb-4">No contacts yet</p>
                   <Link
-                    href={`/customers/new?company_id=${company.id}`}
+                    href={`/clients/new?company_id=${company.id}`}
                     className="inline-flex items-center gap-2 px-4 py-2 text-sm border border-gray-300 rounded hover:bg-gray-50 transition-colors"
                   >
                     Add First Contact

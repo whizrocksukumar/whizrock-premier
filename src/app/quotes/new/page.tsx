@@ -217,13 +217,17 @@ export default function AddQuotePage() {
     const filterClients = (searchTerm: string) => {
         if (!searchTerm) return clients;
         const term = searchTerm.toLowerCase();
-        return clients.filter(c => 
-            c.first_name?.toLowerCase().includes(term) ||
-            c.last_name?.toLowerCase().includes(term) ||
-            c.email?.toLowerCase().includes(term) ||
-            c.phone?.includes(term) ||
-            c.companies?.company_name?.toLowerCase().includes(term)
-        );
+        return clients.filter(c => {
+            // Prefer company name if it exists, otherwise use full name
+            const companyName = c.companies?.company_name?.toLowerCase() || '';
+            const fullName = `${c.first_name || ''} ${c.last_name || ''}`.toLowerCase();
+            return (
+                (companyName && companyName.includes(term)) ||
+                fullName.includes(term) ||
+                (c.email?.toLowerCase().includes(term)) ||
+                (c.phone?.includes(term))
+            );
+        });
     };
 
     const selectClient = (client: Client) => {

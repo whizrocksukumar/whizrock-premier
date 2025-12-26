@@ -188,7 +188,7 @@ export default function ClientSelector({ onClientSelected }: ClientSelectorProps
   }
 
   const handleCreateNewClient = () => {
-    router.push('/customers/new?redirectTo=assessments/new')
+    router.push('/clients/new?redirectTo=assessments/new')
   }
 
   const getCompanyName = (client: Client) => {
