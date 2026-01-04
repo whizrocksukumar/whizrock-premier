@@ -294,19 +294,25 @@ export default function CompaniesPage() {
     setSaving(true)
 
     try {
-      const dataToSave = {
-        company_name: formData.company_name.trim(),
-        industry: formData.industry.trim() || null,
-        phone: formData.phone.trim() || null,
-        email: formData.email.trim() || null,
-        website: formData.website.trim() || null,
-        address_line_1: formData.address_line_1.trim() || null,
-        address_line_2: formData.address_line_2.trim() || null,
-        city: formData.city.trim() || null,
-        postcode: formData.postcode.trim() || null,
-        region_id: formData.region_id || null,
-        is_active: formData.is_active
-      }
+      const normalizedWebsite = formData.website.trim() 
+      ? (formData.website.startsWith('http') 
+          ? formData.website 
+          : `https://${formData.website}`)
+      : null
+
+    const dataToSave = {
+      company_name: formData.company_name.trim(),
+      industry: formData.industry.trim() || null,
+      phone: formData.phone.trim() || null,
+      email: formData.email.trim() || null,
+      website: normalizedWebsite,  // ← USE NORMALIZED VERSION HERE
+      address_line_1: formData.address_line_1.trim() || null,
+      address_line_2: formData.address_line_2.trim() || null,
+      city: formData.city.trim() || null,
+      postcode: formData.postcode.trim() || null,
+      region_id: formData.region_id || null,
+      is_active: formData.is_active
+    }
 
       if (editingId) {
         // Update
@@ -816,7 +822,6 @@ export default function CompaniesPage() {
                       Website
                     </label>
                     <input
-                      type="url"
                       name="website"
                       value={formData.website}
                       onChange={handleFormChange}

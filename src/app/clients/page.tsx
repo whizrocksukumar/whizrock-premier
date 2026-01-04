@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
-import { Search, Plus, X, ChevronDown } from 'lucide-react';
+import { Search, Plus, X, ChevronDown, Edit, Eye } from 'lucide-react';
 
 // Types
 interface Client {
@@ -16,7 +16,8 @@ interface Client {
     company_id: string;
     company_name?: string;
     region_name?: string;
-    site_address?: string;
+    address_line_1?: string;
+    region_id?: string;
     status: string;
     follow_up_date?: string;
 }
@@ -36,7 +37,7 @@ interface ClientType {
     name: string;
 }
 
-interface CustomerFormData {
+interface ClientFormData {
     first_name: string;
     last_name: string;
     email: string;
@@ -49,6 +50,7 @@ interface CustomerFormData {
     region_id: string;
     status: string;
     client_type_id: string;
+    website?: string;
 }
 
 interface CompanyFormData {
@@ -56,12 +58,13 @@ interface CompanyFormData {
     industry: string;
     phone: string;
     email: string;
+    website?: string;
 }
 
-type SortField = 'first_name' | 'last_name' | 'company_name' | 'site_address' | 'region_name' | 'email' | 'phone' | 'status' | 'follow_up_date';
+type SortField = 'first_name' | 'last_name' | 'company_name' | 'address_line_1' | 'region_name' | 'email' | 'phone' | 'status' | 'follow_up_date';
 type SortDirection = 'asc' | 'desc';
 
-export default function CustomersPage() {
+export default function ClientsPage() {
     const router = useRouter();
 
     // State
@@ -77,6 +80,7 @@ export default function CustomersPage() {
 
     // Drawer state
     const [drawerOpen, setDrawerOpen] = useState(false);
+    const [editingId, setEditingId] = useState<string | null>(null);
     const [saving, setSaving] = useState(false);
     const [formError, setFormError] = useState<string | null>(null);
 
@@ -91,7 +95,7 @@ export default function CustomersPage() {
     const [industryDropdownOpen, setIndustryDropdownOpen] = useState(false);
 
     // Form data
-    const [customerForm, setCustomerForm] = useState<CustomerFormData>({
+    const [clientForm, setClientForm] = useState<ClientFormData>({
         first_name: '',
         last_name: '',
         email: '',
@@ -102,15 +106,17 @@ export default function CustomersPage() {
         city: '',
         postcode: '',
         region_id: '',
-        status: 'Active',
-        client_type_id: ''
+        status: 'Prospect',
+        client_type_id: '',
+        website: ''
     });
 
     const [companyForm, setCompanyForm] = useState<CompanyFormData>({
         company_name: '',
         industry: '',
         phone: '',
-        email: ''
+        email: '',
+        website: ''
     });
 
     // Fetch clients on mount and when filters change
@@ -182,8 +188,9 @@ export default function CustomersPage() {
                 company_id: client.company_id,
                 company_name: client.company_id ? (companyMap[client.company_id] || '—') : '—',
                 region_name: client.region_id ? (regionMap[client.region_id] || '—') : '—',
-                site_address: client.address_line_1 || '—',
-                status: client.status || 'Active',
+                address_line_1: client.address_line_1 || '—',
+                region_id: client.region_id,
+                status: client.status || 'Prospect',
                 follow_up_date: client.follow_up_date || '',
             }));
 
@@ -192,7 +199,7 @@ export default function CustomersPage() {
             setSelectedIds(new Set());
         } catch (err) {
             console.error('Fetch error:', err);
-            setError(err instanceof Error ? err.message : 'Failed to fetch customers');
+            setError(err instanceof Error ? err.message : 'Failed to fetch clients');
         } finally {
             setLoading(false);
         }
@@ -207,7 +214,6 @@ export default function CustomersPage() {
 
             if (fetchError) throw fetchError;
             
-            // Map company_name to name for dropdown
             const mappedCompanies = (data || []).map(company => ({
                 id: company.id,
                 name: company.company_name
@@ -258,7 +264,6 @@ export default function CustomersPage() {
 
             if (fetchError) throw fetchError;
             
-            // Get distinct industries
             const uniqueIndustries = Array.from(new Set((data || []).map(c => c.industry).filter(Boolean)));
             setIndustries(uniqueIndustries);
         } catch (err) {
@@ -266,22 +271,44 @@ export default function CustomersPage() {
         }
     };
 
-    const openDrawer = () => {
-        // Reset form
-        setCustomerForm({
-            first_name: '',
-            last_name: '',
-            email: '',
-            phone: '',
-            company_id: '',
-            address_line_1: '',
-            address_line_2: '',
-            city: '',
-            postcode: '',
-            region_id: '',
-            status: 'Active',
-            client_type_id: ''
-        });
+    const openDrawer = (client?: Client) => {
+        if (client) {
+            // EDIT MODE - pre-populate form
+            setEditingId(client.id);
+            setClientForm({
+                first_name: client.first_name,
+                last_name: client.last_name,
+                email: client.email,
+                phone: client.phone,
+                company_id: client.company_id || '',
+                address_line_1: client.address_line_1 || '',
+                address_line_2: '',
+                city: '',
+                postcode: '',
+                region_id: client.region_id || '',
+                status: client.status || 'Prospect',
+                client_type_id: '',
+                website: ''
+            });
+        } else {
+            // ADD MODE - empty form
+            setEditingId(null);
+            setClientForm({
+                first_name: '',
+                last_name: '',
+                email: '',
+                phone: '',
+                company_id: '',
+                address_line_1: '',
+                address_line_2: '',
+                city: '',
+                postcode: '',
+                region_id: '',
+                status: 'Prospect',
+                client_type_id: '',
+                website: ''
+            });
+        }
         setFormError(null);
         setShowCompanyForm(false);
         setDrawerOpen(true);
@@ -289,14 +316,15 @@ export default function CustomersPage() {
 
     const closeDrawer = () => {
         setDrawerOpen(false);
+        setEditingId(null);
         setShowCompanyForm(false);
         setFormError(null);
         setCompanyError(null);
     };
 
-    const handleCustomerFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const handleClientFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { name, value } = e.target;
-        setCustomerForm(prev => ({ ...prev, [name]: value }));
+        setClientForm(prev => ({ ...prev, [name]: value }));
     };
 
     const handleCompanyFormChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -304,74 +332,85 @@ export default function CustomersPage() {
         setCompanyForm(prev => ({ ...prev, [name]: value }));
     };
 
-    const validateCustomerForm = (): boolean => {
-        if (!customerForm.first_name.trim()) {
+    const validateClientForm = (): boolean => {
+        if (!clientForm.first_name.trim()) {
             setFormError('First name is required');
             return false;
         }
-        if (!customerForm.last_name.trim()) {
+        if (!clientForm.last_name.trim()) {
             setFormError('Last name is required');
             return false;
         }
-        if (!customerForm.email.trim()) {
+        if (!clientForm.email.trim()) {
             setFormError('Email is required');
             return false;
         }
-        if (!customerForm.email.includes('@')) {
+        if (!clientForm.email.includes('@')) {
             setFormError('Please enter a valid email address');
             return false;
         }
-        if (!customerForm.phone.trim()) {
+        if (!clientForm.phone.trim()) {
             setFormError('Phone is required');
             return false;
         }
-        if (!customerForm.address_line_1.trim()) {
+        if (!clientForm.address_line_1.trim()) {
             setFormError('Address is required');
             return false;
         }
-        if (!customerForm.region_id) {
+        if (!clientForm.region_id) {
             setFormError('Region is required');
             return false;
         }
         return true;
     };
 
-    const handleSubmitCustomer = async (e: React.FormEvent) => {
+    const handleSubmitClient = async (e: React.FormEvent) => {
         e.preventDefault();
         setFormError(null);
 
-        if (!validateCustomerForm()) return;
+        if (!validateClientForm()) return;
 
         setSaving(true);
 
         try {
-            const { data, error: insertError } = await supabase
-                .from('clients')
-                .insert({
-                    first_name: customerForm.first_name.trim(),
-                    last_name: customerForm.last_name.trim(),
-                    email: customerForm.email.trim(),
-                    phone: customerForm.phone.trim(),
-                    company_id: customerForm.company_id || null,
-                    address_line_1: customerForm.address_line_1.trim(),
-                    address_line_2: customerForm.address_line_2.trim() || null,
-                    city: customerForm.city.trim() || null,
-                    postcode: customerForm.postcode.trim() || null,
-                    region_id: customerForm.region_id,
-                    status: customerForm.status,
-                    client_type_id: customerForm.client_type_id || null
-                })
-                .select()
-                .single();
+            const dataToSave = {
+                first_name: clientForm.first_name.trim(),
+                last_name: clientForm.last_name.trim(),
+                email: clientForm.email.trim(),
+                phone: clientForm.phone.trim(),
+                company_id: clientForm.company_id || null,
+                address_line_1: clientForm.address_line_1.trim(),
+                address_line_2: clientForm.address_line_2.trim() || null,
+                city: clientForm.city.trim() || null,
+                postcode: clientForm.postcode.trim() || null,
+                region_id: clientForm.region_id,
+                status: clientForm.status,
+                client_type_id: clientForm.client_type_id || null
+            };
 
-            if (insertError) throw insertError;
+            if (editingId) {
+                // UPDATE existing client
+                const { error: updateError } = await supabase
+                    .from('clients')
+                    .update(dataToSave)
+                    .eq('id', editingId);
+
+                if (updateError) throw updateError;
+            } else {
+                // INSERT new client
+                const { error: insertError } = await supabase
+                    .from('clients')
+                    .insert(dataToSave);
+
+                if (insertError) throw insertError;
+            }
 
             // Refresh clients list
             await fetchClients();
             closeDrawer();
         } catch (err: any) {
-            console.error('Error creating customer:', err);
-            setFormError(err.message || 'Failed to create customer');
+            console.error('Error saving client:', err);
+            setFormError(err.message || 'Failed to save client');
         } finally {
             setSaving(false);
         }
@@ -389,13 +428,21 @@ export default function CustomersPage() {
         setSavingCompany(true);
 
         try {
+            // Normalize website URL
+            const normalizedWebsite = companyForm.website?.trim()
+                ? (companyForm.website.startsWith('http')
+                    ? companyForm.website
+                    : `https://${companyForm.website}`)
+                : null;
+
             const { data, error: insertError } = await supabase
                 .from('companies')
                 .insert({
                     company_name: companyForm.company_name.trim(),
                     industry: companyForm.industry.trim() || null,
                     phone: companyForm.phone.trim() || null,
-                    email: companyForm.email.trim() || null
+                    email: companyForm.email.trim() || null,
+                    website: normalizedWebsite
                 })
                 .select()
                 .single();
@@ -411,10 +458,10 @@ export default function CustomersPage() {
             }
             
             // Auto-select the new company
-            setCustomerForm(prev => ({ ...prev, company_id: data.id }));
+            setClientForm(prev => ({ ...prev, company_id: data.id }));
             
             // Reset company form and hide it
-            setCompanyForm({ company_name: '', industry: '', phone: '', email: '' });
+            setCompanyForm({ company_name: '', industry: '', phone: '', email: '', website: '' });
             setShowCompanyForm(false);
         } catch (err: any) {
             console.error('Error creating company:', err);
@@ -449,8 +496,8 @@ export default function CustomersPage() {
     const getStatusColor = (status: string) => {
         switch (status?.toLowerCase()) {
             case 'active': return 'bg-green-500 text-white';
-            case 'inactive': return 'bg-gray-500 text-white';
             case 'prospect': return 'bg-blue-500 text-white';
+            case 'inactive': return 'bg-gray-500 text-white';
             case 'lost': return 'bg-red-500 text-white';
             default: return 'bg-gray-500 text-white';
         }
@@ -496,7 +543,7 @@ export default function CustomersPage() {
                 client.email?.toLowerCase().includes(term) ||
                 client.phone?.includes(term) ||
                 client.company_name?.toLowerCase().includes(term) ||
-                client.site_address?.toLowerCase().includes(term)
+                client.address_line_1?.toLowerCase().includes(term)
             );
         }
 
@@ -562,7 +609,7 @@ export default function CustomersPage() {
                             Import
                         </button>
                         <button
-                            onClick={openDrawer}
+                            onClick={() => openDrawer()}
                             className="px-4 py-2 text-sm bg-[#0066CC] text-white rounded hover:bg-[#0052a3] transition-colors flex items-center gap-2"
                         >
                             <Plus className="w-4 h-4" />
@@ -587,9 +634,9 @@ export default function CustomersPage() {
                         All
                     </button>
                     <button
-                        onClick={() => setStatusFilter('Active')}
+                        onClick={() => setStatusFilter('active')}
                         className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
-                            statusFilter === 'Active'
+                            statusFilter === 'active'
                                 ? 'bg-[#0066CC] text-white'
                                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                         }`}
@@ -597,9 +644,9 @@ export default function CustomersPage() {
                         Active
                     </button>
                     <button
-                        onClick={() => setStatusFilter('Prospect')}
+                        onClick={() => setStatusFilter('prospect')}
                         className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
-                            statusFilter === 'Prospect'
+                            statusFilter === 'prospect'
                                 ? 'bg-[#0066CC] text-white'
                                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                         }`}
@@ -607,9 +654,9 @@ export default function CustomersPage() {
                         Prospect
                     </button>
                     <button
-                        onClick={() => setStatusFilter('Inactive')}
+                        onClick={() => setStatusFilter('inactive')}
                         className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
-                            statusFilter === 'Inactive'
+                            statusFilter === 'inactive'
                                 ? 'bg-[#0066CC] text-white'
                                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                         }`}
@@ -646,7 +693,7 @@ export default function CustomersPage() {
                                         <th className="text-center px-4 py-3 text-xs font-semibold">
                                             <input
                                                 type="checkbox"
-                                                checked={selectedIds.size === clients.length && clients.length > 0}
+                                                checked={selectedIds.size === filteredClients.length && filteredClients.length > 0}
                                                 onChange={toggleSelectAll}
                                                 className="rounded"
                                             />
@@ -668,9 +715,9 @@ export default function CustomersPage() {
                                         </th>
                                         <th
                                             className="text-left px-4 py-3 text-xs font-semibold whitespace-nowrap cursor-pointer hover:bg-[#0055aa]"
-                                            onClick={() => handleSort('site_address')}
+                                            onClick={() => handleSort('address_line_1')}
                                         >
-                                            Site Address <SortArrow field="site_address" />
+                                            Site Address <SortArrow field="address_line_1" />
                                         </th>
                                         <th className="text-left px-4 py-3 text-xs font-semibold whitespace-nowrap">
                                             Region
@@ -728,16 +775,18 @@ export default function CustomersPage() {
                                                     <div className="flex items-center justify-center gap-1">
                                                         <Link
                                                             href={`/clients/${client.id}`}
-                                                            className="px-2 py-1 text-xs bg-gray-200 hover:bg-gray-300 rounded"
+                                                            className="px-2 py-1 text-xs bg-gray-200 hover:bg-gray-300 rounded flex items-center gap-1"
                                                         >
+                                                            <Eye className="w-3 h-3" />
                                                             View
                                                         </Link>
-                                                        <Link
-                                                            href={`/clients/${client.id}/edit`}
-                                                            className="px-2 py-1 text-xs bg-gray-200 hover:bg-gray-300 rounded"
+                                                        <button
+                                                            onClick={() => openDrawer(client)}
+                                                            className="px-2 py-1 text-xs bg-gray-200 hover:bg-gray-300 rounded flex items-center gap-1"
                                                         >
+                                                            <Edit className="w-3 h-3" />
                                                             Edit
-                                                        </Link>
+                                                        </button>
                                                     </div>
                                                 </td>
                                                 <td className="px-4 py-3 text-sm">
@@ -760,8 +809,8 @@ export default function CustomersPage() {
                                                         <span className="text-gray-500">—</span>
                                                     )}
                                                 </td>
-                                                <td className="px-4 py-3 text-sm text-gray-700 max-w-[200px] truncate" title={client.site_address}>
-                                                    {client.site_address}
+                                                <td className="px-4 py-3 text-sm text-gray-700 max-w-[200px] truncate" title={client.address_line_1}>
+                                                    {client.address_line_1}
                                                 </td>
                                                 <td className="px-4 py-3 text-sm text-gray-700">
                                                     {client.region_name || '—'}
@@ -845,7 +894,7 @@ export default function CustomersPage() {
                 )}
             </div>
 
-            {/* ===== ADD CUSTOMER DRAWER ===== */}
+            {/* ===== EDIT/ADD CLIENT DRAWER ===== */}
             {drawerOpen && (
                 <div className="fixed inset-0 z-50">
                     {/* Backdrop */}
@@ -859,7 +908,9 @@ export default function CustomersPage() {
                         {/* Drawer Header */}
                         <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 z-10">
                             <div className="flex items-center justify-between">
-                                <h2 className="text-xl font-semibold text-[#0066CC]">Add New Contact</h2>
+                                <h2 className="text-xl font-semibold text-[#0066CC]">
+                                    {editingId ? 'Edit Contact' : 'Add New Contact'}
+                                </h2>
                                 <button
                                     onClick={closeDrawer}
                                     className="p-2 hover:bg-gray-100 rounded-lg"
@@ -870,7 +921,7 @@ export default function CustomersPage() {
                         </div>
 
                         {/* Drawer Content */}
-                        <form onSubmit={handleSubmitCustomer} className="p-6 space-y-6">
+                        <form onSubmit={handleSubmitClient} className="p-6 space-y-6">
                             
                             {/* Error */}
                             {formError && (
@@ -892,8 +943,8 @@ export default function CustomersPage() {
                                         <input
                                             type="text"
                                             name="first_name"
-                                            value={customerForm.first_name}
-                                            onChange={handleCustomerFormChange}
+                                            value={clientForm.first_name}
+                                            onChange={handleClientFormChange}
                                             placeholder="John"
                                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC] text-sm"
                                         />
@@ -906,8 +957,8 @@ export default function CustomersPage() {
                                         <input
                                             type="text"
                                             name="last_name"
-                                            value={customerForm.last_name}
-                                            onChange={handleCustomerFormChange}
+                                            value={clientForm.last_name}
+                                            onChange={handleClientFormChange}
                                             placeholder="Smith"
                                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC] text-sm"
                                         />
@@ -920,8 +971,8 @@ export default function CustomersPage() {
                                         <input
                                             type="email"
                                             name="email"
-                                            value={customerForm.email}
-                                            onChange={handleCustomerFormChange}
+                                            value={clientForm.email}
+                                            onChange={handleClientFormChange}
                                             placeholder="john.smith@example.com"
                                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC] text-sm"
                                         />
@@ -934,8 +985,8 @@ export default function CustomersPage() {
                                         <input
                                             type="tel"
                                             name="phone"
-                                            value={customerForm.phone}
-                                            onChange={handleCustomerFormChange}
+                                            value={clientForm.phone}
+                                            onChange={handleClientFormChange}
                                             placeholder="+64 21 123 4567"
                                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC] text-sm"
                                         />
@@ -953,8 +1004,8 @@ export default function CustomersPage() {
                                 </label>
                                 <select
                                     name="client_type_id"
-                                    value={customerForm.client_type_id}
-                                    onChange={handleCustomerFormChange}
+                                    value={clientForm.client_type_id}
+                                    onChange={handleClientFormChange}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC] text-sm"
                                 >
                                     <option value="">-- Select client type (optional) --</option>
@@ -981,8 +1032,8 @@ export default function CustomersPage() {
                                         <div className="flex gap-2">
                                             <select
                                                 name="company_id"
-                                                value={customerForm.company_id}
-                                                onChange={handleCustomerFormChange}
+                                                value={clientForm.company_id}
+                                                onChange={handleClientFormChange}
                                                 className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC] text-sm"
                                             >
                                                 <option value="">-- Select a company --</option>
@@ -1012,7 +1063,7 @@ export default function CustomersPage() {
                                                 onClick={() => {
                                                     setShowCompanyForm(false);
                                                     setCompanyError(null);
-                                                    setCompanyForm({ company_name: '', industry: '', phone: '', email: '' });
+                                                    setCompanyForm({ company_name: '', industry: '', phone: '', email: '', website: '' });
                                                 }}
                                                 className="text-sm text-blue-700 hover:text-blue-900 underline"
                                             >
@@ -1108,6 +1159,20 @@ export default function CustomersPage() {
                                                 />
                                             </div>
 
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                                    Website
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    name="website"
+                                                    value={companyForm.website || ''}
+                                                    onChange={handleCompanyFormChange}
+                                                    placeholder="www.example.com or https://example.com"
+                                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC] text-sm"
+                                                />
+                                            </div>
+
                                             <button
                                                 type="button"
                                                 onClick={handleSubmitCompany}
@@ -1134,8 +1199,8 @@ export default function CustomersPage() {
                                         <input
                                             type="text"
                                             name="address_line_1"
-                                            value={customerForm.address_line_1}
-                                            onChange={handleCustomerFormChange}
+                                            value={clientForm.address_line_1}
+                                            onChange={handleClientFormChange}
                                             placeholder="123 Main Street"
                                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC] text-sm"
                                         />
@@ -1148,8 +1213,8 @@ export default function CustomersPage() {
                                         <input
                                             type="text"
                                             name="address_line_2"
-                                            value={customerForm.address_line_2}
-                                            onChange={handleCustomerFormChange}
+                                            value={clientForm.address_line_2}
+                                            onChange={handleClientFormChange}
                                             placeholder="Apt, suite, unit (optional)"
                                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC] text-sm"
                                         />
@@ -1163,8 +1228,8 @@ export default function CustomersPage() {
                                             <input
                                                 type="text"
                                                 name="city"
-                                                value={customerForm.city}
-                                                onChange={handleCustomerFormChange}
+                                                value={clientForm.city}
+                                                onChange={handleClientFormChange}
                                                 placeholder="Auckland"
                                                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC] text-sm"
                                             />
@@ -1177,8 +1242,8 @@ export default function CustomersPage() {
                                             <input
                                                 type="text"
                                                 name="postcode"
-                                                value={customerForm.postcode}
-                                                onChange={handleCustomerFormChange}
+                                                value={clientForm.postcode}
+                                                onChange={handleClientFormChange}
                                                 placeholder="1010"
                                                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC] text-sm"
                                             />
@@ -1190,8 +1255,8 @@ export default function CustomersPage() {
                                             </label>
                                             <select
                                                 name="region_id"
-                                                value={customerForm.region_id}
-                                                onChange={handleCustomerFormChange}
+                                                value={clientForm.region_id}
+                                                onChange={handleClientFormChange}
                                                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC] text-sm"
                                             >
                                                 <option value="">-- Select --</option>
@@ -1217,8 +1282,8 @@ export default function CustomersPage() {
                                             type="radio"
                                             name="status"
                                             value="Active"
-                                            checked={customerForm.status === 'Active'}
-                                            onChange={handleCustomerFormChange}
+                                            checked={clientForm.status === 'Active'}
+                                            onChange={handleClientFormChange}
                                             className="w-4 h-4 text-[#0066CC]"
                                         />
                                         <span className="ml-2 text-sm text-gray-700">Active</span>
@@ -1227,23 +1292,23 @@ export default function CustomersPage() {
                                         <input
                                             type="radio"
                                             name="status"
-                                            value="Inactive"
-                                            checked={customerForm.status === 'Inactive'}
-                                            onChange={handleCustomerFormChange}
+                                            value="Prospect"
+                                            checked={clientForm.status === 'Prospect'}
+                                            onChange={handleClientFormChange}
                                             className="w-4 h-4 text-[#0066CC]"
                                         />
-                                        <span className="ml-2 text-sm text-gray-700">Inactive</span>
+                                        <span className="ml-2 text-sm text-gray-700">Prospect</span>
                                     </label>
                                     <label className="flex items-center cursor-pointer">
                                         <input
                                             type="radio"
                                             name="status"
-                                            value="Prospect"
-                                            checked={customerForm.status === 'Prospect'}
-                                            onChange={handleCustomerFormChange}
+                                            value="Inactive"
+                                            checked={clientForm.status === 'Inactive'}
+                                            onChange={handleClientFormChange}
                                             className="w-4 h-4 text-[#0066CC]"
                                         />
-                                        <span className="ml-2 text-sm text-gray-700">Prospect</span>
+                                        <span className="ml-2 text-sm text-gray-700">Inactive</span>
                                     </label>
                                 </div>
                             </div>
@@ -1262,7 +1327,7 @@ export default function CustomersPage() {
                                     disabled={saving}
                                     className="px-6 py-2 bg-[#0066CC] hover:bg-[#0052a3] text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium text-sm"
                                 >
-                                    {saving ? 'Saving...' : 'Save Contact'}
+                                    {saving ? 'Saving...' : editingId ? 'Update Contact' : 'Save Contact'}
                                 </button>
                             </div>
                         </form>

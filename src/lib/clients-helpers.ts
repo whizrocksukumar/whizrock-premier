@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import { fetchClientInvoiceSummary } from '@/lib/invoices-helpers'
 
 export interface Client {
   id: string
@@ -61,6 +62,8 @@ export interface ActivitySummary {
   jobs_in_progress: number
   invoices_total: number
   invoices_unpaid_amount: number
+  invoices_overdue_amount: number
+  invoices_revenue_total: number
   total_revenue: number
 }
 
@@ -247,6 +250,7 @@ export async function fetchClientActivitySummary(
   clientId: string
 ): Promise<ActivitySummary> {
   try {
+    // Fetch quotes data
     const { count: quotesTotal } = await supabase
       .from('quotes')
       .select('id', { count: 'exact' })
@@ -258,6 +262,7 @@ export async function fetchClientActivitySummary(
       .eq('client_id', clientId)
       .eq('status', 'Accepted')
 
+    // Fetch assessments data
     const { count: assessmentsTotal } = await supabase
       .from('assessments')
       .select('id', { count: 'exact' })
@@ -269,6 +274,7 @@ export async function fetchClientActivitySummary(
       .eq('client_id', clientId)
       .eq('status', 'Completed')
 
+    // Fetch jobs data
     const { data: jobsData } = await supabase
       .from('jobs')
       .select('id, status')
@@ -285,27 +291,11 @@ export async function fetchClientActivitySummary(
     const jobsTotal = jobsData?.length || 0
     const jobsInProgress = jobsData?.filter((j) => j.status === 'In Progress').length || 0
 
-    const { count: invoicesTotal } = await supabase
-      .from('invoices')
-      .select('id', { count: 'exact' })
-      .eq('client_id', clientId)
+    // Fetch invoice summary using new helper function
+    const invoiceSummary = await fetchClientInvoiceSummary(clientId)
 
-    const { data: unpaidInvoices } = await supabase
-      .from('invoices')
-      .select('total_inc_gst')
-      .eq('client_id', clientId)
-      .in('status', ['Draft', 'Sent', 'Overdue'])
-
-    const invoicesUnpaidAmount =
-      unpaidInvoices?.reduce((sum, inv) => sum + (inv.total_inc_gst || 0), 0) || 0
-
-    const { data: allInvoices } = await supabase
-      .from('invoices')
-      .select('total_inc_gst')
-      .eq('client_id', clientId)
-      .eq('status', 'Paid')
-
-    const totalRevenue = allInvoices?.reduce((sum, inv) => sum + (inv.total_inc_gst || 0), 0) || 0
+    // Calculate total revenue (sum of paid invoices)
+    const totalRevenue = invoiceSummary.invoices_revenue_total
 
     return {
       quotes_total: quotesTotal || 0,
@@ -314,8 +304,10 @@ export async function fetchClientActivitySummary(
       assessments_completed: assessmentsCompleted || 0,
       jobs_total: jobsTotal,
       jobs_in_progress: jobsInProgress,
-      invoices_total: invoicesTotal || 0,
-      invoices_unpaid_amount: invoicesUnpaidAmount,
+      invoices_total: invoiceSummary.invoices_total,
+      invoices_unpaid_amount: invoiceSummary.invoices_unpaid_amount,
+      invoices_overdue_amount: invoiceSummary.invoices_overdue_amount,
+      invoices_revenue_total: invoiceSummary.invoices_revenue_total,
       total_revenue: totalRevenue,
     }
   } catch (error) {
@@ -329,6 +321,8 @@ export async function fetchClientActivitySummary(
       jobs_in_progress: 0,
       invoices_total: 0,
       invoices_unpaid_amount: 0,
+      invoices_overdue_amount: 0,
+      invoices_revenue_total: 0,
       total_revenue: 0,
     }
   }

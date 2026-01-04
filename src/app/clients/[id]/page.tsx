@@ -4,6 +4,9 @@ import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 
+// If your project uses the '@' alias for 'src', try this import:
+// import ClientOverviewCard from '@/components/client/ClientOverviewCard';
+import ClientOverviewCard from '@/components/client/ClientOverviewCard'
 import { fetchClientWithRelations, fetchClientActivitySummary, ClientWithRelations, ActivitySummary } from '@/lib/clients-helpers'
 import { fetchOpportunitiesByClient } from '@/lib/opportunities-helpers'
 import { fetchQuotesByClient } from '@/lib/quotes-helpers'
@@ -11,7 +14,6 @@ import { fetchJobsByClient } from '@/lib/jobs-helpers'
 import { fetchInvoicesByClient } from '@/lib/invoices-helpers'
 import { fetchAssessmentsByClient } from '@/lib/assessments-queries'
 import { fetchCertificatesByClient } from '@/lib/certificates-queries'
-
 import StatusBadge from '@/components/StatusBadge'
 
 type TabType = 'opportunities' | 'quotes' | 'jobs' | 'assessments' | 'invoices' | 'certificates' | 'notes'
@@ -178,72 +180,7 @@ export default function ClientDetailPage() {
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
               <div className="lg:col-span-2">
-                <h3 className="text-lg font-bold text-gray-900 mb-4">Overview</h3>
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-8">
-                    {client.client_type && (
-                      <div>
-                        <p className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Client Type</p>
-                        <p className="text-gray-900 font-medium mt-1">{client.client_type.name}</p>
-                      </div>
-                    )}
-                    {client.industry && (
-                      <div>
-                        <p className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Industry</p>
-                        <p className="text-gray-900 font-medium mt-1">{client.industry}</p>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-8">
-                    {client.address_line_1 && (
-                      <div>
-                        <p className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Address</p>
-                        <p className="text-gray-900 font-medium mt-1">{client.address_line_1}</p>
-                      </div>
-                    )}
-                    {client.region && (
-                      <div>
-                        <p className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Region</p>
-                        <p className="text-gray-900 font-medium mt-1">{client.region.name}</p>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-8">
-                    {client.website && (
-                      <div>
-                        <p className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Website</p>
-                        <a href={`https://${client.website}`} target="_blank" rel="noopener noreferrer" className="text-[#0066CC] hover:underline font-medium mt-1">
-                          {client.website}
-                        </a>
-                      </div>
-                    )}
-                    {client.created_at && (
-                      <div>
-                        <p className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Date Added</p>
-                        <p className="text-gray-900 font-medium mt-1">{new Date(client.created_at).toLocaleDateString('en-NZ', { day: '2-digit', month: 'short', year: '2-digit' })}</p>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-8">
-                    {client.sales_rep && (
-                      <div>
-                        <p className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Sales Rep</p>
-                        <p className="text-gray-900 font-medium mt-1">
-                          {client.sales_rep.first_name} {client.sales_rep.last_name}
-                        </p>
-                      </div>
-                    )}
-                    {client.updated_at && (
-                      <div>
-                        <p className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Last Updated</p>
-                        <p className="text-gray-900 font-medium mt-1">{new Date(client.updated_at).toLocaleDateString('en-NZ', { day: '2-digit', month: 'short', year: '2-digit' })}</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
+                <ClientOverviewCard client={client} />
               </div>
 
               {activitySummary && (

@@ -1,3 +1,33 @@
+export const RESULT_TYPE_CONFIG = {
+  Pass: {
+    label: 'Pass',
+    color: 'bg-green-100 text-green-800',
+    badgeColor: 'bg-green-500',
+    borderColor: 'border-green-500',
+    icon: '✓'
+  },
+  Fail: {
+    label: 'Fail',
+    color: 'bg-red-100 text-red-800',
+    badgeColor: 'bg-red-500',
+    borderColor: 'border-red-500',
+    icon: '✗'
+  },
+  Exempt: {
+    label: 'Exempt',
+    color: 'bg-purple-100 text-purple-800',
+    badgeColor: 'bg-purple-500',
+    borderColor: 'border-purple-500',
+    icon: '○'
+  },
+  Pending: {
+    label: 'Pending',
+    color: 'bg-gray-100 text-gray-800',
+    badgeColor: 'bg-gray-500',
+    borderColor: 'border-gray-500',
+    icon: '◌'
+  }
+} as const
 // ============================================================================
 // ASSESSMENT HELPERS - Database queries and operations
 // Location: src/lib/assessment-helpers.ts
@@ -12,58 +42,49 @@ import { supabase } from '@/lib/supabase'
 export interface AssessmentArea {
   id: string
   assessment_id: string
-  area_name: string
+  app_type_id: string
   square_metres: number
   existing_insulation_type?: string
-  recommended_r_value?: string
-  removal_required?: boolean
   notes?: string
-  result_type?: string
-  sort_order?: number
+  result_type?: 'Pass' | 'Fail' | 'Exempt' | 'Conditional' | 'Pending'
+  wording_id?: string
   created_at?: string
   updated_at?: string
-}
-
-export interface AssessmentInstaller {
-  id: string
-  assessment_id: string
-  installer_id: string
-  role: 'Lead' | 'Support' | 'Apprentice'
-  sequence: number
-  created_at?: string
 }
 
 export interface AssessmentPhoto {
   id: string
   assessment_id: string
-  area_id?: string
-  photo_url: string
-  photo_key: string
-  photo_type?: string
-  description?: string
-  uploaded_by?: string
-  uploaded_at?: string
+  assessment_area_id?: string
+  file_name: string
+  file_path: string
+  file_url: string
+  file_size: number
+  photo_type?: 'Before' | 'After' | 'General'
+  created_at?: string
+  updated_at?: string
+}
+
+export interface AssessmentWording {
+  id: string
+  wording_text: string
+  is_active: boolean
+  created_at?: string
+  updated_at?: string
 }
 
 export interface Assessment {
   id: string
   assessment_number: string
   reference_number?: string
+  site_id: string
   client_id: string
   opportunity_id?: string
   enquiry_id?: string
-  customer_name: string
-  customer_email?: string
-  customer_phone?: string
-  customer_company?: string
-  site_address: string
-  city?: string
-  region_id?: string
-  postcode?: string
-  scheduled_date: string // DATE
-  scheduled_time: string // TIME
   assigned_installer_id?: string
-  assessment_type?: string
+  scheduled_date: string
+  scheduled_time: string
+  status: 'Draft' | 'Scheduled' | 'In Progress' | 'Completed' | 'Cancelled'
   time_estimate_hours?: number
   property_type?: string
   year_built?: number
@@ -72,11 +93,8 @@ export interface Assessment {
   crawl_space_height_cm?: number
   existing_insulation_type?: string
   removal_required?: boolean
-  hazards_present?: string // JSON or comma-separated
-  opportunity_source?: string
-  status: 'Scheduled' | 'Completed' | 'Cancelled'
+  hazards_present?: string
   notes?: string
-  created_by_premier_user_id?: string
   created_by_user_id?: string
   created_at: string
   completed_at?: string
@@ -86,14 +104,25 @@ export interface Assessment {
 
 export interface AssessmentWithRelations extends Assessment {
   areas?: AssessmentArea[]
-  installers?: AssessmentInstaller[]
   photos?: AssessmentPhoto[]
+  site?: {
+    id: string
+    site_name: string
+    address_line_1: string
+    address_line_2?: string
+    city: string
+    region_id?: string
+    postcode: string
+    company_id?: string
+    client_id?: string
+  }
   client?: {
     id: string
     first_name: string
     last_name: string
     email: string
     phone?: string
+    company_id?: string
   }
   opportunity?: {
     id: string
@@ -101,7 +130,7 @@ export interface AssessmentWithRelations extends Assessment {
     stage: string
     sub_status?: string
   }
-  primary_installer?: {
+  assigned_installer?: {
     id: string
     first_name: string
     last_name: string
@@ -135,7 +164,6 @@ export async function generateAssessmentNumber(): Promise<string> {
       .limit(1)
 
     if (error && error.code !== 'PGRST116') {
-      // PGRST116 is "no rows" which is fine
       throw error
     }
 
@@ -163,20 +191,13 @@ export async function generateAssessmentNumber(): Promise<string> {
  * Create a new assessment with all related data
  */
 export async function createAssessment(data: {
+  site_id: string
   client_id: string
   opportunity_id?: string
-  customer_name: string
-  customer_email?: string
-  customer_phone?: string
-  customer_company?: string
-  site_address: string
-  city?: string
-  region_id?: string
-  postcode?: string
+  assigned_installer_id?: string
   scheduled_date: string
   scheduled_time: string
-  assessment_type: string
-  time_estimate_hours: number
+  time_estimate_hours?: number
   property_type?: string
   year_built?: number
   estimated_size_sqm?: number
@@ -185,7 +206,6 @@ export async function createAssessment(data: {
   existing_insulation_type?: string
   removal_required?: boolean
   hazards_present?: string
-  opportunity_source?: string
   notes?: string
   created_by_user_id: string
 }): Promise<Assessment> {
@@ -220,17 +240,20 @@ export async function createAssessment(data: {
 export async function createAssessmentAreas(
   assessmentId: string,
   areas: Array<{
-    area_name: string
+    app_type_id: string
     square_metres: number
     existing_insulation_type?: string
     notes?: string
+    result_type?: 'Pass' | 'Fail' | 'Exempt' | 'Conditional' | 'Pending'
+    wording_id?: string
   }>
 ): Promise<AssessmentArea[]> {
   try {
     const areasWithMetadata = areas.map((area, index) => ({
       ...area,
       assessment_id: assessmentId,
-      sort_order: index,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     }))
 
     const { data, error } = await supabase
@@ -249,33 +272,38 @@ export async function createAssessmentAreas(
 }
 
 /**
- * Assign installers to assessment
+ * Create assessment photos (multiple)
  */
-export async function assignInstallersToAssessment(
+export async function createAssessmentPhotos(
   assessmentId: string,
-  installers: Array<{
-    installer_id: string
-    role: 'Lead' | 'Support' | 'Apprentice'
+  photos: Array<{
+    file_name: string
+    file_path: string
+    file_url: string
+    file_size: number
+    assessment_area_id?: string
+    photo_type?: 'Before' | 'After' | 'General'
   }>
-): Promise<AssessmentInstaller[]> {
+): Promise<AssessmentPhoto[]> {
   try {
-    const installersWithMetadata = installers.map((installer, index) => ({
-      ...installer,
+    const photosWithMetadata = photos.map(photo => ({
+      ...photo,
       assessment_id: assessmentId,
-      sequence: index,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     }))
 
     const { data, error } = await supabase
-      .from('assessment_installers')
-      .insert(installersWithMetadata)
+      .from('assessment_photos')
+      .insert(photosWithMetadata)
       .select()
 
     if (error) throw error
-    if (!data) throw new Error('Installer assignment failed')
+    if (!data) throw new Error('Photo creation failed')
 
-    return data as AssessmentInstaller[]
+    return data as AssessmentPhoto[]
   } catch (error) {
-    console.error('Error assigning installers:', error)
+    console.error('Error creating assessment photos:', error)
     throw error
   }
 }
@@ -306,14 +334,7 @@ export async function fetchAssessmentWithRelations(
       .from('assessment_areas')
       .select('*')
       .eq('assessment_id', assessmentId)
-      .order('sort_order')
-
-    // Fetch installers
-    const { data: installers } = await supabase
-      .from('assessment_installers')
-      .select('*')
-      .eq('assessment_id', assessmentId)
-      .order('sequence')
+      .order('created_at')
 
     // Fetch photos
     const { data: photos } = await supabase
@@ -321,12 +342,23 @@ export async function fetchAssessmentWithRelations(
       .select('*')
       .eq('assessment_id', assessmentId)
 
-    // Fetch client details if client_id exists
+    // Fetch site details
+    let site = null
+    if (assessment.site_id) {
+      const { data: siteData } = await supabase
+        .from('sites')
+        .select('*')
+        .eq('id', assessment.site_id)
+        .single()
+      site = siteData
+    }
+
+    // Fetch client details
     let client = null
     if (assessment.client_id) {
       const { data: clientData } = await supabase
         .from('clients')
-        .select('id, first_name, last_name, email, phone')
+        .select('id, first_name, last_name, email, phone, company_id')
         .eq('id', assessment.client_id)
         .single()
       client = clientData
@@ -343,25 +375,25 @@ export async function fetchAssessmentWithRelations(
       opportunity = oppData
     }
 
-    // Fetch primary installer details
-    let primary_installer = null
+    // Fetch assigned installer details
+    let assigned_installer = null
     if (assessment.assigned_installer_id) {
       const { data: installerData } = await supabase
         .from('team_members')
         .select('id, first_name, last_name, email, phone')
         .eq('id', assessment.assigned_installer_id)
         .single()
-      primary_installer = installerData
+      assigned_installer = installerData
     }
 
     return {
       ...assessment,
       areas: areas || [],
-      installers: installers || [],
       photos: photos || [],
+      site: site || undefined,
       client: client || undefined,
       opportunity: opportunity || undefined,
-      primary_installer: primary_installer || undefined,
+      assigned_installer: assigned_installer || undefined,
     } as AssessmentWithRelations
   } catch (error) {
     console.error('Error fetching assessment with relations:', error)
@@ -447,33 +479,12 @@ export async function fetchAssessmentAreas(
       .from('assessment_areas')
       .select('*')
       .eq('assessment_id', assessmentId)
-      .order('sort_order')
+      .order('created_at')
 
     if (error) throw error
     return (data || []) as AssessmentArea[]
   } catch (error) {
     console.error('Error fetching assessment areas:', error)
-    throw error
-  }
-}
-
-/**
- * Fetch installers assigned to assessment
- */
-export async function fetchAssessmentInstallers(
-  assessmentId: string
-): Promise<AssessmentInstaller[]> {
-  try {
-    const { data, error } = await supabase
-      .from('assessment_installers')
-      .select('*')
-      .eq('assessment_id', assessmentId)
-      .order('sequence')
-
-    if (error) throw error
-    return (data || []) as AssessmentInstaller[]
-  } catch (error) {
-    console.error('Error fetching assessment installers:', error)
     throw error
   }
 }
@@ -489,11 +500,52 @@ export async function fetchAssessmentPhotos(
       .from('assessment_photos')
       .select('*')
       .eq('assessment_id', assessmentId)
+      .order('created_at')
 
     if (error) throw error
     return (data || []) as AssessmentPhoto[]
   } catch (error) {
     console.error('Error fetching assessment photos:', error)
+    throw error
+  }
+}
+
+/**
+ * Fetch assessment wordings (dropdown options)
+ */
+export async function fetchAssessmentWordings(): Promise<AssessmentWording[]> {
+  try {
+    const { data, error } = await supabase
+      .from('assessment_wordings')
+      .select('*')
+      .eq('is_active', true)
+      .order('wording_text')
+
+    if (error) throw error
+    return (data || []) as AssessmentWording[]
+  } catch (error) {
+    console.error('Error fetching assessment wordings:', error)
+    throw error
+  }
+}
+
+/**
+ * Fetch assessments by client
+ */
+export async function fetchAssessmentsByClient(
+  clientId: string
+): Promise<Assessment[]> {
+  try {
+    const { data, error } = await supabase
+      .from('assessments')
+      .select('*')
+      .eq('client_id', clientId)
+      .order('scheduled_date', { ascending: false })
+
+    if (error) throw error
+    return (data || []) as Assessment[]
+  } catch (error) {
+    console.error('Error fetching assessments by client:', error)
     throw error
   }
 }
@@ -507,7 +559,7 @@ export async function fetchAssessmentPhotos(
  */
 export async function updateAssessmentStatus(
   assessmentId: string,
-  status: 'Scheduled' | 'Completed' | 'Cancelled',
+  status: 'Draft' | 'Scheduled' | 'In Progress' | 'Completed' | 'Cancelled',
   completedByUserId?: string
 ): Promise<Assessment> {
   try {
@@ -576,7 +628,10 @@ export async function updateAssessmentArea(
   try {
     const { data, error } = await supabase
       .from('assessment_areas')
-      .update(updates)
+      .update({
+        ...updates,
+        updated_at: new Date().toISOString(),
+      })
       .eq('id', areaId)
       .select()
       .single()
@@ -587,33 +642,6 @@ export async function updateAssessmentArea(
     return data as AssessmentArea
   } catch (error) {
     console.error('Error updating assessment area:', error)
-    throw error
-  }
-}
-
-/**
- * Reassign installers to assessment
- */
-export async function reassignInstallersToAssessment(
-  assessmentId: string,
-  installers: Array<{
-    installer_id: string
-    role: 'Lead' | 'Support' | 'Apprentice'
-  }>
-): Promise<AssessmentInstaller[]> {
-  try {
-    // Delete existing assignments
-    const { error: deleteError } = await supabase
-      .from('assessment_installers')
-      .delete()
-      .eq('assessment_id', assessmentId)
-
-    if (deleteError) throw deleteError
-
-    // Create new assignments
-    return assignInstallersToAssessment(assessmentId, installers)
-  } catch (error) {
-    console.error('Error reassigning installers:', error)
     throw error
   }
 }
@@ -635,6 +663,23 @@ export async function deleteAssessmentArea(areaId: string): Promise<void> {
     if (error) throw error
   } catch (error) {
     console.error('Error deleting assessment area:', error)
+    throw error
+  }
+}
+
+/**
+ * Delete assessment photo
+ */
+export async function deleteAssessmentPhoto(photoId: string): Promise<void> {
+  try {
+    const { error } = await supabase
+      .from('assessment_photos')
+      .delete()
+      .eq('id', photoId)
+
+    if (error) throw error
+  } catch (error) {
+    console.error('Error deleting assessment photo:', error)
     throw error
   }
 }
@@ -664,7 +709,6 @@ export async function deleteAssessment(assessmentId: string): Promise<void> {
  * Complete assessment and trigger workflow
  * - Update assessment status to Completed
  * - Update opportunity stage to QUALIFIED (if linked)
- * - Create task for sales rep (if opportunity has sales_rep_id)
  */
 export async function completeAssessment(
   assessmentId: string,
@@ -672,7 +716,6 @@ export async function completeAssessment(
 ): Promise<{
   assessment: Assessment
   opportunityUpdated: boolean
-  taskCreated: boolean
 }> {
   try {
     // Update assessment status
@@ -683,7 +726,6 @@ export async function completeAssessment(
     )
 
     let opportunityUpdated = false
-    let taskCreated = false
 
     // If linked to opportunity, update it
     if (assessment.opportunity_id) {
@@ -696,70 +738,16 @@ export async function completeAssessment(
         })
         .eq('id', assessment.opportunity_id)
 
-      if (!oppError) {
-        opportunityUpdated = true
-
-        // Get opportunity to find sales rep
-        const { data: opportunity } = await supabase
-          .from('opportunities')
-          .select('sales_rep_id')
-          .eq('id', assessment.opportunity_id)
-          .single()
-
-        // Create task for sales rep if one exists
-        if (opportunity?.sales_rep_id) {
-          const taskResult = await createTaskForAssessmentReview(
-            assessmentId,
-            assessment.opportunity_id,
-            opportunity.sales_rep_id,
-            completedByUserId
-          )
-          taskCreated = taskResult.success
-        }
-      }
+      opportunityUpdated = !oppError
     }
 
     return {
       assessment,
       opportunityUpdated,
-      taskCreated,
     }
   } catch (error) {
     console.error('Error completing assessment:', error)
     throw error
-  }
-}
-
-/**
- * Create task for sales rep to review assessment
- */
-async function createTaskForAssessmentReview(
-  assessmentId: string,
-  opportunityId: string,
-  assignedToUserId: string,
-  createdByUserId: string
-): Promise<{ success: boolean }> {
-  try {
-    const assessment = await fetchAssessmentByNumber(assessmentId)
-    const assessment_number = assessment?.assessment_number || assessmentId
-
-    const { error } = await supabase.from('tasks').insert({
-      opportunity_id: opportunityId,
-      task_type: 'Review Assessment & Create Recommendation',
-      task_description: `Assessment ${assessment_number} completed for client. Review findings and create product recommendation.`,
-      assigned_to_user_id: assignedToUserId,
-      created_by_user_id: createdByUserId,
-      status: 'Not Started',
-      priority: 'High',
-      due_date: new Date(Date.now() + 24 * 60 * 60 * 1000)
-        .toISOString()
-        .split('T')[0], // Tomorrow
-    })
-
-    return { success: !error }
-  } catch (error) {
-    console.error('Error creating assessment review task:', error)
-    return { success: false }
   }
 }
 
