@@ -36,6 +36,7 @@ export default function Sidebar() {
           width={180}
           height={50}
           className="object-contain"
+          priority
         />
       </div>
 
@@ -51,7 +52,7 @@ export default function Sidebar() {
               href={item.href}
               className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${isActive
                   ? 'bg-blue-600 text-white shadow-md'
-                  : 'text-gray-700 hover:bg-blue-100 hover:text-blue-700'
+                  : 'text-gray-700 border border-transparent hover:border-blue-600 hover:bg-white hover:text-gray-900'
                 }`}
             >
               <Icon className="w-5 h-5 flex-shrink-0" />

@@ -4,6 +4,8 @@ import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { Search, Plus, Trash2, X } from 'lucide-react';
+import ClientSelector from '@/components/ClientSelector';
+import SiteSelector from '@/components/SiteSelector';
 
 // Types
 interface Client {
@@ -94,16 +96,6 @@ export default function AddQuotePage() {
 
     // Client selection
     const [clientId, setClientId] = useState('');
-    const [clientSearch, setClientSearch] = useState('');
-    const [showClientSuggestions, setShowClientSuggestions] = useState(false);
-    const [showAddClientForm, setShowAddClientForm] = useState(false);
-
-    // New client form
-    const [newClientFirstName, setNewClientFirstName] = useState('');
-    const [newClientLastName, setNewClientLastName] = useState('');
-    const [newClientEmail, setNewClientEmail] = useState('');
-    const [newClientPhone, setNewClientPhone] = useState('');
-    const [newClientCompany, setNewClientCompany] = useState('');
 
     // Form state
     const [siteAddress, setSiteAddress] = useState('');
@@ -126,7 +118,6 @@ export default function AddQuotePage() {
     const [nextLineItemId, setNextLineItemId] = useState(1);
 
     // Lookups
-    const [clients, setClients] = useState<Client[]>([]);
     const [products, setProducts] = useState<Product[]>([]);
     const [appTypes, setAppTypes] = useState<ApplicationType[]>([]);
     const [regions, setRegions] = useState<Region[]>([]);
@@ -139,9 +130,6 @@ export default function AddQuotePage() {
     const [productSearch, setProductSearch] = useState<{ [key: string]: string }>({});
     const [showProductSuggestions, setShowProductSuggestions] = useState<{ [key: string]: boolean }>({});
 
-    // Refs for click-outside handling
-    const clientDropdownRef = useRef<HTMLDivElement>(null);
-
     useEffect(() => {
         if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
             setError('Supabase environment variables are missing. Please check your configuration.');
@@ -150,35 +138,18 @@ export default function AddQuotePage() {
         addInitialSection();
     }, []);
 
-    // Handle click outside to close client dropdown
-    useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            if (clientDropdownRef.current && !clientDropdownRef.current.contains(event.target as Node)) {
-                setShowClientSuggestions(false);
-            }
-        };
-
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, []);
-
     const loadLookupData = async () => {
         try {
             setLoading(true);
 
             // Load all lookup data - removed boolean filters that cause 400 errors
-            const [clientsRes, productsRes, appTypesRes, regionsRes, salesRepsRes] = await Promise.all([
-                supabase.from('clients').select('id, first_name, last_name, email, phone, company_id, companies(company_name, site_address)'),
+            const [productsRes, appTypesRes, regionsRes, salesRepsRes] = await Promise.all([
                 supabase.from('products').select('*'),
                 supabase.from('app_types').select('*').order('sort_order'),
                 supabase.from('regions').select('*').order('name'),
                 supabase.from('sales_reps').select('*').order('name'),
             ]);
 
-            if (clientsRes.data) {
-                setClients(clientsRes.data as any);
-                console.log('Clients loaded:', clientsRes.data.length);
-            }
             if (productsRes.data) {
                 // Filter products client-side
                 const activeProducts = productsRes.data.filter((p: any) => p.is_active !== false && p.is_labour !== true);
@@ -211,81 +182,6 @@ export default function AddQuotePage() {
             line_items: []
         }]);
         setNextSectionId(2);
-    };
-
-    // Client fuzzy search
-    const filterClients = (searchTerm: string) => {
-        if (!searchTerm) return clients;
-        const term = searchTerm.toLowerCase();
-        return clients.filter(c => {
-            // Prefer company name if it exists, otherwise use full name
-            const companyName = c.companies?.company_name?.toLowerCase() || '';
-            const fullName = `${c.first_name || ''} ${c.last_name || ''}`.toLowerCase();
-            return (
-                (companyName && companyName.includes(term)) ||
-                fullName.includes(term) ||
-                (c.email?.toLowerCase().includes(term)) ||
-                (c.phone?.includes(term))
-            );
-        });
-    };
-
-    const selectClient = (client: Client) => {
-        setClientId(client.id);
-        setClientSearch(`${client.first_name} ${client.last_name}${client.companies?.company_name ? ` - ${client.companies.company_name}` : ''}`);
-        setShowClientSuggestions(false);
-        // Auto-populate site address if available
-        if (client.companies?.site_address) {
-            setSiteAddress(client.companies.site_address);
-        }
-    };
-
-    const handleAddNewClient = async () => {
-        if (!newClientFirstName || !newClientLastName) {
-            alert('Please enter at least first and last name');
-            return;
-        }
-
-        try {
-            setSaving(true);
-            const { data, error } = await supabase
-                .from('clients')
-                .insert({
-                    first_name: newClientFirstName,
-                    last_name: newClientLastName,
-                    email: newClientEmail || null,
-                    phone: newClientPhone || null,
-                })
-                .select()
-                .single();
-
-            if (error) throw error;
-
-            if (data) {
-                // Reload clients
-                const { data: updatedClients } = await supabase
-                    .from('clients')
-                    .select('id, first_name, last_name, email, phone, company_id, companies(company_name, site_address)');
-                
-                if (updatedClients) setClients(updatedClients as any);
-                
-                // Select the new client
-                selectClient(data as Client);
-                
-                // Reset form
-                setNewClientFirstName('');
-                setNewClientLastName('');
-                setNewClientEmail('');
-                setNewClientPhone('');
-                setNewClientCompany('');
-                setShowAddClientForm(false);
-            }
-        } catch (error: any) {
-            console.error('Error adding client:', error);
-            alert(`Error adding client: ${error.message}`);
-        } finally {
-            setSaving(false);
-        }
     };
 
     const addSection = () => {
@@ -837,140 +733,54 @@ export default function AddQuotePage() {
 
                 {/* Client Details Card */}
                 <div className="bg-white rounded-lg shadow mb-6">
-                    <div className="border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+                    <div className="border-b border-gray-200 px-6 py-4">
                         <h2 className="text-lg font-semibold text-gray-800">Client Information</h2>
-                        {!showAddClientForm && (
-                            <button
-                                onClick={() => setShowAddClientForm(true)}
-                                className="px-3 py-1.5 text-sm bg-[#0066CC] text-white rounded hover:bg-[#0052a3] transition-colors"
-                            >
-                                + Add New Client
-                            </button>
-                        )}
                     </div>
                     <div className="p-6">
-                        {showAddClientForm ? (
-                            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-                                <div className="flex items-center justify-between mb-4">
-                                    <h3 className="font-semibold text-gray-800">New Client</h3>
-                                    <button
-                                        onClick={() => setShowAddClientForm(false)}
-                                        className="text-gray-500 hover:text-gray-700"
-                                    >
-                                        <X className="w-5 h-5" />
-                                    </button>
-                                </div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">First Name *</label>
-                                        <input
-                                            type="text"
-                                            value={newClientFirstName}
-                                            onChange={(e) => setNewClientFirstName(e.target.value)}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded text-sm"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">Last Name *</label>
-                                        <input
-                                            type="text"
-                                            value={newClientLastName}
-                                            onChange={(e) => setNewClientLastName(e.target.value)}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded text-sm"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                                        <input
-                                            type="email"
-                                            value={newClientEmail}
-                                            onChange={(e) => setNewClientEmail(e.target.value)}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded text-sm"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
-                                        <input
-                                            type="tel"
-                                            value={newClientPhone}
-                                            onChange={(e) => setNewClientPhone(e.target.value)}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded text-sm"
-                                        />
-                                    </div>
-                                </div>
-                                <div className="flex justify-end gap-2 mt-4">
-                                    <button
-                                        onClick={() => setShowAddClientForm(false)}
-                                        className="px-4 py-2 text-sm border border-gray-300 rounded hover:bg-gray-50"
-                                    >
-                                        Cancel
-                                    </button>
-                                    <button
-                                        onClick={handleAddNewClient}
-                                        disabled={saving}
-                                        className="px-4 py-2 text-sm bg-[#0066CC] text-white rounded hover:bg-[#0052a3] disabled:opacity-50"
-                                    >
-                                        {saving ? 'Adding...' : 'Add Client'}
-                                    </button>
-                                </div>
-                            </div>
-                        ) : (
-                            <div className="relative mb-4" ref={clientDropdownRef}>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Search Client *</label>
-                                <div className="relative">
-                                    <input
-                                        type="text"
-                                        value={clientSearch}
-                                        onChange={(e) => {
-                                            setClientSearch(e.target.value);
-                                            setShowClientSuggestions(true);
-                                            console.log('Search changed:', e.target.value, 'Show dropdown:', true);
-                                        }}
-                                        onFocus={() => {
-                                            setShowClientSuggestions(true);
-                                            console.log('Input focused, clients count:', clients.length, 'Show dropdown:', true);
-                                        }}
-                                        placeholder="Type to search by name, email, phone, or company..."
-                                        className="w-full px-3 py-2 pr-10 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
-                                    />
-                                    <Search className="absolute right-3 top-2.5 w-5 h-5 text-gray-400" />
-                                </div>
-                                {showClientSuggestions && clients.length > 0 && (
-                                    <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                                        {filterClients(clientSearch).map(c => (
-                                            <button
-                                                key={c.id}
-                                                onClick={() => selectClient(c)}
-                                                className="w-full text-left px-4 py-3 hover:bg-blue-50 border-b border-gray-100 last:border-b-0 transition-colors"
-                                            >
-                                                <p className="font-medium text-gray-900">{c.first_name} {c.last_name}</p>
-                                                <p className="text-sm text-gray-600">{c.email}</p>
-                                                {c.companies?.company_name && (
-                                                    <p className="text-xs text-gray-500">{c.companies.company_name}</p>
-                                                )}
-                                            </button>
-                                        ))}
-                                        {filterClients(clientSearch).length === 0 && (
-                                            <div className="px-4 py-3 text-sm text-gray-500 text-center">
-                                                No clients found. <button onClick={() => setShowAddClientForm(true)} className="text-[#0066CC] hover:underline">Add new client</button>
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-                            </div>
-                        )}
+                        <div className="mb-6">
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Select Client *</label>
+                            <ClientSelector
+                                onClientSelected={(client) => {
+                                    if (client) {
+                                        setClientId(client.id);
+                                        // Auto-populate fields from client data
+                                        if (client.address_line_1) setSiteAddress(client.address_line_1);
+                                        if (client.city) setCity(client.city);
+                                        if (client.postcode) setPostcode(client.postcode);
+                                        if (client.region_id) setRegionId(client.region_id);
+                                    } else {
+                                        setClientId('');
+                                        setSiteAddress('');
+                                        setCity('');
+                                        setPostcode('');
+                                        setRegionId('');
+                                    }
+                                }}
+                                onClear={() => {
+                                    setClientId('');
+                                    setSiteAddress('');
+                                    setCity('');
+                                    setPostcode('');
+                                    setRegionId('');
+                                }}
+                            />
+                        </div>
+
+                        <div className="mb-6">
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Site Address *</label>
+                            <SiteSelector
+                                onSiteSelected={(site) => {
+                                    if (site) {
+                                        setSiteAddress(site.address_line_1);
+                                        if (site.city) setCity(site.city);
+                                        if (site.postcode) setPostcode(site.postcode);
+                                        if (site.region_id) setRegionId(site.region_id);
+                                    }
+                                }}
+                            />
+                        </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <div className="md:col-span-2">
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Site Address *</label>
-                                <input
-                                    type="text"
-                                    value={siteAddress}
-                                    onChange={(e) => setSiteAddress(e.target.value)}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
-                                    placeholder="8 Ulster Road, Blockhouse Bay"
-                                />
-                            </div>
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
                                 <input

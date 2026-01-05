@@ -1,0 +1,6 @@
+@echo off
+set NEXT_PUBLIC_SUPABASE_URL=https://syyzrgybeqnyjfqealnv.supabase.co
+set NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN5eXpyZ3liZXFueWpmcWVhbG52Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjExMjk3MDksImV4cCI6MjA3NjcwNTcwOX0.ICKIx4p-q39j1nMK42abdFmGRevpSfxkiozPkxDnE1Q
+
+cd /d "c:\Users\leosu\whizrock-premier"
+node scripts/populate_test_quote_items.js

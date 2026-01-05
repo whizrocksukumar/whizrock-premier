@@ -72,16 +72,19 @@ export async function fetchQuoteWithRelations(
   }
 }
 
-export async function fetchQuotesByClient(clientId: string): Promise<Quote[]> {
+export async function fetchQuotesByClient(clientId: string): Promise<any[]> {
   try {
     const { data, error } = await supabase
       .from('quotes')
-      .select('*')
+      .select(`
+        *,
+        sales_rep:team_members!quotes_sales_rep_id_fkey(id, first_name, last_name, email, phone)
+      `)
       .eq('client_id', clientId)
       .order('created_at', { ascending: false })
 
     if (error) throw error
-    return (data || []) as Quote[]
+    return (data || []) as any[]
   } catch (error) {
     console.error('Error fetching quotes by client:', error)
     throw error

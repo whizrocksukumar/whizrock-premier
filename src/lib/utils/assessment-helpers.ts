@@ -43,8 +43,10 @@ export interface AssessmentArea {
   id: string
   assessment_id: string
   app_type_id: string
+  area_name: string
   square_metres: number
   existing_insulation_type?: string
+  recommended_r_value?: string
   notes?: string
   result_type?: 'Pass' | 'Fail' | 'Exempt' | 'Conditional' | 'Pending'
   wording_id?: string
@@ -68,6 +70,8 @@ export interface AssessmentPhoto {
 export interface AssessmentWording {
   id: string
   wording_text: string
+  area_label?: string
+  result_type?: 'Pass' | 'Fail' | 'Exempt' | 'Pending'
   is_active: boolean
   created_at?: string
   updated_at?: string
@@ -207,7 +211,6 @@ export async function createAssessment(data: {
   removal_required?: boolean
   hazards_present?: string
   notes?: string
-  created_by_user_id: string
 }): Promise<Assessment> {
   try {
     // Generate assessment number
@@ -241,8 +244,10 @@ export async function createAssessmentAreas(
   assessmentId: string,
   areas: Array<{
     app_type_id: string
+    area_name: string
     square_metres: number
     existing_insulation_type?: string
+    recommended_r_value?: string
     notes?: string
     result_type?: 'Pass' | 'Fail' | 'Exempt' | 'Conditional' | 'Pending'
     wording_id?: string
@@ -516,7 +521,7 @@ export async function fetchAssessmentPhotos(
 export async function fetchAssessmentWordings(): Promise<AssessmentWording[]> {
   try {
     const { data, error } = await supabase
-      .from('assessment_wordings')
+      .from('wordings_templates')
       .select('*')
       .eq('is_active', true)
       .order('wording_text')

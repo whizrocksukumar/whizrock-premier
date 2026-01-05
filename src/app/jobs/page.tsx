@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 
-// Types
 interface Job {
   id: string;
   job_number: string;
@@ -32,31 +31,28 @@ type SortDirection = 'asc' | 'desc';
 export default function JobsPage() {
   const router = useRouter();
   
-  // State
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [crewLeadFilter, setCrewLeadFilter] = useState('all');
+  const [installerFilter, setInstallerFilter] = useState('all');
   const [dateFromFilter, setDateFromFilter] = useState('');
   const [dateToFilter, setDateToFilter] = useState('');
   const [sortField, setSortField] = useState<SortField>('created_at');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [pagination, setPagination] = useState({ page: 1, pageSize: 20, total: 0 });
-  const [crewLeads, setCrewLeads] = useState<Array<{ id: string; name: string }>>([]);
+  const [installers, setInstallers] = useState<Array<{ id: string; name: string }>>([]);
 
-  // Fetch crew leads for filter dropdown
   useEffect(() => {
-    fetchCrewLeads();
+    fetchInstallers();
   }, []);
 
-  // Fetch jobs when filters change
   useEffect(() => {
     fetchJobs();
-  }, [searchTerm, statusFilter, crewLeadFilter, dateFromFilter, dateToFilter, sortField, sortDirection, pagination.page]);
+  }, [searchTerm, statusFilter, installerFilter, dateFromFilter, dateToFilter, sortField, sortDirection, pagination.page]);
 
-  const fetchCrewLeads = async () => {
+  const fetchInstallers = async () => {
     try {
       const { data, error } = await supabase
         .from('team_members')
@@ -67,12 +63,12 @@ export default function JobsPage() {
 
       if (error) throw error;
 
-      setCrewLeads((data || []).map(tm => ({
+      setInstallers((data || []).map(tm => ({
         id: tm.id,
         name: `${tm.first_name} ${tm.last_name}`
       })));
     } catch (err: any) {
-      console.error('Error fetching crew leads:', err);
+      console.error('Error fetching installers:', err);
     }
   };
 
@@ -83,27 +79,20 @@ export default function JobsPage() {
 
       let query = supabase
         .from('jobs')
-        .select(`
-          *,
-          quotes!inner(quote_number)
-        `, { count: 'exact' });
+        .select('*', { count: 'exact' });
 
-      // Search filter (job number, quote number, customer, address)
       if (searchTerm) {
         query = query.or(`job_number.ilike.%${searchTerm}%,customer_first_name.ilike.%${searchTerm}%,customer_last_name.ilike.%${searchTerm}%,customer_company.ilike.%${searchTerm}%,site_address.ilike.%${searchTerm}%`);
       }
 
-      // Status filter
       if (statusFilter !== 'all') {
         query = query.eq('status', statusFilter);
       }
 
-      // Crew lead filter
-      if (crewLeadFilter !== 'all') {
-        query = query.eq('crew_lead_id', crewLeadFilter);
+      if (installerFilter !== 'all') {
+        query = query.eq('crew_lead_id', installerFilter);
       }
 
-      // Date range filter
       if (dateFromFilter) {
         query = query.gte('scheduled_date', dateFromFilter);
       }
@@ -111,10 +100,8 @@ export default function JobsPage() {
         query = query.lte('scheduled_date', dateToFilter);
       }
 
-      // Sorting
       query = query.order(sortField, { ascending: sortDirection === 'asc' });
 
-      // Pagination
       const offset = (pagination.page - 1) * pagination.pageSize;
       query = query.range(offset, offset + pagination.pageSize - 1);
 
@@ -122,22 +109,33 @@ export default function JobsPage() {
 
       if (fetchError) throw fetchError;
 
-      // Fetch crew lead names for each job
-      const jobsWithCrewLeads = await Promise.all((data || []).map(async (job: any) => {
+      const jobsWithDetails = await Promise.all((data || []).map(async (job: any) => {
         let crewLeadName = '';
         if (job.crew_lead_id) {
-          const { data: crewLead } = await supabase
+          const { data: installer } = await supabase
             .from('team_members')
             .select('first_name, last_name')
             .eq('id', job.crew_lead_id)
             .single();
           
-          if (crewLead) {
-            crewLeadName = `${crewLead.first_name} ${crewLead.last_name}`;
+          if (installer) {
+            crewLeadName = `${installer.first_name} ${installer.last_name}`;
           }
         }
 
-        // Calculate actual cost and margin (would normally call calculate_job_costing function)
+        // Fetch quote number
+        let quoteNumber = '';
+        if (job.quote_id) {
+          const { data: quote } = await supabase
+            .from('quotes')
+            .select('quote_number')
+            .eq('id', job.quote_id)
+            .single();
+          if (quote) {
+            quoteNumber = quote.quote_number;
+          }
+        }
+
         const actual_cost = job.actual_amount || 0;
         const margin_percent = job.quoted_amount > 0 
           ? ((job.quoted_amount - actual_cost) / job.quoted_amount * 100)
@@ -147,7 +145,7 @@ export default function JobsPage() {
           id: job.id,
           job_number: job.job_number,
           quote_id: job.quote_id,
-          quote_number: job.quotes?.quote_number || '',
+          quote_number: quoteNumber,
           customer_first_name: job.customer_first_name || '',
           customer_last_name: job.customer_last_name || '',
           customer_company: job.customer_company || '',
@@ -164,7 +162,7 @@ export default function JobsPage() {
         };
       }));
 
-      setJobs(jobsWithCrewLeads);
+      setJobs(jobsWithDetails);
       setPagination(prev => ({ ...prev, total: count || 0 }));
 
     } catch (err: any) {
@@ -249,17 +247,17 @@ export default function JobsPage() {
             </select>
           </div>
 
-          {/* Crew Lead Filter */}
+          {/* Installer Filter */}
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Crew Lead</label>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Installer</label>
             <select
-              value={crewLeadFilter}
-              onChange={(e) => setCrewLeadFilter(e.target.value)}
+              value={installerFilter}
+              onChange={(e) => setInstallerFilter(e.target.value)}
               className="w-full px-3 py-1.5 text-sm border rounded focus:ring-2 focus:ring-orange-500"
             >
-              <option value="all">All Crew Leads</option>
-              {crewLeads.map(lead => (
-                <option key={lead.id} value={lead.id}>{lead.name}</option>
+              <option value="all">All Installers</option>
+              {installers.map(installer => (
+                <option key={installer.id} value={installer.id}>{installer.name}</option>
               ))}
             </select>
           </div>
@@ -293,7 +291,7 @@ export default function JobsPage() {
             onClick={() => {
               setSearchTerm('');
               setStatusFilter('all');
-              setCrewLeadFilter('all');
+              setInstallerFilter('all');
               setDateFromFilter('');
               setDateToFilter('');
             }}
@@ -317,7 +315,7 @@ export default function JobsPage() {
           <div className="p-8 text-center text-gray-500">Loading jobs...</div>
         ) : jobs.length === 0 ? (
           <div className="p-8 text-center text-gray-500">
-            No jobs found. {searchTerm || statusFilter !== 'all' || crewLeadFilter !== 'all' ? 'Try adjusting your filters.' : 'Create your first job from a quote.'}
+            No jobs found. {searchTerm || statusFilter !== 'all' || installerFilter !== 'all' ? 'Try adjusting your filters.' : 'Create your first job from a quote.'}
           </div>
         ) : (
           <>
@@ -368,7 +366,7 @@ export default function JobsPage() {
                       Status {sortField === 'status' && (sortDirection === 'asc' ? '↑' : '↓')}
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider w-32">
-                      Crew Lead
+                      Installer
                     </th>
                     <th className="px-4 py-3 text-right text-xs font-medium text-white uppercase tracking-wider w-32">
                       Quoted Amount

@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase'
-import { fetchClientInvoiceSummary } from '@/lib/invoices-helpers'
+import { fetchClientInvoiceSummary } from '@/lib/utils/invoices-helpers'
 
 export interface Client {
   id: string
@@ -33,7 +33,8 @@ export interface Client {
 }
 
 export interface ClientWithRelations extends Client {
-  client_type?: {
+  // For backwards compatibility with original relations
+  client_types?: {
     id: string
     name: string
     color?: string
@@ -46,11 +47,16 @@ export interface ClientWithRelations extends Client {
     email?: string
     phone?: string
   }
-  region?: {
+  regions?: {
     id: string
     name: string
     code: string
   }
+  // Additional mapped fields for ClientOverviewCard
+  client_type?: string | null
+  address?: string | null
+  region?: string | null
+  sales_rep_name?: string | null
 }
 
 export interface ActivitySummary {
@@ -71,23 +77,73 @@ export async function fetchClientWithRelations(
   clientId: string
 ): Promise<ClientWithRelations> {
   try {
+    // First, get basic client data without joins
     const { data, error } = await supabase
       .from('clients')
-      .select(
-        `
-        *,
-        client_types(id, name, color, icon),
-        sales_reps(id, first_name, last_name, email, phone),
-        regions(id, name, code)
-      `
-      )
+      .select('*')
       .eq('id', clientId)
       .single()
 
-    if (error) throw error
+    if (error) {
+      console.error('Error fetching client:', error)
+      throw error
+    }
     if (!data) throw new Error('Client not found')
 
-    return data as ClientWithRelations
+    // Fetch related data separately to avoid join issues
+    const [clientTypeData, teamMemberData, regionData, companyData] = await Promise.all([
+      // Client type
+      data.client_type_id
+        ? supabase.from('client_types').select('id, name, color, icon').eq('id', data.client_type_id).single()
+        : Promise.resolve({ data: null }),
+
+      // Team member (sales rep)
+      data.sales_rep_id
+        ? supabase.from('team_members').select('id, first_name, last_name, email, phone').eq('id', data.sales_rep_id).single()
+        : Promise.resolve({ data: null }),
+
+      // Region
+      data.region_id
+        ? supabase.from('regions').select('id, name, code').eq('id', data.region_id).single()
+        : Promise.resolve({ data: null }),
+
+      // Company
+      data.company_id
+        ? supabase.from('companies').select('company_name, industry, website').eq('id', data.company_id).single()
+        : Promise.resolve({ data: null })
+    ])
+
+    // Transform the data to match the ClientOverviewCard expectations
+    const transformedClient = {
+      ...data,
+      // Map client_type
+      client_type: clientTypeData.data?.name || null,
+
+      // Map company fields
+      company_name: companyData.data?.company_name || null,
+      industry: companyData.data?.industry || null,
+      website: companyData.data?.website || null,
+
+      // Map address
+      address: data.address_line_1
+        ? `${data.address_line_1}${data.address_line_2 ? ', ' + data.address_line_2 : ''}${data.city ? ', ' + data.city : ''}${data.postcode ? ' ' + data.postcode : ''}`
+        : null,
+
+      // Map region
+      region: regionData.data?.name || null,
+
+      // Map sales rep
+      sales_rep_name: teamMemberData.data
+        ? `${teamMemberData.data.first_name} ${teamMemberData.data.last_name}`
+        : null,
+
+      // Keep the original relations for other uses
+      client_types: clientTypeData.data,
+      sales_rep: teamMemberData.data,
+      regions: regionData.data
+    }
+
+    return transformedClient as ClientWithRelations
   } catch (error) {
     console.error('Error fetching client with relations:', error)
     throw error

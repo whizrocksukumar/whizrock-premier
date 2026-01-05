@@ -48,9 +48,10 @@ interface Region {
 interface SiteSelectorProps {
   onSiteSelected: (site: Site) => void
   onClose?: () => void
+  hideCreateButton?: boolean
 }
 
-export default function SiteSelector({ onSiteSelected, onClose }: SiteSelectorProps) {
+export default function SiteSelector({ onSiteSelected, onClose, hideCreateButton = false }: SiteSelectorProps) {
   const [searchMode, setSearchMode] = useState<SearchMode>('contact')
   const [createMode, setCreateMode] = useState<CreateMode | null>(null)
 
@@ -159,14 +160,49 @@ export default function SiteSelector({ onSiteSelected, onClose }: SiteSelectorPr
     setError('')
 
     try {
-      let query = supabase.from('sites').select('*')
-
       if (searchMode === 'contact' && selectedContact) {
-        query = query.eq('client_id', selectedContact.id)
+        // Search for sites linked to this contact
+        const { data, error: err } = await supabase
+          .from('sites')
+          .select('*')
+          .eq('client_id', selectedContact.id)
+
+        if (err) throw err
+        setSearchResults(data as Site[])
       } else if (searchMode === 'company' && selectedCompany) {
-        query = query.eq('company_id', selectedCompany.id)
+        // Search for sites in two ways:
+        // 1. Sites directly linked to company (company_id)
+        // 2. Sites linked to clients who belong to this company (client_id where client.company_id matches)
+
+        // First, get all clients belonging to this company
+        const { data: companyClients, error: clientsErr } = await supabase
+          .from('clients')
+          .select('id')
+          .eq('company_id', selectedCompany.id)
+
+        if (clientsErr) throw clientsErr
+
+        const clientIds = companyClients?.map(c => c.id) || []
+
+        // Now fetch sites that are either:
+        // - Directly linked to company, OR
+        // - Linked to any client in this company
+        const { data: allSites, error: sitesErr } = await supabase
+          .from('sites')
+          .select('*')
+
+        if (sitesErr) throw sitesErr
+
+        // Filter sites: company_id matches OR client_id is in the list of company clients
+        const filtered = (allSites || []).filter(
+          s => s.company_id === selectedCompany.id || (s.client_id && clientIds.includes(s.client_id))
+        )
+
+        setSearchResults(filtered as Site[])
       } else if (searchMode === 'address' && searchTerm) {
-        const { data, error: err } = await query
+        const { data, error: err } = await supabase
+          .from('sites')
+          .select('*')
 
         if (err) throw err
 
@@ -178,15 +214,9 @@ export default function SiteSelector({ onSiteSelected, onClose }: SiteSelectorPr
         )
 
         setSearchResults(filtered as Site[])
-        setSearching(false)
-        return
+      } else {
+        setSearchResults([])
       }
-
-      const { data, error: err } = await query
-
-      if (err) throw err
-
-      setSearchResults(data as Site[])
     } catch (err: any) {
       console.error('Error searching sites:', err)
       setError(err.message || 'Search failed')
@@ -551,32 +581,36 @@ export default function SiteSelector({ onSiteSelected, onClose }: SiteSelectorPr
           </div>
         )}
 
-        {/* Create New Site Button */}
-        {(searchMode === 'address' || (!selectedContact && !selectedCompany)) && (
-          <button
-            onClick={() => setCreateMode('standalone')}
-            className="w-full px-4 py-2 bg-[#0066CC] text-white rounded-lg hover:bg-[#0052a3] font-medium text-sm"
-          >
-            + Create New Site
-          </button>
-        )}
+        {/* Create New Site Button - Hidden when hideCreateButton is true */}
+        {!hideCreateButton && (
+          <>
+            {(searchMode === 'address' || (!selectedContact && !selectedCompany)) && (
+              <button
+                onClick={() => setCreateMode('standalone')}
+                className="w-full px-4 py-2 bg-[#0066CC] text-white rounded-lg hover:bg-[#0052a3] font-medium text-sm"
+              >
+                + Create New Site
+              </button>
+            )}
 
-        {selectedContact && (
-          <button
-            onClick={() => setCreateMode('from-contact')}
-            className="w-full px-4 py-2 bg-[#0066CC] text-white rounded-lg hover:bg-[#0052a3] font-medium text-sm mt-2"
-          >
-            + Add New Site for {selectedContact.first_name}
-          </button>
-        )}
+            {selectedContact && (
+              <button
+                onClick={() => setCreateMode('from-contact')}
+                className="w-full px-4 py-2 bg-[#0066CC] text-white rounded-lg hover:bg-[#0052a3] font-medium text-sm mt-2"
+              >
+                + Add New Site for {selectedContact.first_name}
+              </button>
+            )}
 
-        {selectedCompany && (
-          <button
-            onClick={() => setCreateMode('from-company')}
-            className="w-full px-4 py-2 bg-[#0066CC] text-white rounded-lg hover:bg-[#0052a3] font-medium text-sm mt-2"
-          >
-            + Add New Site for {selectedCompany.company_name}
-          </button>
+            {selectedCompany && (
+              <button
+                onClick={() => setCreateMode('from-company')}
+                className="w-full px-4 py-2 bg-[#0066CC] text-white rounded-lg hover:bg-[#0052a3] font-medium text-sm mt-2"
+              >
+                + Add New Site for {selectedCompany.company_name}
+              </button>
+            )}
+          </>
         )}
       </div>
     )

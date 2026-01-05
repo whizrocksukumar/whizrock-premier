@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run build:*)",
+      "Bash(taskkill:*)",
+      "Bash(pkill:*)",
+      "Bash(npm run dev:*)",
+      "Bash(node -e:*)",
+      "Bash(set NEXT_PUBLIC_SUPABASE_URL=https://syyzrgybeqnyjfqealnv.supabase.co:*)",
+      "Bash(set NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN5eXpyZ3liZXFueWpmcWVhbG52Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjExMjk3MDksImV4cCI6MjA3NjcwNTcwOX0.ICKIx4p-q39j1nMK42abdFmGRevpSfxkiozPkxDnE1Q)",
+      "Bash(node scripts/populate_test_quote_items.js:*)",
+      "Bash(run_populate.bat)",
+      "Bash(npm install:*)",
+      "Bash(node scripts/populate_quote_relationships.js:*)",
+      "Bash(node scripts/verify_quote_data.js:*)",
+      "Bash(npm run build:check:*)",
+      "Bash(git add:*)"
+    ]
+  }
+}

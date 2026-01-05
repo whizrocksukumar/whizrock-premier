@@ -16,10 +16,13 @@ interface Company {
   address_line_1: string | null
   city: string | null
   region_id: string | null
+  region_name?: string
+  sales_rep_id: string | null
+  sales_rep_name?: string
+  follow_up_date: string | null
   is_active: boolean
   created_at: string
   contact_count?: number
-  region_name?: string
 }
 
 interface Contact {
@@ -43,10 +46,12 @@ interface CompanyFormData {
   city: string
   postcode: string
   region_id: string
+  sales_rep_id: string
+  follow_up_date: string
   is_active: boolean
 }
 
-type SortField = 'company_name' | 'industry' | 'city' | 'phone' | 'email' | 'created_at'
+type SortField = 'company_name' | 'industry' | 'region_name' | 'phone' | 'email' | 'sales_rep_name' | 'follow_up_date'
 type SortDirection = 'asc' | 'desc'
 
 const CONTACT_TYPES = ['Primary Contact', 'Sales Contact', 'Accounts Contact']
@@ -56,10 +61,13 @@ export default function CompaniesPage() {
   const [companies, setCompanies] = useState<Company[]>([])
   const [allContacts, setAllContacts] = useState<Contact[]>([])
   const [regions, setRegions] = useState<Array<{ id: string; name: string }>>([])
+  const [salesReps, setSalesReps] = useState<Array<{ id: string; name: string }>>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all')
+  const [salesRepFilter, setSalesRepFilter] = useState('all')
+  const [regionFilter, setRegionFilter] = useState('all')
   const [sortField, setSortField] = useState<SortField>('company_name')
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
@@ -80,6 +88,8 @@ export default function CompaniesPage() {
     city: '',
     postcode: '',
     region_id: '',
+    sales_rep_id: '',
+    follow_up_date: '',
     is_active: true
   })
 
@@ -116,6 +126,15 @@ export default function CompaniesPage() {
 
       if (regionsError) throw regionsError
 
+      // Fetch sales reps
+      const { data: salesRepsData, error: salesRepsError } = await supabase
+        .from('team_members')
+        .select('id, first_name, last_name')
+        .eq('role', 'Sales Rep')
+        .order('first_name')
+
+      if (salesRepsError) throw salesRepsError
+
       // Fetch all contacts
       const { data: contactsData, error: contactsError } = await supabase
         .from('clients')
@@ -130,6 +149,12 @@ export default function CompaniesPage() {
         regionMap[r.id] = r.name
       })
 
+      // Get sales rep map
+      const salesRepMap: Record<string, string> = {}
+      salesRepsData?.forEach(rep => {
+        salesRepMap[rep.id] = `${rep.first_name} ${rep.last_name}`
+      })
+
       // Get contact count for each company
       const companiesWithCount = await Promise.all(
         (companiesData || []).map(async (company) => {
@@ -141,6 +166,7 @@ export default function CompaniesPage() {
           return {
             ...company,
             region_name: company.region_id ? regionMap[company.region_id] : null,
+            sales_rep_name: company.sales_rep_id ? salesRepMap[company.sales_rep_id] : null,
             contact_count: count || 0
           }
         })
@@ -154,6 +180,16 @@ export default function CompaniesPage() {
         filtered = filtered.filter(c => c.is_active)
       } else if (statusFilter === 'inactive') {
         filtered = filtered.filter(c => !c.is_active)
+      }
+
+      // Sales rep filter
+      if (salesRepFilter !== 'all') {
+        filtered = filtered.filter(c => c.sales_rep_id === salesRepFilter)
+      }
+
+      // Region filter
+      if (regionFilter !== 'all') {
+        filtered = filtered.filter(c => c.region_id === regionFilter)
       }
 
       // Search filter
@@ -170,19 +206,24 @@ export default function CompaniesPage() {
 
       // Sort
       filtered.sort((a, b) => {
-        let aVal = a[sortField] || ''
-        let bVal = b[sortField] || ''
-        if (sortField === 'created_at') {
-          aVal = new Date(a.created_at).getTime()
-          bVal = new Date(b.created_at).getTime()
-        }
-        const comparison = String(aVal).localeCompare(String(bVal))
+        const aVal = a[sortField] || ''
+        const bVal = b[sortField] || ''
+
+        const comparison = aVal.toString().localeCompare(bVal.toString(), undefined, {
+          numeric: true,
+          sensitivity: 'base'
+        })
+
         return sortDirection === 'asc' ? comparison : -comparison
       })
 
       setCompanies(filtered)
       setAllContacts(contactsData || [])
       setRegions(regionsData || [])
+      setSalesReps((salesRepsData || []).map(rep => ({
+        id: rep.id,
+        name: `${rep.first_name} ${rep.last_name}`
+      })))
       setSelectedIds(new Set())
     } catch (err) {
       console.error('Fetch error:', err)
@@ -206,6 +247,8 @@ export default function CompaniesPage() {
         city: company.city || '',
         postcode: '',
         region_id: company.region_id || '',
+        sales_rep_id: company.sales_rep_id || '',
+        follow_up_date: company.follow_up_date || '',
         is_active: company.is_active
       })
       // Fetch company contacts
@@ -223,6 +266,8 @@ export default function CompaniesPage() {
         city: '',
         postcode: '',
         region_id: '',
+        sales_rep_id: '',
+        follow_up_date: '',
         is_active: true
       })
       setCompanyContacts([])
@@ -311,6 +356,8 @@ export default function CompaniesPage() {
       city: formData.city.trim() || null,
       postcode: formData.postcode.trim() || null,
       region_id: formData.region_id || null,
+      sales_rep_id: formData.sales_rep_id || null,
+      follow_up_date: formData.follow_up_date || null,
       is_active: formData.is_active
     }
 
@@ -445,7 +492,8 @@ export default function CompaniesPage() {
     return <span className="ml-1">{sortDirection === 'asc' ? '↑' : '↓'}</span>
   }
 
-  const formatDate = (dateString: string) => {
+  const formatDate = (dateString?: string | null) => {
+    if (!dateString) return '—'
     return new Date(dateString).toLocaleDateString('en-NZ', {
       day: '2-digit',
       month: '2-digit',
@@ -514,40 +562,6 @@ export default function CompaniesPage() {
             </div>
           </div>
 
-          {/* Status Filter Buttons */}
-          <div className="flex gap-2">
-            <button
-              onClick={() => setStatusFilter('all')}
-              className={`px-3 py-1 text-sm rounded transition-colors ${
-                statusFilter === 'all'
-                  ? 'bg-[#0066CC] text-white'
-                  : 'border border-gray-300 text-gray-700 hover:bg-gray-50'
-              }`}
-            >
-              All
-            </button>
-            <button
-              onClick={() => setStatusFilter('active')}
-              className={`px-3 py-1 text-sm rounded transition-colors ${
-                statusFilter === 'active'
-                  ? 'bg-[#0066CC] text-white'
-                  : 'border border-gray-300 text-gray-700 hover:bg-gray-50'
-              }`}
-            >
-              Active
-            </button>
-            <button
-              onClick={() => setStatusFilter('inactive')}
-              className={`px-3 py-1 text-sm rounded transition-colors ${
-                statusFilter === 'inactive'
-                  ? 'bg-[#0066CC] text-white'
-                  : 'border border-gray-300 text-gray-700 hover:bg-gray-50'
-              }`}
-            >
-              Inactive
-            </button>
-          </div>
-
           {/* Right side - Action Buttons */}
           <div className="flex items-center gap-2">
             <button className="px-4 py-2 text-sm border border-gray-300 rounded hover:bg-gray-50 transition-colors">
@@ -558,11 +572,85 @@ export default function CompaniesPage() {
             </button>
             <button
               onClick={() => openDrawer()}
-              className="px-4 py-2 text-sm bg-[#0066CC] text-white rounded hover:bg-[#0052a3] transition-colors flex items-center gap-2"
+              className="px-4 py-2 text-sm bg-[#0066CC] text-white rounded hover:bg-[#0052a3] hover:shadow-md transition-all duration-200 flex items-center gap-2"
             >
               <Plus className="w-4 h-4" />
               New Company
             </button>
+          </div>
+        </div>
+      </div>
+
+      {/* FILTER ROW */}
+      <div className="bg-white border-b border-gray-200 px-6 py-3">
+        <div className="flex items-center gap-6">
+          {/* Status Filter */}
+          <div className="flex items-center gap-3">
+            <span className="text-sm font-medium text-gray-700">Status:</span>
+            <button
+              onClick={() => setStatusFilter('all')}
+              className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                statusFilter === 'all'
+                  ? 'bg-[#0066CC] text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              All
+            </button>
+            <button
+              onClick={() => setStatusFilter('active')}
+              className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                statusFilter === 'active'
+                  ? 'bg-[#0066CC] text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              Active
+            </button>
+            <button
+              onClick={() => setStatusFilter('inactive')}
+              className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                statusFilter === 'inactive'
+                  ? 'bg-[#0066CC] text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              Inactive
+            </button>
+          </div>
+
+          {/* Sales Rep Filter */}
+          <div className="flex items-center gap-3">
+            <span className="text-sm font-medium text-gray-700">Sales Rep:</span>
+            <select
+              value={salesRepFilter}
+              onChange={(e) => setSalesRepFilter(e.target.value)}
+              className="px-3 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-[#0066CC]"
+            >
+              <option value="all">All Reps</option>
+              {salesReps.map(rep => (
+                <option key={rep.id} value={rep.id}>
+                  {rep.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Region Filter */}
+          <div className="flex items-center gap-3">
+            <span className="text-sm font-medium text-gray-700">Region:</span>
+            <select
+              value={regionFilter}
+              onChange={(e) => setRegionFilter(e.target.value)}
+              className="px-3 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-[#0066CC]"
+            >
+              <option value="all">All Regions</option>
+              {regions.map(region => (
+                <option key={region.id} value={region.id}>
+                  {region.name}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
       </div>
@@ -616,6 +704,18 @@ export default function CompaniesPage() {
                     </th>
                     <th
                       className="text-left px-4 py-3 text-xs font-semibold whitespace-nowrap cursor-pointer hover:bg-[#0055aa]"
+                      onClick={() => handleSort('sales_rep_name')}
+                    >
+                      Sales Rep <SortArrow field="sales_rep_name" />
+                    </th>
+                    <th
+                      className="text-left px-4 py-3 text-xs font-semibold whitespace-nowrap cursor-pointer hover:bg-[#0055aa]"
+                      onClick={() => handleSort('region_name')}
+                    >
+                      Region <SortArrow field="region_name" />
+                    </th>
+                    <th
+                      className="text-left px-4 py-3 text-xs font-semibold whitespace-nowrap cursor-pointer hover:bg-[#0055aa]"
                       onClick={() => handleSort('phone')}
                     >
                       Phone <SortArrow field="phone" />
@@ -631,22 +731,16 @@ export default function CompaniesPage() {
                     </th>
                     <th
                       className="text-left px-4 py-3 text-xs font-semibold whitespace-nowrap cursor-pointer hover:bg-[#0055aa]"
-                      onClick={() => handleSort('city')}
+                      onClick={() => handleSort('follow_up_date')}
                     >
-                      City <SortArrow field="city" />
-                    </th>
-                    <th
-                      className="text-left px-4 py-3 text-xs font-semibold whitespace-nowrap cursor-pointer hover:bg-[#0055aa]"
-                      onClick={() => handleSort('created_at')}
-                    >
-                      Created <SortArrow field="created_at" />
+                      Follow Up <SortArrow field="follow_up_date" />
                     </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
                   {companies.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="px-4 py-8 text-center text-gray-500">
+                      <td colSpan={10} className="px-4 py-8 text-center text-gray-500">
                         No companies found
                       </td>
                     </tr>
@@ -667,20 +761,20 @@ export default function CompaniesPage() {
                           />
                         </td>
                         <td className="px-4 py-3 text-center whitespace-nowrap">
-                          <div className="flex items-center justify-center gap-1">
+                          <div className="flex items-center justify-center gap-2">
                             <Link
                               href={`/companies/${company.id}`}
-                              className="px-2 py-1 text-xs bg-gray-200 hover:bg-gray-300 rounded flex items-center gap-1"
+                              className="p-1 text-blue-600 hover:bg-blue-50 rounded"
+                              title="View"
                             >
-                              <Eye className="w-3 h-3" />
-                              View
+                              <Eye className="w-4 h-4" />
                             </Link>
                             <button
                               onClick={() => openDrawer(company)}
-                              className="px-2 py-1 text-xs bg-gray-200 hover:bg-gray-300 rounded flex items-center gap-1"
+                              className="p-1 text-gray-600 hover:bg-gray-100 rounded"
+                              title="Edit"
                             >
-                              <Edit className="w-3 h-3" />
-                              Edit
+                              <Edit className="w-4 h-4" />
                             </button>
                           </div>
                         </td>
@@ -696,6 +790,12 @@ export default function CompaniesPage() {
                           {company.industry || '—'}
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-700">
+                          {company.sales_rep_name || '—'}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-700">
+                          {company.region_name || '—'}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-700">
                           {company.phone || '—'}
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-700">
@@ -707,10 +807,7 @@ export default function CompaniesPage() {
                           </span>
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-700">
-                          {company.city || '—'}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-700">
-                          {formatDate(company.created_at)}
+                          {formatDate(company.follow_up_date)}
                         </td>
                       </tr>
                     ))
@@ -915,6 +1012,48 @@ export default function CompaniesPage() {
                     </select>
                   </div>
                 </div>
+              </div>
+
+              {/* Sales Rep */}
+              <div>
+                <h3 className="text-sm font-semibold text-gray-800 mb-4 pb-2 border-b border-gray-200">
+                  Sales Representative
+                </h3>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Assigned Sales Rep
+                </label>
+                <select
+                  name="sales_rep_id"
+                  value={formData.sales_rep_id}
+                  onChange={handleFormChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC] text-sm"
+                >
+                  <option value="">-- Select sales rep (optional) --</option>
+                  {salesReps.map(rep => (
+                    <option key={rep.id} value={rep.id}>
+                      {rep.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">Assign a sales representative to manage this company</p>
+              </div>
+
+              {/* Follow Up Date */}
+              <div>
+                <h3 className="text-sm font-semibold text-gray-800 mb-4 pb-2 border-b border-gray-200">
+                  Follow Up
+                </h3>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Follow Up Date
+                </label>
+                <input
+                  type="date"
+                  name="follow_up_date"
+                  value={formData.follow_up_date}
+                  onChange={handleFormChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC] text-sm"
+                />
+                <p className="text-xs text-gray-500 mt-1">Set a reminder date for follow-up</p>
               </div>
 
               {/* Status */}

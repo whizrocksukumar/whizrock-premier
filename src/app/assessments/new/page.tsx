@@ -105,10 +105,31 @@ export default function CreateAssessmentPage() {
   // UI state
   const [loading, setLoading] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [lookupError, setLookupError] = useState<string | null>(null)
 
   // Initialize
   useEffect(() => {
-    loadLookupData()
+    let isMounted = true
+
+    const init = async () => {
+      try {
+        await loadLookupData()
+        if (isMounted) {
+          setLookupError(null)
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Failed to load lookup data'
+        if (isMounted) {
+          setLookupError(message)
+        }
+      }
+    }
+
+    void init()
+
+    return () => {
+      isMounted = false
+    }
   }, [])
 
   // Auto-populate property type from site
@@ -122,46 +143,48 @@ export default function CreateAssessmentPage() {
   }, [selectedSite])
 
   const loadLookupData = async () => {
-  try {
-    const teamRes = await supabase
-      .from('team_members')
-      .select('id, first_name, last_name')
-      .eq('role', 'Installer')
+    try {
+      const teamRes = await supabase
+        .from('team_members')
+        .select('id, first_name, last_name')
+        .eq('role', 'Installer')
 
-    if (teamRes.error) {
-      console.error('team_members error:', teamRes.error)
-    } else {
-      setTeamMembers(teamRes.data || [])
+      if (teamRes.error) {
+        console.error('team_members error:', teamRes.error)
+      } else {
+        setTeamMembers(teamRes.data || [])
+      }
+
+      const appTypesRes = await supabase
+        .from('app_types')
+        .select('id, name, color_hex')
+
+      if (appTypesRes.error) {
+        console.error('app_types error:', appTypesRes.error)
+      } else {
+        setAppTypes(appTypesRes.data || [])
+      }
+
+      const oppRes = await supabase
+        .from('opportunities')
+        .select('id, opp_number')
+
+      if (oppRes.data) setOpportunities(oppRes.data)
+
+      const wordingsRes = await fetchAssessmentWordings()
+      console.log('Loaded wordings:', wordingsRes.length)
+      setWordings(wordingsRes)
+
+      const regionsRes = await supabase
+        .from('regions')
+        .select('id, name')
+
+      if (regionsRes.data) setRegions(regionsRes.data)
+    } catch (err) {
+      console.error('lookup load crash:', err)
+      throw err
     }
-
-    const appTypesRes = await supabase
-      .from('app_types')
-      .select('id, name, color_hex')
-
-    if (appTypesRes.error) {
-      console.error('app_types error:', appTypesRes.error)
-    } else {
-      setAppTypes(appTypesRes.data || [])
-    }
-
-    const oppRes = await supabase
-      .from('opportunities')
-      .select('id, opp_number')
-
-    if (oppRes.data) setOpportunities(oppRes.data)
-
-    const wordingsRes = await fetchAssessmentWordings()
-    setWordings(wordingsRes)
-
-    const regionsRes = await supabase
-      .from('regions')
-      .select('id, name')
-
-    if (regionsRes.data) setRegions(regionsRes.data)
-  } catch (err) {
-    console.error('lookup load crash:', err)
   }
-}
 
 
   const validateForm = (): boolean => {
@@ -199,9 +222,9 @@ export default function CreateAssessmentPage() {
       assessmentAreas.map(area =>
         area.id === id
           ? {
-              ...area,
-              ...updates,
-            }
+            ...area,
+            ...updates,
+          }
           : area
       )
     )
@@ -247,13 +270,12 @@ export default function CreateAssessmentPage() {
         removal_required: form.removal_required,
         hazards_present: form.hazards_present || undefined,
         notes: form.notes || undefined,
-        created_by_user_id: (await supabase.auth.getUser()).data.user?.id || '',
       })
 
       // 2. Create assessment areas
       if (assessmentAreas.length > 0) {
         const areasToCreate = assessmentAreas.map(area => ({
-          area_id: area.area_id,
+          app_type_id: area.area_id,
           area_name: area.area_name,
           square_metres: area.square_metres,
           result_type: area.result_type,
@@ -363,6 +385,16 @@ export default function CreateAssessmentPage() {
               </div>
             )}
           </div>
+
+          {/* Lookup Load Error */}
+          {lookupError && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+              <div className="flex items-start gap-2 text-sm text-red-700">
+                <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                <span>{lookupError}</span>
+              </div>
+            </div>
+          )}
 
           {/* Error Messages */}
           {Object.values(errors).length > 0 && (
@@ -707,7 +739,7 @@ export default function CreateAssessmentPage() {
                         if (e.target.files) {
                           setUploadedPhotos([
                             ...uploadedPhotos,
-                            ...Array.from(e.target.files),
+                            ...Array.from(e.target.files) as File[],
                           ])
                         }
                       }
@@ -775,31 +807,41 @@ function AssessmentAreaForm({
   const [areaPhotos, setAreaPhotos] = useState<File[]>(area.photos || [])
   const [wordingSearch, setWordingSearch] = useState('')
   const [showWordingDropdown, setShowWordingDropdown] = useState(false)
+  const areaLabel = area.area_name?.toLowerCase() || ''
+
+  console.log('AssessmentAreaForm wordings:', wordings.length, 'area:', area.area_name)
+
+  // Add click outside handler
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Element
+      if (!target.closest('[data-wording-dropdown]')) {
+        setShowWordingDropdown(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
   const filteredWordings = wordings.filter(w => {
-  const wordingText = (w.wordings || '').toLowerCase()
-  const recommended = (w.recommended_action || '').toLowerCase()
-  const areaHint = area.area_name?.toLowerCase() || ''
+    const wordingText = (w.wording_text || '').toLowerCase()
+    const areaHint = (area.area_name || '').toLowerCase()
+    const search = wordingSearch.toLowerCase().trim()
 
-  // If user types → fuzzy search
-  if (wordingSearch.trim()) {
-    return (
-      wordingText.includes(wordingSearch.toLowerCase()) ||
-      recommended.includes(wordingSearch.toLowerCase())
-    )
-  }
+    // Match by area_label if specified in template
+    const areaMatch = !w.area_label || areaHint.includes(w.area_label.toLowerCase())
 
-  // If no typing → auto-filter by area name (ceiling, wall, etc.)
-  if (areaHint) {
-    return wordingText.includes(areaHint)
-  }
+    // Match by result_type if specified in template
+    const resultMatch = !w.result_type || area.result_type === w.result_type
 
-  return true
-})
+    if (search) {
+      return wordingText.includes(search) && areaMatch && resultMatch
+    }
 
- 
+    return areaMatch && resultMatch
+  })
 
-
-{`Search wordings (e.g. ${area.area_name || 'ceiling'})`}
+  { `Search wordings (e.g. ${area.area_name || 'ceiling'})` }
 
 
 
@@ -857,7 +899,7 @@ function AssessmentAreaForm({
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Wording <span className="text-gray-500">(optional)</span>
             </label>
-            <div className="relative">
+            <div className="relative" data-wording-dropdown>
               <input
                 type="text"
                 placeholder={`Search wordings (e.g. ${area.area_name || 'ceiling'})`}
@@ -884,13 +926,12 @@ function AssessmentAreaForm({
                         className="w-full text-left px-3 py-2 hover:bg-blue-50 text-xs border-b border-gray-100 last:border-b-0"
                       >
                         <p className="font-medium text-gray-900">{w.wording_text}</p>
-                        {w.recommended_action && (
-                          <p className="text-gray-600">{w.recommended_action}</p>
-                        )}
                       </button>
                     ))
                   ) : (
-                    <div className="px-3 py-2 text-sm text-gray-500">No wordings found</div>
+                    <div className="px-3 py-2 text-sm text-gray-500">
+                      {wordings.length === 0 ? 'Loading wordings...' : 'No wordings found'}
+                    </div>
                   )}
                 </div>
               )}

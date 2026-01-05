@@ -20,6 +20,8 @@ interface Client {
     region_id?: string;
     status: string;
     follow_up_date?: string;
+    sales_rep_id?: string;
+    sales_rep_name?: string;
 }
 
 interface Company {
@@ -50,6 +52,7 @@ interface ClientFormData {
     region_id: string;
     status: string;
     client_type_id: string;
+    sales_rep_id: string;
     website?: string;
 }
 
@@ -61,7 +64,7 @@ interface CompanyFormData {
     website?: string;
 }
 
-type SortField = 'first_name' | 'last_name' | 'company_name' | 'address_line_1' | 'region_name' | 'email' | 'phone' | 'status' | 'follow_up_date';
+type SortField = 'first_name' | 'last_name' | 'company_name' | 'address_line_1' | 'region_name' | 'email' | 'phone' | 'status' | 'follow_up_date' | 'sales_rep_name';
 type SortDirection = 'asc' | 'desc';
 
 export default function ClientsPage() {
@@ -73,6 +76,8 @@ export default function ClientsPage() {
     const [error, setError] = useState('');
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState('all');
+    const [salesRepFilter, setSalesRepFilter] = useState('all');
+    const [regionFilter, setRegionFilter] = useState('all');
     const [sortField, setSortField] = useState<SortField>('last_name');
     const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
     const [pagination, setPagination] = useState({ page: 1, pageSize: 20, total: 0 });
@@ -88,6 +93,7 @@ export default function ClientsPage() {
     const [companies, setCompanies] = useState<Company[]>([]);
     const [regions, setRegions] = useState<Region[]>([]);
     const [clientTypes, setClientTypes] = useState<ClientType[]>([]);
+    const [salesReps, setSalesReps] = useState<{ id: string; name: string }[]>([]);
     const [industries, setIndustries] = useState<string[]>([]);
     const [showCompanyForm, setShowCompanyForm] = useState(false);
     const [savingCompany, setSavingCompany] = useState(false);
@@ -108,6 +114,7 @@ export default function ClientsPage() {
         region_id: '',
         status: 'Prospect',
         client_type_id: '',
+        sales_rep_id: '',
         website: ''
     });
 
@@ -125,6 +132,7 @@ export default function ClientsPage() {
         fetchCompanies();
         fetchRegions();
         fetchClientTypes();
+        fetchSalesReps();
         fetchIndustries();
     }, [searchTerm, statusFilter, sortField, sortDirection, pagination.page]);
 
@@ -148,7 +156,10 @@ export default function ClientsPage() {
             
             // Get unique region IDs
             const regionIds = [...new Set(data.map(c => c.region_id).filter(Boolean))];
-            
+
+            // Get unique sales rep IDs
+            const salesRepIds = [...new Set(data.map(c => c.sales_rep_id).filter(Boolean))];
+
             // Fetch company names
             const companyMap: Record<string, string> = {};
             if (companyIds.length > 0) {
@@ -156,7 +167,7 @@ export default function ClientsPage() {
                     .from('companies')
                     .select('id, company_name')
                     .in('id', companyIds);
-                
+
                 if (companies) {
                     companies.forEach(company => {
                         companyMap[company.id] = company.company_name;
@@ -171,10 +182,25 @@ export default function ClientsPage() {
                     .from('regions')
                     .select('id, name')
                     .in('id', regionIds);
-                
+
                 if (regions) {
                     regions.forEach(region => {
                         regionMap[region.id] = region.name;
+                    });
+                }
+            }
+
+            // Fetch sales rep names
+            const salesRepMap: Record<string, string> = {};
+            if (salesRepIds.length > 0) {
+                const { data: salesReps } = await supabase
+                    .from('team_members')
+                    .select('id, first_name, last_name')
+                    .in('id', salesRepIds);
+
+                if (salesReps) {
+                    salesReps.forEach(rep => {
+                        salesRepMap[rep.id] = `${rep.first_name} ${rep.last_name}`;
                     });
                 }
             }
@@ -192,6 +218,8 @@ export default function ClientsPage() {
                 region_id: client.region_id,
                 status: client.status || 'Prospect',
                 follow_up_date: client.follow_up_date || '',
+                sales_rep_id: client.sales_rep_id,
+                sales_rep_name: client.sales_rep_id ? (salesRepMap[client.sales_rep_id] || '—') : '—',
             }));
 
             setClients(transformedData);
@@ -254,6 +282,25 @@ export default function ClientsPage() {
         }
     };
 
+    const fetchSalesReps = async () => {
+        try {
+            const { data, error: fetchError } = await supabase
+                .from('team_members')
+                .select('id, first_name, last_name')
+                .eq('role', 'Sales Rep')
+                .order('first_name', { ascending: true });
+
+            if (fetchError) throw fetchError;
+            const formattedReps = (data || []).map(rep => ({
+                id: rep.id,
+                name: `${rep.first_name} ${rep.last_name}`
+            }));
+            setSalesReps(formattedReps);
+        } catch (err) {
+            console.error('Error fetching sales reps:', err);
+        }
+    };
+
     const fetchIndustries = async () => {
         try {
             const { data, error: fetchError } = await supabase
@@ -288,6 +335,7 @@ export default function ClientsPage() {
                 region_id: client.region_id || '',
                 status: client.status || 'Prospect',
                 client_type_id: '',
+                sales_rep_id: client.sales_rep_id || '',
                 website: ''
             });
         } else {
@@ -383,9 +431,10 @@ export default function ClientsPage() {
                 address_line_2: clientForm.address_line_2.trim() || null,
                 city: clientForm.city.trim() || null,
                 postcode: clientForm.postcode.trim() || null,
-                region_id: clientForm.region_id,
+                region_id: clientForm.region_id || null,
                 status: clientForm.status,
-                client_type_id: clientForm.client_type_id || null
+                client_type_id: clientForm.client_type_id || null,
+                sales_rep_id: clientForm.sales_rep_id || null
             };
 
             if (editingId) {
@@ -530,7 +579,7 @@ export default function ClientsPage() {
         setSelectedIds(newSelected);
     };
 
-    // Filter clients based on search term and status
+    // Filter and sort clients
     const getFilteredClients = () => {
         let filtered = clients;
 
@@ -549,10 +598,37 @@ export default function ClientsPage() {
 
         // Apply status filter
         if (statusFilter !== 'all') {
-            filtered = filtered.filter(client => 
+            filtered = filtered.filter(client =>
                 client.status?.toLowerCase() === statusFilter.toLowerCase()
             );
         }
+
+        // Apply sales rep filter
+        if (salesRepFilter !== 'all') {
+            filtered = filtered.filter(client =>
+                client.sales_rep_id === salesRepFilter
+            );
+        }
+
+        // Apply region filter
+        if (regionFilter !== 'all') {
+            filtered = filtered.filter(client =>
+                client.region_id === regionFilter
+            );
+        }
+
+        // Apply sorting
+        filtered.sort((a, b) => {
+            const aValue = a[sortField] || '';
+            const bValue = b[sortField] || '';
+
+            const comparison = aValue.toString().localeCompare(bValue.toString(), undefined, {
+                numeric: true,
+                sensitivity: 'base'
+            });
+
+            return sortDirection === 'asc' ? comparison : -comparison;
+        });
 
         return filtered;
     };
@@ -610,7 +686,7 @@ export default function ClientsPage() {
                         </button>
                         <button
                             onClick={() => openDrawer()}
-                            className="px-4 py-2 text-sm bg-[#0066CC] text-white rounded hover:bg-[#0052a3] transition-colors flex items-center gap-2"
+                            className="px-4 py-2 text-sm bg-[#0066CC] text-white rounded hover:bg-[#0052a3] hover:shadow-md transition-all duration-200 flex items-center gap-2"
                         >
                             <Plus className="w-4 h-4" />
                             New Contact
@@ -621,48 +697,85 @@ export default function ClientsPage() {
 
             {/* ===== FILTER ROW ===== */}
             <div className="bg-white border-b border-gray-200 px-6 py-3">
-                <div className="flex items-center gap-3">
-                    <span className="text-sm font-medium text-gray-700">Status:</span>
-                    <button
-                        onClick={() => setStatusFilter('all')}
-                        className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
-                            statusFilter === 'all'
-                                ? 'bg-[#0066CC] text-white'
-                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                        }`}
-                    >
-                        All
-                    </button>
-                    <button
-                        onClick={() => setStatusFilter('active')}
-                        className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
-                            statusFilter === 'active'
-                                ? 'bg-[#0066CC] text-white'
-                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                        }`}
-                    >
-                        Active
-                    </button>
-                    <button
-                        onClick={() => setStatusFilter('prospect')}
-                        className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
-                            statusFilter === 'prospect'
-                                ? 'bg-[#0066CC] text-white'
-                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                        }`}
-                    >
-                        Prospect
-                    </button>
-                    <button
-                        onClick={() => setStatusFilter('inactive')}
-                        className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
-                            statusFilter === 'inactive'
-                                ? 'bg-[#0066CC] text-white'
-                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                        }`}
-                    >
-                        Inactive
-                    </button>
+                <div className="flex items-center gap-6">
+                    {/* Status Filter */}
+                    <div className="flex items-center gap-3">
+                        <span className="text-sm font-medium text-gray-700">Status:</span>
+                        <button
+                            onClick={() => setStatusFilter('all')}
+                            className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                                statusFilter === 'all'
+                                    ? 'bg-[#0066CC] text-white'
+                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                            }`}
+                        >
+                            All
+                        </button>
+                        <button
+                            onClick={() => setStatusFilter('active')}
+                            className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                                statusFilter === 'active'
+                                    ? 'bg-[#0066CC] text-white'
+                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                            }`}
+                        >
+                            Active
+                        </button>
+                        <button
+                            onClick={() => setStatusFilter('prospect')}
+                            className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                                statusFilter === 'prospect'
+                                    ? 'bg-[#0066CC] text-white'
+                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                            }`}
+                        >
+                            Prospect
+                        </button>
+                        <button
+                            onClick={() => setStatusFilter('inactive')}
+                            className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                                statusFilter === 'inactive'
+                                    ? 'bg-[#0066CC] text-white'
+                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                            }`}
+                        >
+                            Inactive
+                        </button>
+                    </div>
+
+                    {/* Sales Rep Filter */}
+                    <div className="flex items-center gap-3">
+                        <span className="text-sm font-medium text-gray-700">Sales Rep:</span>
+                        <select
+                            value={salesRepFilter}
+                            onChange={(e) => setSalesRepFilter(e.target.value)}
+                            className="px-3 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-[#0066CC]"
+                        >
+                            <option value="all">All Reps</option>
+                            {salesReps.map(rep => (
+                                <option key={rep.id} value={rep.id}>
+                                    {rep.name}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {/* Region Filter */}
+                    <div className="flex items-center gap-3">
+                        <span className="text-sm font-medium text-gray-700">Region:</span>
+                        <select
+                            value={regionFilter}
+                            onChange={(e) => setRegionFilter(e.target.value)}
+                            className="px-3 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-[#0066CC]"
+                        >
+                            <option value="all">All Regions</option>
+                            {regions.map(region => (
+                                <option key={region.id} value={region.id}>
+                                    {region.name}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
                 </div>
             </div>
 
@@ -715,12 +828,15 @@ export default function ClientsPage() {
                                         </th>
                                         <th
                                             className="text-left px-4 py-3 text-xs font-semibold whitespace-nowrap cursor-pointer hover:bg-[#0055aa]"
-                                            onClick={() => handleSort('address_line_1')}
+                                            onClick={() => handleSort('sales_rep_name')}
                                         >
-                                            Site Address <SortArrow field="address_line_1" />
+                                            Sales Rep <SortArrow field="sales_rep_name" />
                                         </th>
-                                        <th className="text-left px-4 py-3 text-xs font-semibold whitespace-nowrap">
-                                            Region
+                                        <th
+                                            className="text-left px-4 py-3 text-xs font-semibold whitespace-nowrap cursor-pointer hover:bg-[#0055aa]"
+                                            onClick={() => handleSort('region_name')}
+                                        >
+                                            Region <SortArrow field="region_name" />
                                         </th>
                                         <th
                                             className="text-left px-4 py-3 text-xs font-semibold whitespace-nowrap cursor-pointer hover:bg-[#0055aa]"
@@ -772,20 +888,20 @@ export default function ClientsPage() {
                                                     />
                                                 </td>
                                                 <td className="px-4 py-3 text-center whitespace-nowrap">
-                                                    <div className="flex items-center justify-center gap-1">
+                                                    <div className="flex items-center justify-center gap-2">
                                                         <Link
                                                             href={`/clients/${client.id}`}
-                                                            className="px-2 py-1 text-xs bg-gray-200 hover:bg-gray-300 rounded flex items-center gap-1"
+                                                            className="p-1 text-blue-600 hover:bg-blue-50 rounded"
+                                                            title="View"
                                                         >
-                                                            <Eye className="w-3 h-3" />
-                                                            View
+                                                            <Eye className="w-4 h-4" />
                                                         </Link>
                                                         <button
                                                             onClick={() => openDrawer(client)}
-                                                            className="px-2 py-1 text-xs bg-gray-200 hover:bg-gray-300 rounded flex items-center gap-1"
+                                                            className="p-1 text-gray-600 hover:bg-gray-100 rounded"
+                                                            title="Edit"
                                                         >
-                                                            <Edit className="w-3 h-3" />
-                                                            Edit
+                                                            <Edit className="w-4 h-4" />
                                                         </button>
                                                     </div>
                                                 </td>
@@ -809,8 +925,8 @@ export default function ClientsPage() {
                                                         <span className="text-gray-500">—</span>
                                                     )}
                                                 </td>
-                                                <td className="px-4 py-3 text-sm text-gray-700 max-w-[200px] truncate" title={client.address_line_1}>
-                                                    {client.address_line_1}
+                                                <td className="px-4 py-3 text-sm text-gray-700">
+                                                    {client.sales_rep_name || '—'}
                                                 </td>
                                                 <td className="px-4 py-3 text-sm text-gray-700">
                                                     {client.region_name || '—'}
@@ -1311,6 +1427,30 @@ export default function ClientsPage() {
                                         <span className="ml-2 text-sm text-gray-700">Inactive</span>
                                     </label>
                                 </div>
+                            </div>
+
+                            {/* Sales Rep */}
+                            <div>
+                                <h3 className="text-sm font-semibold text-gray-800 mb-4 pb-2 border-b border-gray-200">
+                                    Sales Representative
+                                </h3>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Assigned Sales Rep
+                                </label>
+                                <select
+                                    name="sales_rep_id"
+                                    value={clientForm.sales_rep_id}
+                                    onChange={handleClientFormChange}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC] text-sm"
+                                >
+                                    <option value="">-- Select sales rep (optional) --</option>
+                                    {salesReps.map(rep => (
+                                        <option key={rep.id} value={rep.id}>
+                                            {rep.name}
+                                        </option>
+                                    ))}
+                                </select>
+                                <p className="text-xs text-gray-500 mt-1">Assign a sales representative to manage this contact</p>
                             </div>
 
                             {/* Buttons */}

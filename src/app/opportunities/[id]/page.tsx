@@ -1,138 +1,188 @@
+'use client'
+
+import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
-import { ArrowLeft, Edit, FileText, CheckCircle, Clock, AlertCircle, Upload } from 'lucide-react'
+import { ArrowLeft, Edit, AlertCircle, Save, X } from 'lucide-react'
+import ClientSelector from '@/components/ClientSelector'
+import SiteSelector from '@/components/SiteSelector'
 
 interface OpportunityDetail {
   id: string
   opp_number: string
-  contact_first_name: string
-  contact_last_name: string
-  contact_email: string
-  contact_phone: string
-  contact_type: string
-  client_type: string
-  site_address: string
-  site_city: string
-  site_postcode: string
-  stage: string
-  sub_status: string
-  recommendation_status: string
-  estimated_value: number
-  actual_value: number
-  due_date: string
-  notes: string
-  created_at: string
-  company_id: string | null
-  product_recommendation_id: string | null
+  client_id: string | null
+  contact_type: string | null
+  client_type: string | null
   sales_rep_id: string | null
-  companies?: {
-    company_name: string
-    email: string
-    phone: string
-  } | null
-  team_members?: {
+  site_address: string | null
+  site_city: string | null
+  site_postcode: string | null
+  region_id: string | null
+  stage: string
+  sub_status: string | null
+  estimated_value: number | null
+  actual_value: number | null
+  due_date: string | null
+  notes: string | null
+  created_at: string
+  updated_at: string
+  is_active: boolean
+  clients?: {
+    id: string
     first_name: string
     last_name: string
-    email: string
+    email: string | null
+    phone: string | null
+    company_name: string | null
   } | null
-  product_recommendations?: {
-    recommendation_number: string
-    status: string
-    section_count: number
-    total_area_sqm: number
-    total_packs_required: number
-    submitted_at: string
+  sales_rep?: {
+    id: string
+    first_name: string
+    last_name: string
+  } | null
+  regions?: {
+    name: string
   } | null
 }
 
-interface Task {
-  id: string
-  task_description: string
-  task_type: string
-  status: string
-  priority: string
-  due_date: string
-  completion_percent: number
-  notes: string
-  assigned_to?: {
-    first_name: string
-    last_name: string
+const stageColors: Record<string, string> = {
+  'NEW': 'bg-blue-100 text-blue-800',
+  'QUALIFIED': 'bg-yellow-100 text-yellow-800',
+  'QUOTED': 'bg-purple-100 text-purple-800',
+  'WON': 'bg-green-100 text-green-800',
+  'LOST': 'bg-red-100 text-red-800'
+}
+
+export default function OpportunityDetailPage({ params }: { params: { id: string } }) {
+  const [opportunity, setOpportunity] = useState<OpportunityDetail | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<any>(null)
+  const [editMode, setEditMode] = useState(false)
+  const [savingEdit, setSavingEdit] = useState(false)
+
+  // Edit form state
+  const [editForm, setEditForm] = useState<Partial<OpportunityDetail>>({})
+
+  // Reference data
+  const [salesRepsList, setSalesRepsList] = useState<Array<{id: string, name: string}>>([])
+  const [regionsList, setRegionsList] = useState<Array<{id: string, name: string}>>([])
+
+  useEffect(() => {
+    fetchOpportunity()
+    fetchSalesReps()
+    fetchRegions()
+  }, [params.id])
+
+  const fetchOpportunity = async () => {
+    try {
+      setLoading(true)
+      const { data, error } = await supabase
+        .from('opportunities')
+        .select(`
+          *,
+          clients (id, first_name, last_name, email, phone, company_name),
+          sales_rep:sales_rep_id (id, first_name, last_name),
+          regions (name)
+        `)
+        .eq('id', params.id)
+        .single()
+
+      if (error) throw error
+      setOpportunity(data as OpportunityDetail)
+      setEditForm(data)
+    } catch (err) {
+      console.error('Error fetching opportunity:', err)
+      setError(err)
+    } finally {
+      setLoading(false)
+    }
   }
-}
 
-interface Attachment {
-  id: string
-  file_name: string
-  file_url: string
-  file_type: string
-  file_size: number
-  file_category: string
-  uploaded_at: string
-  uploaded_by?: {
-    first_name: string
-    last_name: string
+  const fetchSalesReps = async () => {
+    const { data, error } = await supabase
+      .from('sales_reps')
+      .select('id, name')
+      .order('name')
+
+    if (!error && data) {
+      setSalesRepsList(data)
+    }
   }
-}
 
-async function getOpportunity(id: string) {
-  const { data, error } = await supabase
-    .from('opportunities')
-    .select(`
-      *,
-      companies (company_name, email, phone),
-      team_members:sales_rep_id (first_name, last_name, email),
-      product_recommendations (
-        recommendation_number,
-        status,
-        section_count,
-        total_area_sqm,
-        total_packs_required,
-        submitted_at
-      )
-    `)
-    .eq('id', id)
-    .single()
+  const fetchRegions = async () => {
+    const { data, error } = await supabase
+      .from('regions')
+      .select('id, name')
+      .order('name')
 
-  return { data, error }
-}
+    if (!error && data) {
+      setRegionsList(data)
+    }
+  }
 
-async function getTasks(opportunityId: string) {
-  const { data, error } = await supabase
-    .from('tasks')
-    .select(`
-      *,
-      assigned_to:team_members!assigned_to_user_id (first_name, last_name)
-    `)
-    .eq('opportunity_id', opportunityId)
-    .eq('is_active', true)
-    .order('due_date', { ascending: true })
+  const handleEditFormChange = (field: string, value: any) => {
+    setEditForm(prev => ({ ...prev, [field]: value }))
+  }
 
-  return { data, error }
-}
+  const toggleEditMode = () => {
+    if (editMode) {
+      // Cancel - reset form
+      setEditForm(opportunity || {})
+    }
+    setEditMode(!editMode)
+  }
 
-async function getAttachments(opportunityId: string) {
-  const { data, error } = await supabase
-    .from('opportunity_attachments')
-    .select(`
-      *,
-      uploaded_by:team_members (first_name, last_name)
-    `)
-    .eq('opportunity_id', opportunityId)
-    .eq('is_active', true)
-    .order('uploaded_at', { ascending: false })
+  const saveEdit = async () => {
+    if (!opportunity) return
 
-  return { data, error }
-}
+    setSavingEdit(true)
+    try {
+      const { error } = await supabase
+        .from('opportunities')
+        .update({
+          client_id: editForm.client_id,
+          contact_type: editForm.contact_type,
+          client_type: editForm.client_type,
+          sales_rep_id: editForm.sales_rep_id,
+          site_address: editForm.site_address,
+          site_city: editForm.site_city,
+          site_postcode: editForm.site_postcode,
+          region_id: editForm.region_id,
+          estimated_value: editForm.estimated_value,
+          actual_value: editForm.actual_value,
+          due_date: editForm.due_date,
+          sub_status: editForm.sub_status,
+          notes: editForm.notes,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', opportunity.id)
 
-export default async function OpportunityDetailPage({ params }: { params: { id: string } }) {
-  const { data: opportunity, error } = await getOpportunity(params.id)
-  const { data: tasks } = await getTasks(params.id)
-  const { data: attachments } = await getAttachments(params.id)
+      if (error) throw error
+
+      // Refresh opportunity with updated data
+      await fetchOpportunity()
+      setEditMode(false)
+      alert('Changes saved successfully')
+    } catch (error) {
+      console.error('Error saving changes:', error)
+      alert('Failed to save changes')
+    } finally {
+      setSavingEdit(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-100 p-6 flex items-center justify-center">
+        <div className="text-gray-600">Loading...</div>
+      </div>
+    )
+  }
 
   if (error || !opportunity) {
     return (
       <div className="min-h-screen bg-gray-100 p-6">
-        <div className="max-w-6xl mx-auto bg-white rounded-lg shadow p-8 text-center">
+        <div className="max-w-4xl mx-auto bg-white rounded-lg shadow p-8 text-center">
           <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
           <h2 className="text-xl font-semibold text-gray-800">Opportunity Not Found</h2>
           <Link href="/opportunities" className="text-blue-600 hover:underline mt-4 inline-block">
@@ -143,41 +193,15 @@ export default async function OpportunityDetailPage({ params }: { params: { id: 
     )
   }
 
-  const customerName = opportunity.companies?.company_name || 
-    `${opportunity.contact_first_name} ${opportunity.contact_last_name}`
-  const contactPerson = opportunity.companies?.company_name 
-    ? `${opportunity.contact_first_name} ${opportunity.contact_last_name}` 
-    : null
-
-  const stageColors: Record<string, string> = {
-    'NEW': 'bg-blue-100 text-blue-800',
-    'QUALIFIED': 'bg-yellow-100 text-yellow-800',
-    'QUOTED': 'bg-purple-100 text-purple-800',
-    'WON': 'bg-green-100 text-green-800',
-    'LOST': 'bg-red-100 text-red-800'
-  }
-
-  const statusColors: Record<string, string> = {
-    'Not Started': 'bg-gray-100 text-gray-800',
-    'Sent to VA': 'bg-blue-100 text-blue-800',
-    'In Progress': 'bg-yellow-100 text-yellow-800',
-    'Submitted': 'bg-green-100 text-green-800',
-    'Converted to Quote': 'bg-purple-100 text-purple-800',
-    'Rejected': 'bg-red-100 text-red-800'
-  }
-
-  const priorityColors: Record<string, string> = {
-    'Low': 'bg-gray-100 text-gray-700',
-    'Normal': 'bg-blue-100 text-blue-700',
-    'High': 'bg-orange-100 text-orange-700',
-    'Urgent': 'bg-red-100 text-red-700'
-  }
+  const customerName = opportunity.clients
+    ? `${opportunity.clients.first_name} ${opportunity.clients.last_name}`
+    : 'Unknown'
 
   return (
     <div className="min-h-screen bg-gray-100">
       {/* Header */}
       <div className="bg-white border-b border-gray-200 px-6 py-4">
-        <div className="max-w-6xl mx-auto flex items-center justify-between">
+        <div className="max-w-4xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Link href="/opportunities" className="text-gray-600 hover:text-gray-800">
               <ArrowLeft className="w-5 h-5" />
@@ -188,314 +212,377 @@ export default async function OpportunityDetailPage({ params }: { params: { id: 
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <span className={`px-3 py-1 rounded-full text-sm font-medium ${stageColors[opportunity.stage]}`}>
+            <span className={`px-3 py-1 rounded-full text-sm font-medium ${stageColors[opportunity.stage] || 'bg-gray-100 text-gray-800'}`}>
               {opportunity.stage}
             </span>
-            <Link
-              href={`/opportunities/${params.id}/edit`}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center gap-2"
-            >
-              <Edit className="w-4 h-4" />
-              Edit
-            </Link>
+            {editMode ? (
+              <>
+                <button
+                  onClick={toggleEditMode}
+                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg flex items-center gap-2 text-sm font-medium hover:bg-gray-50"
+                  disabled={savingEdit}
+                >
+                  <X className="w-4 h-4" />
+                  Cancel
+                </button>
+                <button
+                  onClick={saveEdit}
+                  className="px-4 py-2 bg-[#0066CC] hover:bg-[#0052a3] text-white rounded-lg flex items-center gap-2 text-sm font-medium disabled:opacity-50"
+                  disabled={savingEdit}
+                >
+                  <Save className="w-4 h-4" />
+                  {savingEdit ? 'Saving...' : 'Save Changes'}
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={toggleEditMode}
+                className="px-4 py-2 bg-[#0066CC] hover:bg-[#0052a3] text-white rounded-lg flex items-center gap-2 text-sm font-medium"
+              >
+                <Edit className="w-4 h-4" />
+                Edit
+              </button>
+            )}
           </div>
         </div>
       </div>
 
       {/* Main Content */}
-      <div className="max-w-6xl mx-auto p-6">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left Column - Main Details */}
-          <div className="lg:col-span-2 space-y-6">
-            {/* Customer Information */}
-            <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-lg font-semibold text-gray-800 mb-4">Customer Information</h2>
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <label className="text-gray-500">Customer Name</label>
-                  <p className="text-gray-800 font-medium">{customerName}</p>
-                </div>
-                {contactPerson && (
-                  <div>
-                    <label className="text-gray-500">Contact Person</label>
-                    <p className="text-gray-800 font-medium">{contactPerson}</p>
+      <div className="max-w-4xl mx-auto p-6 space-y-6">
+        {/* Customer Information */}
+        <div className="bg-white rounded-lg shadow p-6">
+          <h2 className="text-lg font-semibold text-gray-800 mb-4">Customer Information</h2>
+          {editMode ? (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs text-gray-600 mb-2">Select Client</label>
+                <ClientSelector
+                  onClientSelected={(client) => {
+                    if (client) {
+                      handleEditFormChange('client_id', client.id)
+                    }
+                  }}
+                  onClear={() => {
+                    handleEditFormChange('client_id', null)
+                  }}
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-600 mb-2">Contact Type</label>
+                <select
+                  value={editForm.contact_type || ''}
+                  onChange={(e) => handleEditFormChange('contact_type', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0066CC]"
+                >
+                  <option value="">Select...</option>
+                  <option value="New">New</option>
+                  <option value="Existing">Existing</option>
+                  <option value="Referral">Referral</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-600 mb-2">Client Type</label>
+                <select
+                  value={editForm.client_type || ''}
+                  onChange={(e) => handleEditFormChange('client_type', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0066CC]"
+                >
+                  <option value="">Select...</option>
+                  <option value="Residential">Residential</option>
+                  <option value="Commercial">Commercial</option>
+                  <option value="Government">Government</option>
+                </select>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-3 text-sm">
+              {opportunity.clients ? (
+                <>
+                  <div className="grid grid-cols-[140px_1fr] gap-2">
+                    <span className="text-gray-600">Contact Name:</span>
+                    <span className="font-medium text-[#0066CC]">
+                      {opportunity.clients.first_name} {opportunity.clients.last_name}
+                    </span>
                   </div>
-                )}
-                <div>
-                  <label className="text-gray-500">Email</label>
-                  <p className="text-gray-800">{opportunity.contact_email || 'N/A'}</p>
-                </div>
-                <div>
-                  <label className="text-gray-500">Phone</label>
-                  <p className="text-gray-800">{opportunity.contact_phone || 'N/A'}</p>
-                </div>
-                <div>
-                  <label className="text-gray-500">Client Type</label>
-                  <p className="text-gray-800">{opportunity.client_type}</p>
-                </div>
-                <div>
-                  <label className="text-gray-500">Contact Type</label>
-                  <p className="text-gray-800">{opportunity.contact_type}</p>
-                </div>
-                <div className="col-span-2">
-                  <label className="text-gray-500">Site Address</label>
-                  <p className="text-gray-800">
-                    {opportunity.site_address || 'N/A'}
-                    {opportunity.site_city && `, ${opportunity.site_city}`}
-                    {opportunity.site_postcode && ` ${opportunity.site_postcode}`}
+                  {opportunity.clients.company_name && (
+                    <div className="grid grid-cols-[140px_1fr] gap-2">
+                      <span className="text-gray-600">Company:</span>
+                      <span className="font-medium">
+                        {opportunity.clients.company_name}
+                      </span>
+                    </div>
+                  )}
+                  <div className="grid grid-cols-[140px_1fr] gap-2">
+                    <span className="text-gray-600">Email:</span>
+                    <a href={`mailto:${opportunity.clients.email}`} className="font-medium text-[#0066CC] hover:underline">
+                      {opportunity.clients.email || 'N/A'}
+                    </a>
+                  </div>
+                  <div className="grid grid-cols-[140px_1fr] gap-2">
+                    <span className="text-gray-600">Phone:</span>
+                    <a href={`tel:${opportunity.clients.phone}`} className="font-medium text-[#0066CC] hover:underline">
+                      {opportunity.clients.phone || 'N/A'}
+                    </a>
+                  </div>
+                  <div className="grid grid-cols-[140px_1fr] gap-2">
+                    <span className="text-gray-600">Contact Type:</span>
+                    <span className="font-medium">{opportunity.contact_type || 'Not set'}</span>
+                  </div>
+                  <div className="grid grid-cols-[140px_1fr] gap-2">
+                    <span className="text-gray-600">Client Type:</span>
+                    <span className="font-medium">{opportunity.client_type || 'Not set'}</span>
+                  </div>
+                </>
+              ) : (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                  <p className="text-sm text-yellow-800">
+                    ⚠️ No client linked to this opportunity. Click Edit to assign a client.
                   </p>
                 </div>
-              </div>
-            </div>
-
-            {/* VA Recommendation Section */}
-            {opportunity.product_recommendation_id && opportunity.product_recommendations ? (
-              <div className="bg-white rounded-lg shadow p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-lg font-semibold text-gray-800">Product Recommendation</h2>
-                  <span className={`px-3 py-1 rounded-full text-xs font-medium ${statusColors[opportunity.product_recommendations.status]}`}>
-                    {opportunity.product_recommendations.status}
-                  </span>
-                </div>
-                <div className="grid grid-cols-3 gap-4 mb-4">
-                  <div className="text-center p-3 bg-gray-50 rounded">
-                    <p className="text-2xl font-bold text-blue-600">
-                      {opportunity.product_recommendations.section_count}
-                    </p>
-                    <p className="text-xs text-gray-500">Sections</p>
-                  </div>
-                  <div className="text-center p-3 bg-gray-50 rounded">
-                    <p className="text-2xl font-bold text-green-600">
-                      {opportunity.product_recommendations.total_area_sqm.toFixed(1)}
-                    </p>
-                    <p className="text-xs text-gray-500">Total m²</p>
-                  </div>
-                  <div className="text-center p-3 bg-gray-50 rounded">
-                    <p className="text-2xl font-bold text-orange-600">
-                      {opportunity.product_recommendations.total_packs_required}
-                    </p>
-                    <p className="text-xs text-gray-500">Total Packs</p>
-                  </div>
-                </div>
-                <div className="flex gap-3">
-                  <Link
-                    href={`/va-workspace/${opportunity.product_recommendation_id}`}
-                    className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-center flex items-center justify-center gap-2"
-                  >
-                    <FileText className="w-4 h-4" />
-                    View Recommendation
-                  </Link>
-                  {opportunity.product_recommendations.status === 'Submitted' && (
-                    <Link
-                      href={`/quotes/convert-from-recommendation/${opportunity.product_recommendation_id}?opportunityId=${params.id}`}
-                      className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-center flex items-center justify-center gap-2"
-                    >
-                      <CheckCircle className="w-4 h-4" />
-                      Convert to Quote
-                    </Link>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
-                <div className="flex items-start gap-3">
-                  <Clock className="w-5 h-5 text-blue-600 mt-0.5" />
-                  <div>
-                    <h3 className="font-semibold text-blue-900">No Product Recommendation Yet</h3>
-                    <p className="text-sm text-blue-700 mt-1">
-                      Send this opportunity to VA to create a product recommendation.
-                    </p>
-                    <button className="mt-3 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm">
-                      Send to VA
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Tasks */}
-            <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-lg font-semibold text-gray-800 mb-4">Tasks</h2>
-              {tasks && tasks.length > 0 ? (
-                <div className="space-y-3">
-                  {tasks.map((task: Task) => (
-                    <div key={task.id} className="border border-gray-200 rounded-lg p-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className={`px-2 py-0.5 rounded text-xs font-medium ${priorityColors[task.priority]}`}>
-                              {task.priority}
-                            </span>
-                            <span className="text-xs text-gray-500">{task.task_type}</span>
-                          </div>
-                          <p className="text-sm font-medium text-gray-800">{task.task_description}</p>
-                          {task.assigned_to && (
-                            <p className="text-xs text-gray-500 mt-1">
-                              Assigned to: {task.assigned_to.first_name} {task.assigned_to.last_name}
-                            </p>
-                          )}
-                        </div>
-                        <div className="text-right">
-                          <p className="text-xs text-gray-500">Due</p>
-                          <p className="text-sm font-medium text-gray-800">
-                            {new Date(task.due_date).toLocaleDateString('en-NZ', { 
-                              month: 'short', 
-                              day: 'numeric' 
-                            })}
-                          </p>
-                        </div>
-                      </div>
-                      {task.completion_percent > 0 && (
-                        <div className="mt-3">
-                          <div className="w-full bg-gray-200 rounded-full h-2">
-                            <div
-                              className="bg-blue-600 h-2 rounded-full"
-                              style={{ width: `${task.completion_percent}%` }}
-                            ></div>
-                          </div>
-                          <p className="text-xs text-gray-500 mt-1">{task.completion_percent}% complete</p>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-gray-500 text-sm">No tasks yet</p>
               )}
             </div>
+          )}
+        </div>
 
-            {/* Notes */}
-            <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-lg font-semibold text-gray-800 mb-4">Notes</h2>
-              <p className="text-gray-700 whitespace-pre-wrap">
-                {opportunity.notes || 'No notes added'}
-              </p>
+        {/* Site Address */}
+        <div className="bg-white rounded-lg shadow p-6">
+          <h2 className="text-lg font-semibold text-gray-800 mb-4">Site Address</h2>
+          {editMode ? (
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs text-gray-600 mb-2">Search Existing Sites</label>
+                <SiteSelector
+                  onSiteSelected={(site) => {
+                    if (site) {
+                      handleEditFormChange('site_address', site.address_line_1)
+                      if (site.city) handleEditFormChange('site_city', site.city)
+                      if (site.postcode) handleEditFormChange('site_postcode', site.postcode)
+                      if (site.region_id) handleEditFormChange('region_id', site.region_id)
+                    }
+                  }}
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-600 mb-1">Or Enter Manually</label>
+                <input
+                  type="text"
+                  value={editForm.site_address || ''}
+                  onChange={(e) => handleEditFormChange('site_address', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0066CC]"
+                  placeholder="Street address"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <input
+                  type="text"
+                  value={editForm.site_city || ''}
+                  onChange={(e) => handleEditFormChange('site_city', e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0066CC]"
+                  placeholder="City"
+                />
+                <input
+                  type="text"
+                  value={editForm.site_postcode || ''}
+                  onChange={(e) => handleEditFormChange('site_postcode', e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0066CC]"
+                  placeholder="Postcode"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-600 mb-1">Region</label>
+                <select
+                  value={editForm.region_id || ''}
+                  onChange={(e) => handleEditFormChange('region_id', e.target.value || null)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0066CC]"
+                >
+                  <option value="">-- Select Region --</option>
+                  {regionsList.map(region => (
+                    <option key={region.id} value={region.id}>
+                      {region.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          ) : (
+            <div className="text-sm text-gray-700 space-y-1">
+              <p>{opportunity.site_address || 'N/A'}</p>
+              {(opportunity.site_city || opportunity.site_postcode) && (
+                <p>{opportunity.site_city} {opportunity.site_postcode}</p>
+              )}
+              {opportunity.regions && (
+                <p className="text-xs text-gray-600 mt-1">Region: {opportunity.regions.name}</p>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Status & Financial */}
+        <div className="grid grid-cols-2 gap-6">
+          {/* Status */}
+          <div className="bg-white rounded-lg shadow p-6">
+            <h3 className="font-semibold text-gray-800 mb-4">Status</h3>
+            <div className="space-y-3 text-sm">
+              <div>
+                <label className="text-gray-500 text-xs font-medium">Pipeline Stage</label>
+                <p className={`mt-2 px-3 py-1 rounded-full inline-block text-xs font-medium ${stageColors[opportunity.stage] || 'bg-gray-100 text-gray-800'}`}>
+                  {opportunity.stage}
+                </p>
+              </div>
+              {editMode ? (
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">Sub-Status</label>
+                  <input
+                    type="text"
+                    value={editForm.sub_status || ''}
+                    onChange={(e) => handleEditFormChange('sub_status', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0066CC]"
+                    placeholder="Enter sub-status"
+                  />
+                </div>
+              ) : (
+                opportunity.sub_status && (
+                  <div>
+                    <label className="text-gray-500 text-xs font-medium">Sub-Status</label>
+                    <p className="text-gray-800 mt-1">{opportunity.sub_status}</p>
+                  </div>
+                )
+              )}
             </div>
           </div>
 
-          {/* Right Column - Sidebar */}
-          <div className="space-y-6">
-            {/* Status Card */}
-            <div className="bg-white rounded-lg shadow p-6">
-              <h3 className="font-semibold text-gray-800 mb-4">Status</h3>
-              <div className="space-y-3 text-sm">
-                <div>
-                  <label className="text-gray-500">Pipeline Stage</label>
-                  <p className={`mt-1 px-3 py-1 rounded-full inline-block text-xs font-medium ${stageColors[opportunity.stage]}`}>
-                    {opportunity.stage}
-                  </p>
-                </div>
-                {opportunity.sub_status && (
+          {/* Financial */}
+          <div className="bg-white rounded-lg shadow p-6">
+            <h3 className="font-semibold text-gray-800 mb-4">Financial</h3>
+            <div className="space-y-3 text-sm">
+              {editMode ? (
+                <>
                   <div>
-                    <label className="text-gray-500">Sub-Status</label>
-                    <p className="text-gray-800 mt-1">{opportunity.sub_status}</p>
+                    <label className="block text-xs text-gray-600 mb-1">Estimated Value</label>
+                    <input
+                      type="number"
+                      value={editForm.estimated_value || ''}
+                      onChange={(e) => handleEditFormChange('estimated_value', parseFloat(e.target.value) || null)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0066CC]"
+                      placeholder="0.00"
+                      step="0.01"
+                    />
                   </div>
-                )}
-                {opportunity.recommendation_status && (
                   <div>
-                    <label className="text-gray-500">VA Recommendation</label>
-                    <p className={`mt-1 px-3 py-1 rounded-full inline-block text-xs font-medium ${statusColors[opportunity.recommendation_status]}`}>
-                      {opportunity.recommendation_status}
+                    <label className="block text-xs text-gray-600 mb-1">Actual Value</label>
+                    <input
+                      type="number"
+                      value={editForm.actual_value || ''}
+                      onChange={(e) => handleEditFormChange('actual_value', parseFloat(e.target.value) || null)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0066CC]"
+                      placeholder="0.00"
+                      step="0.01"
+                    />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <label className="text-gray-500 text-xs font-medium">Estimated Value</label>
+                    <p className="text-2xl font-bold text-green-600 mt-1">
+                      ${opportunity.estimated_value?.toLocaleString('en-NZ', { minimumFractionDigits: 2 }) || '0.00'}
                     </p>
                   </div>
-                )}
-              </div>
+                  {opportunity.actual_value && (
+                    <div>
+                      <label className="text-gray-500 text-xs font-medium">Actual Value</label>
+                      <p className="text-xl font-bold text-blue-600 mt-1">
+                        ${opportunity.actual_value.toLocaleString('en-NZ', { minimumFractionDigits: 2 })}
+                      </p>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
+          </div>
+        </div>
 
-            {/* Financial */}
-            <div className="bg-white rounded-lg shadow p-6">
-              <h3 className="font-semibold text-gray-800 mb-4">Financial</h3>
-              <div className="space-y-3 text-sm">
-                <div>
-                  <label className="text-gray-500">Estimated Value</label>
-                  <p className="text-xl font-bold text-green-600">
-                    ${opportunity.estimated_value?.toLocaleString('en-NZ', { minimumFractionDigits: 2 }) || '0.00'}
-                  </p>
-                </div>
-                {opportunity.actual_value && (
-                  <div>
-                    <label className="text-gray-500">Actual Value</label>
-                    <p className="text-xl font-bold text-blue-600">
-                      ${opportunity.actual_value.toLocaleString('en-NZ', { minimumFractionDigits: 2 })}
-                    </p>
-                  </div>
-                )}
-              </div>
+        {/* Sales Rep */}
+        <div className="bg-white rounded-lg shadow p-6">
+          <h3 className="font-semibold text-gray-800 mb-4">Sales Rep</h3>
+          {editMode ? (
+            <select
+              value={editForm.sales_rep_id || ''}
+              onChange={(e) => handleEditFormChange('sales_rep_id', e.target.value || null)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0066CC]"
+            >
+              <option value="">-- Select Sales Rep --</option>
+              {salesRepsList.map(rep => (
+                <option key={rep.id} value={rep.id}>
+                  {rep.name}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <p className="text-sm text-gray-700">
+              {opportunity.sales_rep
+                ? `${opportunity.sales_rep.first_name} ${opportunity.sales_rep.last_name}`
+                : 'Not assigned'}
+            </p>
+          )}
+        </div>
+
+        {/* Dates */}
+        <div className="bg-white rounded-lg shadow p-6">
+          <h3 className="font-semibold text-gray-800 mb-4">Important Dates</h3>
+          <div className="grid grid-cols-2 gap-4 text-sm">
+            <div>
+              <label className="text-gray-500 text-xs font-medium">Created</label>
+              <p className="text-gray-800 mt-1">
+                {new Date(opportunity.created_at).toLocaleDateString('en-NZ', {
+                  year: 'numeric',
+                  month: 'short',
+                  day: 'numeric'
+                })}
+              </p>
             </div>
-
-            {/* Dates */}
-            <div className="bg-white rounded-lg shadow p-6">
-              <h3 className="font-semibold text-gray-800 mb-4">Important Dates</h3>
-              <div className="space-y-3 text-sm">
+            {editMode ? (
+              <div>
+                <label className="block text-xs text-gray-600 mb-1">Target Close Date</label>
+                <input
+                  type="date"
+                  value={editForm.due_date?.split('T')[0] || ''}
+                  onChange={(e) => handleEditFormChange('due_date', e.target.value ? new Date(e.target.value).toISOString() : null)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0066CC]"
+                />
+              </div>
+            ) : (
+              opportunity.due_date && (
                 <div>
-                  <label className="text-gray-500">Created</label>
-                  <p className="text-gray-800">
-                    {new Date(opportunity.created_at).toLocaleDateString('en-NZ', {
+                  <label className="text-gray-500 text-xs font-medium">Target Close Date</label>
+                  <p className="text-gray-800 mt-1">
+                    {new Date(opportunity.due_date).toLocaleDateString('en-NZ', {
                       year: 'numeric',
-                      month: 'long',
+                      month: 'short',
                       day: 'numeric'
                     })}
                   </p>
                 </div>
-                {opportunity.due_date && (
-                  <div>
-                    <label className="text-gray-500">Target Close Date</label>
-                    <p className="text-gray-800">
-                      {new Date(opportunity.due_date).toLocaleDateString('en-NZ', {
-                        year: 'numeric',
-                        month: 'long',
-                        day: 'numeric'
-                      })}
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Attachments */}
-            <div className="bg-white rounded-lg shadow p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="font-semibold text-gray-800">Attachments</h3>
-                <button className="text-blue-600 hover:text-blue-700">
-                  <Upload className="w-4 h-4" />
-                </button>
-              </div>
-              {attachments && attachments.length > 0 ? (
-                <div className="space-y-2">
-                  {attachments.map((file: Attachment) => (
-                    <a
-                      key={file.id}
-                      href={file.file_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-2 p-2 hover:bg-gray-50 rounded"
-                    >
-                      <FileText className="w-4 h-4 text-gray-400" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm text-gray-700 truncate">{file.file_name}</p>
-                        <p className="text-xs text-gray-500">
-                          {(file.file_size / 1024).toFixed(1)} KB
-                        </p>
-                      </div>
-                    </a>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-gray-500">No files attached</p>
-              )}
-            </div>
-
-            {/* Sales Rep */}
-            {opportunity.team_members && (
-              <div className="bg-white rounded-lg shadow p-6">
-                <h3 className="font-semibold text-gray-800 mb-3">Sales Representative</h3>
-                <p className="text-sm font-medium text-gray-800">
-                  {opportunity.team_members.first_name} {opportunity.team_members.last_name}
-                </p>
-                <p className="text-xs text-gray-500 mt-1">{opportunity.team_members.email}</p>
-              </div>
+              )
             )}
           </div>
+        </div>
+
+        {/* Notes */}
+        <div className="bg-white rounded-lg shadow p-6">
+          <h3 className="font-semibold text-gray-800 mb-4">Notes</h3>
+          {editMode ? (
+            <textarea
+              value={editForm.notes || ''}
+              onChange={(e) => handleEditFormChange('notes', e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0066CC] min-h-[100px]"
+              placeholder="Add notes about this opportunity..."
+            />
+          ) : (
+            <p className="text-gray-700 text-sm whitespace-pre-wrap">
+              {opportunity.notes || 'No notes added'}
+            </p>
+          )}
         </div>
       </div>
     </div>

@@ -14,20 +14,26 @@ export interface Assessment {
   updated_at: string
 }
 
-export async function fetchAssessmentsByClient(clientId: string): Promise<Assessment[]> {
+export async function fetchAssessmentsByClient(clientId: string) {
   try {
     const { data, error } = await supabase
       .from('assessments')
-      .select(
-        'id, assessment_number, reference_number, status, scheduled_date, completed_at, site_address, city, created_at, updated_at'
-      )
+      .select(`
+        id,
+        assessment_number,
+        reference_number,
+        status,
+        scheduled_date,
+        completed_at,
+        created_at
+      `)
       .eq('client_id', clientId)
       .order('scheduled_date', { ascending: false })
 
     if (error) throw error
-    return (data || []) as Assessment[]
+    return data || []
   } catch (error) {
     console.error('Error fetching assessments by client:', error)
-    throw error
+    return []
   }
 }

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, use } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
@@ -53,15 +53,15 @@ interface IncidentNote {
   created_by_name: string | null
 }
 
-export default function IncidentDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const resolvedParams = use(params)
+export default function IncidentDetailPage({ params }: { params: { id: string } }) {
+  const incidentId = params.id
   const router = useRouter()
   const [incident, setIncident] = useState<IncidentDetails | null>(null)
   const [photos, setPhotos] = useState<IncidentPhoto[]>([])
   const [notes, setNotes] = useState<IncidentNote[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  
+
   // New Note Form
   const [showNoteForm, setShowNoteForm] = useState(false)
   const [newNote, setNewNote] = useState({ note_text: '', note_type: 'Update', is_internal: false })
@@ -74,7 +74,7 @@ export default function IncidentDetailPage({ params }: { params: Promise<{ id: s
     fetchIncidentDetails()
     fetchPhotos()
     fetchNotes()
-  }, [resolvedParams.id])
+  }, [incidentId])
 
   const fetchIncidentDetails = async () => {
     try {
@@ -89,7 +89,7 @@ export default function IncidentDetailPage({ params }: { params: Promise<{ id: s
           reported_by_team:team_members!reported_by(first_name, last_name),
           assigned_to_team:team_members!assigned_to(first_name, last_name)
         `)
-        .eq('id', resolvedParams.id)
+        .eq('id', incidentId)
         .single()
 
       if (fetchError) throw fetchError
@@ -139,7 +139,7 @@ export default function IncidentDetailPage({ params }: { params: Promise<{ id: s
           *,
           uploaded_by_team:team_members!uploaded_by(first_name, last_name)
         `)
-        .eq('incident_id', resolvedParams.id)
+        .eq('incident_id', incidentId)
         .is('deleted_at', null)
         .order('taken_at', { ascending: false })
 
@@ -169,7 +169,7 @@ export default function IncidentDetailPage({ params }: { params: Promise<{ id: s
           *,
           created_by_team:team_members!created_by(first_name, last_name)
         `)
-        .eq('incident_id', resolvedParams.id)
+        .eq('incident_id', incidentId)
         .order('created_at', { ascending: false })
 
       if (fetchError) throw fetchError
@@ -199,7 +199,7 @@ export default function IncidentDetailPage({ params }: { params: Promise<{ id: s
       const { error: insertError } = await supabase
         .from('incident_notes')
         .insert({
-          incident_id: resolvedParams.id,
+          incident_id: incidentId,
           note_text: newNote.note_text,
           note_type: newNote.note_type,
           is_internal: newNote.is_internal,
@@ -241,7 +241,7 @@ export default function IncidentDetailPage({ params }: { params: Promise<{ id: s
         }
 
         // Upload to Storage
-        const fileName = `${resolvedParams.id}/${Date.now()}_${file.name}`
+        const fileName = `${incidentId}/${Date.now()}_${file.name}`
         const { error: uploadError } = await supabase.storage
           .from('incident-photos')
           .upload(fileName, file)
@@ -257,7 +257,7 @@ export default function IncidentDetailPage({ params }: { params: Promise<{ id: s
         const { error: insertError } = await supabase
           .from('incident_photos')
           .insert({
-            incident_id: resolvedParams.id,
+            incident_id: incidentId,
             file_name: file.name,
             file_url: publicUrl,
             uploaded_by: 'current-user-id' // TODO: Replace with actual user ID
@@ -283,7 +283,7 @@ export default function IncidentDetailPage({ params }: { params: Promise<{ id: s
       const { error: updateError } = await supabase
         .from('incidents')
         .update({ status: newStatus })
-        .eq('id', resolvedParams.id)
+        .eq('id', incidentId)
 
       if (updateError) throw updateError
 

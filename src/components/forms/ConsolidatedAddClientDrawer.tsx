@@ -285,12 +285,16 @@ export default function ConsolidatedAddClientDrawer({ isOpen, onClose }: AddClie
         createdContactId = contactResult?.id || null
       }
 
-      // Success - redirect with new ID
-      const currentPath = window.location.pathname
+      // Success - close drawer and refresh parent
+      resetForms()
+      onClose()
+
+      // Optional: Add query param for the parent to detect new client
       if (createdContactId) {
-        window.location.href = `${currentPath}?newContactId=${createdContactId}`
-      } else if (createdCompanyId) {
-        window.location.href = `${currentPath}?newCompanyId=${createdCompanyId}`
+        const currentPath = window.location.pathname
+        window.history.pushState({}, '', `${currentPath}?newContactId=${createdContactId}`)
+        // Trigger a popstate event so useSearchParams picks it up
+        window.dispatchEvent(new PopStateEvent('popstate'))
       }
     } catch (err: any) {
       console.error('Error creating:', err)

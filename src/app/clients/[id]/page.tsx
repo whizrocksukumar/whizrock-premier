@@ -7,13 +7,13 @@ import Link from 'next/link'
 // If your project uses the '@' alias for 'src', try this import:
 // import ClientOverviewCard from '@/components/client/ClientOverviewCard';
 import ClientOverviewCard from '@/components/client/ClientOverviewCard'
-import { fetchClientWithRelations, fetchClientActivitySummary, ClientWithRelations, ActivitySummary } from '@/lib/clients-helpers'
-import { fetchOpportunitiesByClient } from '@/lib/opportunities-helpers'
-import { fetchQuotesByClient } from '@/lib/quotes-helpers'
-import { fetchJobsByClient } from '@/lib/jobs-helpers'
-import { fetchInvoicesByClient } from '@/lib/invoices-helpers'
-import { fetchAssessmentsByClient } from '@/lib/assessments-queries'
-import { fetchCertificatesByClient } from '@/lib/certificates-queries'
+import { fetchClientWithRelations, fetchClientActivitySummary, ClientWithRelations, ActivitySummary } from '@/lib/utils/clients-helpers'
+import { fetchOpportunitiesByClient } from '@/lib/utils/opportunities-helpers'
+import { fetchQuotesByClient } from '@/lib/utils/quotes-helpers'
+import { fetchJobsByClient } from '@/lib/utils/jobs-helpers'
+import { fetchInvoicesByClient } from '@/lib/utils/invoices-helpers'
+import { fetchAssessmentsByClient } from '@/lib/utils/assessments-queries'
+import { fetchCertificatesByClient } from '@/lib/utils/certificates-queries'
 import StatusBadge from '@/components/StatusBadge'
 
 type TabType = 'opportunities' | 'quotes' | 'jobs' | 'assessments' | 'invoices' | 'certificates' | 'notes'
@@ -250,9 +250,12 @@ export default function ClientDetailPage() {
               <div>
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="text-lg font-semibold text-gray-800">Opportunities</h3>
-                  <button className="px-4 py-2 bg-[#0066CC] text-white rounded hover:bg-[#0052a3] text-sm font-medium">
+                  <Link 
+                    href={`/opportunities/new?client_id=${clientId}`}
+                    className="px-4 py-2 bg-[#0066CC] text-white rounded hover:bg-[#0052a3] text-sm font-medium"
+                  >
                     + New Opportunity
-                  </button>
+                  </Link>
                 </div>
                 {tabData.opportunities.length > 0 ? (
                   <div className="overflow-x-auto">

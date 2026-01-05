@@ -9,6 +9,7 @@ import { ImportButton, ExportButton } from '@/components/shared/ActionButtons'
 interface Assessment {
   id: string
   reference_number: string
+  site_id: string | null
   site_address: string
   scheduled_date: string
   scheduled_time: string
@@ -16,6 +17,7 @@ interface Assessment {
   assigned_installer_id: string | null
   client_id: string | null
   created_at: string
+  completed_date: string | null
   contactName: string
   companyName: string
   installerName: string
@@ -31,10 +33,33 @@ export default function AssessmentsPage() {
   const [totalCount, setTotalCount] = useState(0)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('ALL')
+  const [installerFilter, setInstallerFilter] = useState('all')
+  const [installersList, setInstallersList] = useState<Array<{ id: string; name: string }>>([])
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+
+  useEffect(() => {
+    fetchInstallers()
+  }, [])
 
   useEffect(() => {
     getAssessments(1)
-  }, [searchTerm, statusFilter])
+  }, [searchTerm, statusFilter, installerFilter])
+
+  const fetchInstallers = async () => {
+    const { data, error } = await supabase
+      .from('team_members')
+      .select('id, first_name, last_name')
+      .eq('role', 'Installer')
+      .order('first_name')
+
+    if (!error && data) {
+      const formattedInstallers = data.map(installer => ({
+        id: installer.id,
+        name: `${installer.first_name} ${installer.last_name}`
+      }))
+      setInstallersList(formattedInstallers)
+    }
+  }
 
   async function getAssessments(page: number) {
     try {
@@ -48,13 +73,27 @@ export default function AssessmentsPage() {
 
       let dataQuery = supabase
         .from('assessments')
-        .select('*')
+        .select(`
+          *,
+          sites!site_id (
+            address_line_1,
+            address_line_2,
+            city,
+            postcode
+          )
+        `)
         .neq('status', 'Deleted')
 
       // Apply status filter
       if (statusFilter !== 'ALL') {
         countQuery = countQuery.eq('status', statusFilter)
         dataQuery = dataQuery.eq('status', statusFilter)
+      }
+
+      // Apply installer filter
+      if (installerFilter !== 'all') {
+        countQuery = countQuery.eq('assigned_installer_id', installerFilter)
+        dataQuery = dataQuery.eq('assigned_installer_id', installerFilter)
       }
 
       // Apply search filter
@@ -137,6 +176,7 @@ export default function AssessmentsPage() {
         let contactName = 'No Client'
         let companyName = '—'
         let installerName = 'Unassigned'
+        let site_address = '—'
 
         if (assessment.client_id && clientMap[assessment.client_id]) {
           const client = clientMap[assessment.client_id]
@@ -152,11 +192,24 @@ export default function AssessmentsPage() {
           installerName = `${installer.first_name} ${installer.last_name}`
         }
 
+        // Construct site address from joined sites table
+        if (assessment.sites) {
+          const site = assessment.sites
+          const addressParts = [
+            site.address_line_1,
+            site.address_line_2,
+            site.city,
+            site.postcode
+          ].filter(Boolean)
+          site_address = addressParts.join(', ') || '—'
+        }
+
         return {
           ...assessment,
           contactName,
           companyName,
-          installerName
+          installerName,
+          site_address
         }
       })
 
@@ -188,94 +241,151 @@ export default function AssessmentsPage() {
     }
   }
 
+  const toggleSelectAll = () => {
+    if (selectedIds.size === assessments.length && assessments.length > 0) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(assessments.map(a => a.id)))
+    }
+  }
+
+  const toggleSelectAssessment = (id: string) => {
+    const newSelected = new Set(selectedIds)
+    if (newSelected.has(id)) {
+      newSelected.delete(id)
+    } else {
+      newSelected.add(id)
+    }
+    setSelectedIds(newSelected)
+  }
+
   const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE)
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Standardized Page Header */}
+    <div className="min-h-screen bg-gray-100">
+      {/* PAGE HEADER */}
       <div className="bg-white border-b border-gray-200 px-6 py-4">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
+        <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Assessments</h1>
-            <p className="text-gray-600 text-sm mt-1">Schedule and manage free site assessments</p>
+            <h1 className="text-2xl font-semibold text-[#0066CC]">Assessments</h1>
+            <p className="text-sm text-gray-500 mt-1">Schedule and manage site assessments</p>
           </div>
-          <Link
-            href="/assessments/new"
-            className="inline-flex items-center gap-2 bg-[#0066CC] text-white px-4 py-2 rounded-lg hover:bg-[#0052a3]"
-          >
-            <Plus className="w-4 h-4" />
-            Schedule Assessment
-          </Link>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white font-medium">
+              U
+            </div>
+            <div className="text-right">
+              <p className="text-sm text-gray-700">user@premier.local</p>
+            </div>
+            <button className="ml-2 text-xs text-[#0066CC] hover:underline">Logout</button>
+          </div>
         </div>
       </div>
-      
-      <div className="p-6">
-        {/* Search and Filter Bar */}
-        <div className="bg-white rounded-lg shadow-sm p-4 mb-6 border border-gray-200">
-          <div className="flex items-center gap-4">
-            {/* Search Box - 30% width */}
-            <div className="w-[30%] relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+
+      {/* TOOLBAR ROW */}
+      <div className="bg-white border-b border-gray-200 px-6 py-3">
+        <div className="flex items-center justify-between">
+          {/* Left side - Search */}
+          <div className="w-64">
+            <div className="relative">
+              <Search className="absolute left-3 top-2.5 w-5 h-5 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search by reference or address..."
+                placeholder="Search assessments..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC]"
+                className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-[#0066CC] focus:border-transparent text-sm"
               />
             </div>
+          </div>
 
-            {/* Status Filter Buttons */}
-            <div className="flex gap-2">
-              <button
-                onClick={() => setStatusFilter('ALL')}
-                className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
-                  statusFilter === 'ALL'
-                    ? 'bg-[#0066CC] text-white'
-                    : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
-                }`}
-              >
-                All
-              </button>
-              <button
-                onClick={() => setStatusFilter('Scheduled')}
-                className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
-                  statusFilter === 'Scheduled'
-                    ? 'bg-blue-100 text-blue-800 border border-blue-300'
-                    : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
-                }`}
-              >
-                Scheduled
-              </button>
-              <button
-                onClick={() => setStatusFilter('Completed')}
-                className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
-                  statusFilter === 'Completed'
-                    ? 'bg-green-100 text-green-800 border border-green-300'
-                    : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
-                }`}
-              >
-                Completed
-              </button>
-              <button
-                onClick={() => setStatusFilter('Cancelled')}
-                className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
-                  statusFilter === 'Cancelled'
-                    ? 'bg-gray-100 text-gray-800 border border-gray-300'
-                    : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
-                }`}
-              >
-                Cancelled
-              </button>
-            </div>
-
-            {/* Action Buttons - Right aligned */}
-            <div className="flex gap-2 ml-auto">
-              <ExportButton />
-              <ImportButton />
-            </div>
+          {/* Right side - Action Buttons */}
+          <div className="flex items-center gap-2">
+            <button className="px-4 py-2 text-sm border border-gray-300 rounded hover:bg-gray-50 transition-colors">
+              Export
+            </button>
+            <button className="px-4 py-2 text-sm border border-gray-300 rounded hover:bg-gray-50 transition-colors">
+              Import
+            </button>
+            <Link
+              href="/assessments/new"
+              className="px-4 py-2 text-sm bg-[#0066CC] text-white rounded hover:bg-[#0052a3] hover:shadow-md transition-all duration-200 flex items-center gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              New Assessment
+            </Link>
           </div>
         </div>
+      </div>
+
+      {/* FILTER ROW */}
+      <div className="bg-white border-b border-gray-200 px-6 py-3">
+        <div className="flex items-center gap-6">
+          {/* Status Filter */}
+          <div className="flex items-center gap-3">
+            <span className="text-sm font-medium text-gray-700">Status:</span>
+            <button
+              onClick={() => setStatusFilter('ALL')}
+              className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                statusFilter === 'ALL'
+                  ? 'bg-[#0066CC] text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              All
+            </button>
+            <button
+              onClick={() => setStatusFilter('Scheduled')}
+              className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                statusFilter === 'Scheduled'
+                  ? 'bg-[#0066CC] text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              Scheduled
+            </button>
+            <button
+              onClick={() => setStatusFilter('Completed')}
+              className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                statusFilter === 'Completed'
+                  ? 'bg-[#0066CC] text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              Completed
+            </button>
+            <button
+              onClick={() => setStatusFilter('Cancelled')}
+              className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                statusFilter === 'Cancelled'
+                  ? 'bg-[#0066CC] text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              Cancelled
+            </button>
+          </div>
+
+          {/* Installer Filter */}
+          <div className="flex items-center gap-3">
+            <span className="text-sm font-medium text-gray-700">Installer:</span>
+            <select
+              value={installerFilter}
+              onChange={(e) => setInstallerFilter(e.target.value)}
+              className="px-3 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-[#0066CC]"
+            >
+              <option value="all">All Installers</option>
+              {installersList.map(installer => (
+                <option key={installer.id} value={installer.id}>
+                  {installer.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div className="p-6">
 
         {/* Error Message */}
         {error && (
@@ -307,6 +417,14 @@ export default function AssessmentsPage() {
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-[#0066CC]">
                     <tr>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-white uppercase tracking-wider">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.size === assessments.length && assessments.length > 0}
+                          onChange={toggleSelectAll}
+                          className="rounded"
+                        />
+                      </th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
                         action
                       </th>
@@ -332,18 +450,26 @@ export default function AssessmentsPage() {
                         assigned installer
                       </th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
-                        created date
+                        completed date
                       </th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {assessments.map((assessment) => (
                       <tr key={assessment.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 text-center whitespace-nowrap">
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.has(assessment.id)}
+                            onChange={() => toggleSelectAssessment(assessment.id)}
+                            className="rounded"
+                          />
+                        </td>
                         <td className="px-4 py-3 whitespace-nowrap">
                           <div className="flex items-center gap-2">
                             <Link
                               href={`/assessments/${assessment.id}`}
-                              className="p-1 text-blue-600 hover:bg-blue-50 rounded"
+                              className="p-1 text-blue-600 hover:bg-gray-100 hover:text-blue-800 rounded"
                               title="View"
                             >
                               <Eye className="w-4 h-4" />
@@ -397,7 +523,7 @@ export default function AssessmentsPage() {
                           {assessment.installerName}
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
-                          {formatDate(assessment.created_at)}
+                          {assessment.completed_date ? formatDate(assessment.completed_date) : '—'}
                         </td>
                       </tr>
                     ))}

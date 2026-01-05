@@ -264,7 +264,7 @@
   
   .btn-primary:hover:not(:disabled) {
     background-color: var(--color-primary-dark);
-    color: white;
+    color: white !important;
     box-shadow: var(--shadow-md);
     transform: translateY(-1px);
   }
@@ -678,8 +678,8 @@
   }
   
   .sidebar-nav-item:hover {
-    background-color: var(--color-sidebar-hover);
-    color: white;
+    background-color: rgba(255, 255, 255, 0.1);
+    color: var(--color-sidebar-text) !important;
     text-decoration: none;
   }
   
@@ -928,5 +928,28 @@
   @media (min-width: 1024px) {
     .lg\:grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .lg\:grid-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  }
+}
+
+/* ============================================
+   UTILITIES LAYER - OVERRIDE HELPERS
+   ============================================ */
+@layer utilities {
+  /* Fix for blue buttons with hover text visibility */
+  .bg-\[--0066CC\]:hover,
+  .bg-blue-600:hover,
+  .hover\:bg-\[\#0052a3\]:hover,
+  .hover\:bg-blue-700:hover,
+  [class*="bg-[#0066CC]"]:hover,
+  [class*="bg-blue"]:hover {
+    color: white !important;
+  }
+
+  /* Ensure white text on any blue background hover */
+  button:hover[class*="bg-[#0066CC]"],
+  button:hover[class*="bg-blue"],
+  a:hover[class*="bg-[#0066CC]"],
+  a:hover[class*="bg-blue"] {
+    color: white !important;
   }
 }
