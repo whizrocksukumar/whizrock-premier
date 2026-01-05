@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { Search, Plus, Trash2, X } from 'lucide-react';
-import ClientSelector from '@/components/ClientSelector';
+import ClientSelectorSimple from '@/components/ClientSelectorSimple';
 import SiteSelector from '@/components/SiteSelector';
 
 // Types
@@ -738,8 +738,7 @@ export default function AddQuotePage() {
                     </div>
                     <div className="p-6">
                         <div className="mb-6">
-                            <label className="block text-sm font-medium text-gray-700 mb-2">Select Client *</label>
-                            <ClientSelector
+                            <ClientSelectorSimple
                                 onClientSelected={(client) => {
                                     if (client) {
                                         setClientId(client.id);
@@ -763,6 +762,8 @@ export default function AddQuotePage() {
                                     setPostcode('');
                                     setRegionId('');
                                 }}
+                                label="Select Client"
+                                placeholder="Search by name, email, phone, or company..."
                             />
                         </div>
 
