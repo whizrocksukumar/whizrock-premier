@@ -531,7 +531,7 @@ export default function AddQuotePage() {
 
                 if (itemsToInsert.length > 0) {
                     const { error: itemsError } = await supabase
-                        .from('quote_items')
+                        .from('quote_line_items')
                         .insert(itemsToInsert);
 
                     if (itemsError) throw itemsError;
