@@ -648,14 +648,14 @@ export default function QuotesPage() {
                             <div className="flex items-center gap-2">
                               <Link
                                 href={`/quotes/${quote.id}`}
-                                className="p-1 text-blue-600 hover:bg-gray-100 hover:text-blue-800 rounded"
+                                className="p-1 text-gray-600 hover:bg-gray-200 rounded"
                                 title="View"
                               >
                                 <Eye className="w-4 h-4" />
                               </Link>
                               <Link
                                 href={`/quotes/${quote.id}/edit`}
-                                className="p-1 text-gray-600 hover:bg-gray-100 rounded"
+                                className="p-1 text-gray-600 hover:bg-gray-200 rounded"
                                 title="Edit"
                               >
                                 <Edit className="w-4 h-4" />

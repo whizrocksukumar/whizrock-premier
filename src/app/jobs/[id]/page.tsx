@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
+import ClientOverviewCard from '@/components/client/ClientOverviewCard';
+import { fetchClientWithRelations, ClientWithRelations } from '@/lib/utils/clients-helpers';
 import { ArrowLeft, Edit, FileText } from 'lucide-react';
 
 interface JobDetail {
@@ -72,7 +74,7 @@ interface Comment {
   is_internal: boolean;
 }
 
-type TabName = 'materials' | 'labour' | 'history' | 'comments';
+type TabName = 'overview' | 'materials' | 'labour' | 'history' | 'comments';
 
 const formatDate = (dateString: string | null) =>
   dateString
@@ -119,7 +121,9 @@ export default function JobDetailPage({ params }: { params: { id: string } }) {
   const router = useRouter();
   const jobId = params.id;
   const [job, setJob] = useState<JobDetail | null>(null);
+  const [clientOverview, setClientOverview] = useState<ClientWithRelations | null>(null);
   const [quoteNumber, setQuoteNumber] = useState('');
+  const [derivedSiteAddress, setDerivedSiteAddress] = useState('');
   const [crewLeadName, setCrewLeadName] = useState('');
   const [lineItems, setLineItems] = useState<LineItem[]>([]);
   const [labourItems, setLabourItems] = useState<LabourItem[]>([]);
@@ -127,7 +131,7 @@ export default function JobDetailPage({ params }: { params: { id: string } }) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [activeTab, setActiveTab] = useState<TabName>('materials');
+  const [activeTab, setActiveTab] = useState<TabName>('overview');
 
   useEffect(() => {
     if (!jobId) return;
@@ -148,14 +152,53 @@ export default function JobDetailPage({ params }: { params: { id: string } }) {
       if (jobError || !jobData) throw jobError;
       setJob(jobData);
 
-      // Fetch quote number
+      // Fetch quote, client, and site details
       if (jobData.quote_id) {
-        const { data: quoteData } = await supabase
+        const { data: quoteData, error: quoteError } = await supabase
           .from('quotes')
-          .select('quote_number')
+          .select('id, quote_number, client_id, site_id')
           .eq('id', jobData.quote_id)
           .single();
-        if (quoteData) setQuoteNumber(quoteData.quote_number);
+
+        if (quoteError) throw quoteError;
+
+        if (quoteData) {
+          setQuoteNumber(quoteData.quote_number || '');
+
+          if (quoteData.client_id) {
+            const clientData = await fetchClientWithRelations(quoteData.client_id);
+            setClientOverview(clientData);
+          } else {
+            setClientOverview(null);
+          }
+
+          if (quoteData.site_id) {
+            const { data: siteData, error: siteError } = await supabase
+              .from('sites')
+              .select('address_line_1, address_line_2, city, postcode')
+              .eq('id', quoteData.site_id)
+              .single();
+
+            if (siteError) throw siteError;
+            if (siteData) {
+              const addressParts = [
+                siteData.address_line_1,
+                siteData.address_line_2,
+                siteData.city,
+                siteData.postcode
+              ].filter(Boolean);
+              setDerivedSiteAddress(addressParts.join(', '));
+            } else {
+              setDerivedSiteAddress('');
+            }
+          } else {
+            setDerivedSiteAddress('');
+          }
+        }
+      } else {
+        setQuoteNumber('');
+        setClientOverview(null);
+        setDerivedSiteAddress('');
       }
 
       // Fetch crew lead name
@@ -232,7 +275,48 @@ export default function JobDetailPage({ params }: { params: { id: string } }) {
     );
   }
 
-  const customerName = `${job.customer_first_name || ''} ${job.customer_last_name || ''}`.trim() || '—';
+  const customerFirstName = job.customer_first_name || clientOverview?.first_name || '';
+  const customerLastName = job.customer_last_name || clientOverview?.last_name || '';
+  const customerName = `${customerFirstName} ${customerLastName}`.trim() || '-';
+  const customerEmail = job.customer_email || clientOverview?.email || '-';
+  const customerPhone = job.customer_phone || clientOverview?.phone || '-';
+  const customerCompany = job.customer_company || clientOverview?.company_name || '';
+  const resolvedSiteAddress = job.site_address || derivedSiteAddress || clientOverview?.address || '';
+  const displayCompany = customerCompany || '-';
+  const displayAddress = resolvedSiteAddress || '-';
+  const clientOverviewForJob = clientOverview
+    ? { ...clientOverview, address: resolvedSiteAddress || clientOverview.address }
+    : null;
+
+  const customerCard = clientOverviewForJob ? (
+    <ClientOverviewCard client={clientOverviewForJob} />
+  ) : (
+    <div className="bg-white rounded-lg shadow p-4">
+      <h2 className="text-base font-semibold mb-4">Customer Details</h2>
+      <div className="space-y-2 text-sm">
+        <div className="flex justify-between">
+          <span className="text-gray-500">Company</span>
+          <span className="font-medium">{displayCompany}</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-gray-500">Name</span>
+          <span className="font-medium">{customerName}</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-gray-500">Email</span>
+          <span className="font-medium text-xs">{customerEmail}</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-gray-500">Phone</span>
+          <span className="font-medium">{customerPhone}</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-gray-500">Address</span>
+          <span className="font-medium text-right text-xs">{displayAddress}</span>
+        </div>
+      </div>
+    </div>
+  );
 
   // Costing calculations
   const materialsQuoted = lineItems?.reduce((s, item) => s + (item.line_cost || 0), 0) || 0;
@@ -258,7 +342,7 @@ export default function JobDetailPage({ params }: { params: { id: string } }) {
         </Link>
 
         <h1 className="text-2xl font-bold">{job.job_number}</h1>
-        <p className="text-sm text-gray-600">{customerName} • {job.customer_email}</p>
+        <p className="text-sm text-gray-600">{customerName} • {customerEmail}</p>
       </div>
 
       {/* STATUS BAR */}
@@ -293,174 +377,57 @@ export default function JobDetailPage({ params }: { params: { id: string } }) {
       {/* MAIN CONTENT */}
       <div className="p-6 space-y-6">
 
-        {/* -------- TOP 3 CARDS (OVERVIEW - ALWAYS VISIBLE) -------- */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-
-          {/* CUSTOMER CARD */}
-          <div className="bg-white rounded-lg shadow p-4">
-            <h2 className="text-base font-semibold mb-4">Customer Details</h2>
-
-            <div className="space-y-2 text-sm">
-              {job.customer_company && (
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Company</span>
-                  <span className="font-medium">{job.customer_company}</span>
-                </div>
-              )}
-              <div className="flex justify-between">
-                <span className="text-gray-500">Name</span>
-                <span className="font-medium">{customerName}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-500">Email</span>
-                <span className="font-medium text-xs">{job.customer_email}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-500">Phone</span>
-                <span className="font-medium">{job.customer_phone || '—'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-500">Address</span>
-                <span className="font-medium text-right text-xs">{job.site_address || '—'}</span>
-              </div>
-            </div>
-          </div>
-
-          {/* JOB INFO CARD */}
-          <div className="bg-white rounded-lg shadow p-4">
-            <h2 className="text-base font-semibold mb-4">Job Information</h2>
-
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-gray-500">Status</span>
-                <span className={`px-2 py-1 text-xs rounded-full ${getStatusBadge(job.status)}`}>
-                  {job.status}
-                </span>
-              </div>
-
-              <div className="flex justify-between">
-                <span className="text-gray-500">Scheduled</span>
-                <span className="font-medium">{formatDate(job.scheduled_date)}</span>
-              </div>
-
-              {job.start_date && (
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Start</span>
-                  <span className="font-medium">{formatDate(job.start_date)}</span>
-                </div>
-              )}
-
-              {job.completion_date && (
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Completed</span>
-                  <span className="font-medium">{formatDate(job.completion_date)}</span>
-                </div>
-              )}
-
-              <div className="flex justify-between">
-                <span className="text-gray-500">Installer</span>
-                <span className="font-medium">{crewLeadName || '—'}</span>
-              </div>
-
-              {job.warranty_period_months && (
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Warranty</span>
-                  <span className="font-medium">{job.warranty_period_months} months</span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* QUICK STATS CARD */}
-          <div className="bg-white rounded-lg shadow p-4">
-            <h2 className="text-base font-semibold mb-4">Quick Stats</h2>
-
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-gray-500">Total Quoted</span>
-                <span className="font-bold">{formatCurrency(totalQuoted)}</span>
-              </div>
-
-              <div className="flex justify-between">
-                <span className="text-gray-500">Total Actual</span>
-                <span className="font-bold">{formatCurrency(totalActual)}</span>
-              </div>
-
-              <div className="flex justify-between">
-                <span className="text-gray-500">Variance</span>
-                <span className={`font-bold ${variance >= 0 ? 'text-red-600' : 'text-green-600'}`}>
-                  {formatCurrency(Math.abs(variance))}
-                  <span className="text-xs ml-1">({variancePercent.toFixed(1)}%)</span>
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* -------- JOB COSTING ANALYSIS -------- */}
-        <div className="bg-white rounded-lg shadow p-4">
-          <h2 className="text-base font-semibold mb-3">Job Costing Analysis</h2>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <div className="border rounded p-3">
-              <p className="text-xs text-gray-500">Materials Quoted</p>
-              <p className="text-base font-bold text-gray-900">{formatCurrency(materialsQuoted)}</p>
-            </div>
-            <div className="border rounded p-3">
-              <p className="text-xs text-gray-500">Materials Actual</p>
-              <p className="text-base font-bold text-gray-900">{formatCurrency(materialsActual)}</p>
-            </div>
-            <div className="border rounded p-3">
-              <p className="text-xs text-gray-500">Labour Quoted</p>
-              <p className="text-base font-bold text-gray-900">{formatCurrency(labourQuoted)}</p>
-            </div>
-            <div className="border rounded p-3">
-              <p className="text-xs text-gray-500">Labour Actual</p>
-              <p className="text-base font-bold text-gray-900">{formatCurrency(labourActual)}</p>
-            </div>
-          </div>
-        </div>
-
         {/* -------- TABS -------- */}
         <div className="bg-white rounded-lg shadow overflow-hidden">
           
           {/* TAB NAVIGATION */}
-          <div className="border-b border-gray-200 px-6 flex gap-6">
+          <div className="border-b border-gray-200 flex px-6 overflow-x-auto">
+            <button
+              onClick={() => setActiveTab('overview')}
+              className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                activeTab === 'overview'
+                  ? 'border-[#0066CC] text-white bg-[#0066CC]'
+                  : 'border-transparent text-gray-600 bg-gray-50 hover:text-[#0066CC]'
+              }`}
+            >
+              Overview
+            </button>
             <button
               onClick={() => setActiveTab('materials')}
-              className={`py-4 px-0 font-medium text-sm border-b-2 transition-colors ${
+              className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                 activeTab === 'materials'
-                  ? 'border-[#0066CC] text-[#0066CC]'
-                  : 'border-transparent text-gray-600 hover:text-gray-900'
+                  ? 'border-[#0066CC] text-white bg-[#0066CC]'
+                  : 'border-transparent text-gray-600 bg-gray-50 hover:text-[#0066CC]'
               }`}
             >
               Materials & Products
             </button>
             <button
               onClick={() => setActiveTab('labour')}
-              className={`py-4 px-0 font-medium text-sm border-b-2 transition-colors ${
+              className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                 activeTab === 'labour'
-                  ? 'border-[#0066CC] text-[#0066CC]'
-                  : 'border-transparent text-gray-600 hover:text-gray-900'
+                  ? 'border-[#0066CC] text-white bg-[#0066CC]'
+                  : 'border-transparent text-gray-600 bg-gray-50 hover:text-[#0066CC]'
               }`}
             >
               Labour
             </button>
             <button
               onClick={() => setActiveTab('history')}
-              className={`py-4 px-0 font-medium text-sm border-b-2 transition-colors ${
+              className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                 activeTab === 'history'
-                  ? 'border-[#0066CC] text-[#0066CC]'
-                  : 'border-transparent text-gray-600 hover:text-gray-900'
+                  ? 'border-[#0066CC] text-white bg-[#0066CC]'
+                  : 'border-transparent text-gray-600 bg-gray-50 hover:text-[#0066CC]'
               }`}
             >
               Status History
             </button>
             <button
               onClick={() => setActiveTab('comments')}
-              className={`py-4 px-0 font-medium text-sm border-b-2 transition-colors ${
+              className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                 activeTab === 'comments'
-                  ? 'border-[#0066CC] text-[#0066CC]'
-                  : 'border-transparent text-gray-600 hover:text-gray-900'
+                  ? 'border-[#0066CC] text-white bg-[#0066CC]'
+                  : 'border-transparent text-gray-600 bg-gray-50 hover:text-[#0066CC]'
               }`}
             >
               Notes & Comments
@@ -469,6 +436,113 @@ export default function JobDetailPage({ params }: { params: { id: string } }) {
 
           {/* TAB CONTENT */}
           <div className="p-6">
+
+            {/* OVERVIEW TAB */}
+            {activeTab === 'overview' && (
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                  <div className="lg:col-span-2">
+                    {customerCard}
+                  </div>
+                  <div className="space-y-4">
+                    <div className="bg-white rounded-lg shadow p-4">
+                      <h2 className="text-base font-semibold mb-4">Job Information</h2>
+
+                      <div className="space-y-2 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Status</span>
+                          <span className={`px-2 py-1 text-xs rounded-full ${getStatusBadge(job.status)}`}>
+                            {job.status}
+                          </span>
+                        </div>
+
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Scheduled</span>
+                          <span className="font-medium">{formatDate(job.scheduled_date)}</span>
+                        </div>
+
+                        {job.start_date && (
+                          <div className="flex justify-between">
+                            <span className="text-gray-500">Start</span>
+                            <span className="font-medium">{formatDate(job.start_date)}</span>
+                          </div>
+                        )}
+
+                        {job.completion_date && (
+                          <div className="flex justify-between">
+                            <span className="text-gray-500">Completed</span>
+                            <span className="font-medium">{formatDate(job.completion_date)}</span>
+                          </div>
+                        )}
+
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Installer</span>
+                          <span className="font-medium">{crewLeadName || '-'}</span>
+                        </div>
+
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Site Address</span>
+                          <span className="font-medium text-right text-xs">{displayAddress}</span>
+                        </div>
+
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Warranty</span>
+                          <span className="font-medium">
+                            {job.warranty_period_months ? `${job.warranty_period_months} months` : '-'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="bg-white rounded-lg shadow p-4">
+                      <h2 className="text-base font-semibold mb-4">Quick Stats</h2>
+
+                      <div className="space-y-2 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Total Quoted</span>
+                          <span className="font-bold">{formatCurrency(totalQuoted)}</span>
+                        </div>
+
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Total Actual</span>
+                          <span className="font-bold">{formatCurrency(totalActual)}</span>
+                        </div>
+
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Variance</span>
+                          <span className={`font-bold ${variance >= 0 ? 'text-red-600' : 'text-green-600'}`}>
+                            {formatCurrency(Math.abs(variance))}
+                            <span className="text-xs ml-1">({variancePercent.toFixed(1)}%)</span>
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-lg shadow p-4">
+                  <h2 className="text-base font-semibold mb-3">Job Costing Analysis</h2>
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    <div className="border rounded p-3">
+                      <p className="text-xs text-gray-500">Materials Quoted</p>
+                      <p className="text-base font-bold text-gray-900">{formatCurrency(materialsQuoted)}</p>
+                    </div>
+                    <div className="border rounded p-3">
+                      <p className="text-xs text-gray-500">Materials Actual</p>
+                      <p className="text-base font-bold text-gray-900">{formatCurrency(materialsActual)}</p>
+                    </div>
+                    <div className="border rounded p-3">
+                      <p className="text-xs text-gray-500">Labour Quoted</p>
+                      <p className="text-base font-bold text-gray-900">{formatCurrency(labourQuoted)}</p>
+                    </div>
+                    <div className="border rounded p-3">
+                      <p className="text-xs text-gray-500">Labour Actual</p>
+                      <p className="text-base font-bold text-gray-900">{formatCurrency(labourActual)}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
             
             {/* MATERIALS TAB */}
             {activeTab === 'materials' && (

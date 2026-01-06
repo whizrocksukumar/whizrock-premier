@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { Search, Plus, Eye, Edit } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 interface Job {
@@ -109,6 +110,68 @@ export default function JobsPage() {
 
       if (fetchError) throw fetchError;
 
+      const quoteIds = [...new Set((data || []).map((job: any) => job.quote_id).filter(Boolean))];
+      const quoteMap: Record<string, any> = {};
+      if (quoteIds.length > 0) {
+        const { data: quotesData, error: quotesError } = await supabase
+          .from('quotes')
+          .select('id, quote_number, client_id, site_id')
+          .in('id', quoteIds);
+
+        if (quotesError) throw quotesError;
+        (quotesData || []).forEach((quote: any) => {
+          quoteMap[quote.id] = quote;
+        });
+      }
+
+      const clientIds = [...new Set(Object.values(quoteMap).map((quote: any) => quote.client_id).filter(Boolean))];
+      const clientMap: Record<string, any> = {};
+      if (clientIds.length > 0) {
+        const { data: clientsData, error: clientsError } = await supabase
+          .from('clients')
+          .select('id, first_name, last_name, company_id')
+          .in('id', clientIds);
+
+        if (clientsError) throw clientsError;
+        (clientsData || []).forEach((client: any) => {
+          clientMap[client.id] = client;
+        });
+      }
+
+      const companyIds = [...new Set(Object.values(clientMap).map((client: any) => client.company_id).filter(Boolean))];
+      const companyMap: Record<string, any> = {};
+      if (companyIds.length > 0) {
+        const { data: companiesData, error: companiesError } = await supabase
+          .from('companies')
+          .select('id, company_name')
+          .in('id', companyIds);
+
+        if (companiesError) throw companiesError;
+        (companiesData || []).forEach((company: any) => {
+          companyMap[company.id] = company.company_name;
+        });
+      }
+
+      const siteIds = [...new Set(Object.values(quoteMap).map((quote: any) => quote.site_id).filter(Boolean))];
+      const siteMap: Record<string, any> = {};
+      if (siteIds.length > 0) {
+        const { data: sitesData, error: sitesError } = await supabase
+          .from('sites')
+          .select('id, address_line_1, address_line_2, city, postcode')
+          .in('id', siteIds);
+
+        if (sitesError) throw sitesError;
+        (sitesData || []).forEach((site: any) => {
+          siteMap[site.id] = site;
+        });
+      }
+
+      const buildSiteAddress = (site: any) => {
+        if (!site) return '';
+        const parts = [site.address_line_1, site.address_line_2, site.city, site.postcode].filter(Boolean);
+        return parts.length > 0 ? parts.join(', ') : '';
+      };
+
       const jobsWithDetails = await Promise.all((data || []).map(async (job: any) => {
         let crewLeadName = '';
         if (job.crew_lead_id) {
@@ -123,18 +186,11 @@ export default function JobsPage() {
           }
         }
 
-        // Fetch quote number
-        let quoteNumber = '';
-        if (job.quote_id) {
-          const { data: quote } = await supabase
-            .from('quotes')
-            .select('quote_number')
-            .eq('id', job.quote_id)
-            .single();
-          if (quote) {
-            quoteNumber = quote.quote_number;
-          }
-        }
+        const quote = job.quote_id ? quoteMap[job.quote_id] : null;
+        const client = quote?.client_id ? clientMap[quote.client_id] : null;
+        const companyName = client?.company_id ? companyMap[client.company_id] : '';
+        const site = quote?.site_id ? siteMap[quote.site_id] : null;
+        const derivedAddress = buildSiteAddress(site);
 
         const actual_cost = job.actual_amount || 0;
         const margin_percent = job.quoted_amount > 0 
@@ -145,12 +201,12 @@ export default function JobsPage() {
           id: job.id,
           job_number: job.job_number,
           quote_id: job.quote_id,
-          quote_number: quoteNumber,
-          customer_first_name: job.customer_first_name || '',
-          customer_last_name: job.customer_last_name || '',
-          customer_company: job.customer_company || '',
-          site_address: job.site_address || '',
-          city: job.city || '',
+          quote_number: quote?.quote_number || '',
+          customer_first_name: job.customer_first_name || client?.first_name || '',
+          customer_last_name: job.customer_last_name || client?.last_name || '',
+          customer_company: job.customer_company || companyName || '',
+          site_address: job.site_address || derivedAddress || '',
+          city: job.city || site?.city || '',
           scheduled_date: job.scheduled_date || '',
           status: job.status,
           crew_lead_id: job.crew_lead_id,
@@ -197,46 +253,70 @@ export default function JobsPage() {
     }
   };
 
+  const SortArrow = ({ field }: { field: SortField }) => {
+    if (sortField !== field) return <span className="ml-1 text-blue-200">-</span>;
+    return <span className="ml-1">{sortDirection === 'asc' ? '^' : 'v'}</span>;
+  };
+
   const totalPages = Math.ceil(pagination.total / pagination.pageSize);
 
   return (
-    <div className="p-8">
-      {/* Header */}
-      <div className="mb-6 flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold">Jobs</h1>
-          <p className="text-gray-600 mt-1">Manage installation jobs and schedules</p>
+    <div className="min-h-screen bg-gray-100">
+      {/* ===== PAGE HEADER ===== */}
+      <div className="bg-white border-b border-gray-200 px-6 py-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold text-[#0066CC]">Jobs</h1>
+            <p className="text-sm text-gray-500 mt-1">Manage installation jobs and schedules</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white font-medium">
+              U
+            </div>
+            <div className="text-right">
+              <p className="text-sm text-gray-700">user@premier.local</p>
+            </div>
+            <button className="ml-2 text-xs text-[#0066CC] hover:underline">Logout</button>
+          </div>
         </div>
-        <Link
-          href="/jobs/create-from-quote"
-          className="bg-orange-500 text-white px-6 py-2 rounded-lg hover:bg-orange-600"
-        >
-          Create Job from Quote
-        </Link>
       </div>
 
-      {/* Filters */}
-      <div className="bg-white rounded-lg shadow p-4 mb-6">
-        <div className="grid grid-cols-1 lg:grid-cols-10 gap-3">
-          {/* Search */}
-          <div className="lg:col-span-3">
-            <label className="block text-xs font-medium text-gray-700 mb-1">Search</label>
-            <input
-              type="text"
-              placeholder="Job #, Quote #, Customer..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full px-3 py-1.5 text-sm border rounded focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-            />
+      {/* ===== TOOLBAR ROW ===== */}
+      <div className="bg-white border-b border-gray-200 px-6 py-3">
+        <div className="flex items-center justify-between gap-4">
+          <div className="w-64">
+            <div className="relative">
+              <Search className="absolute left-3 top-2.5 w-5 h-5 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search jobs..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-[#0066CC] focus:border-transparent text-sm"
+              />
+            </div>
           </div>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/jobs/create-from-quote"
+              className="px-4 py-2 text-sm bg-[#0066CC] text-white rounded hover:bg-[#0052a3] hover:shadow-md transition-all duration-200 flex items-center gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              Create Job from Quote
+            </Link>
+          </div>
+        </div>
+      </div>
 
-          {/* Status Filter */}
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Status</label>
+      {/* ===== FILTER ROW ===== */}
+      <div className="bg-white border-b border-gray-200 px-6 py-3">
+        <div className="flex flex-wrap items-center gap-6">
+          <div className="flex items-center gap-3">
+            <span className="text-sm font-medium text-gray-700">Status:</span>
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="w-full px-3 py-1.5 text-sm border rounded focus:ring-2 focus:ring-orange-500"
+              className="px-3 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-[#0066CC]"
             >
               <option value="all">All Statuses</option>
               <option value="Draft">Draft</option>
@@ -247,13 +327,12 @@ export default function JobsPage() {
             </select>
           </div>
 
-          {/* Installer Filter */}
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Installer</label>
+          <div className="flex items-center gap-3">
+            <span className="text-sm font-medium text-gray-700">Installer:</span>
             <select
               value={installerFilter}
               onChange={(e) => setInstallerFilter(e.target.value)}
-              className="w-full px-3 py-1.5 text-sm border rounded focus:ring-2 focus:ring-orange-500"
+              className="px-3 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-[#0066CC]"
             >
               <option value="all">All Installers</option>
               {installers.map(installer => (
@@ -262,31 +341,26 @@ export default function JobsPage() {
             </select>
           </div>
 
-          {/* Date From */}
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Date From</label>
+          <div className="flex items-center gap-3">
+            <span className="text-sm font-medium text-gray-700">Date From:</span>
             <input
               type="date"
               value={dateFromFilter}
               onChange={(e) => setDateFromFilter(e.target.value)}
-              className="w-full px-3 py-1.5 text-sm border rounded focus:ring-2 focus:ring-orange-500"
+              className="px-3 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-[#0066CC]"
             />
           </div>
 
-          {/* Date To */}
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Date To</label>
+          <div className="flex items-center gap-3">
+            <span className="text-sm font-medium text-gray-700">Date To:</span>
             <input
               type="date"
               value={dateToFilter}
               onChange={(e) => setDateToFilter(e.target.value)}
-              className="w-full px-3 py-1.5 text-sm border rounded focus:ring-2 focus:ring-orange-500"
+              className="px-3 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-[#0066CC]"
             />
           </div>
-        </div>
 
-        {/* Clear Filters */}
-        <div className="mt-3 flex justify-end">
           <button
             onClick={() => {
               setSearchTerm('');
@@ -295,252 +369,237 @@ export default function JobsPage() {
               setDateFromFilter('');
               setDateToFilter('');
             }}
-            className="text-xs text-orange-600 hover:text-orange-700 font-medium"
+            className="ml-auto text-xs text-[#0066CC] hover:underline font-medium"
           >
             Clear All Filters
           </button>
         </div>
       </div>
 
-      {/* Error Message */}
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
-          {error}
-        </div>
-      )}
+      {/* ===== CONTENT AREA ===== */}
+      <div className="p-6">
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4">
+            {error}
+          </div>
+        )}
 
-      {/* Jobs Table */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
+        <div className="text-sm text-gray-600 mb-4">
+          Showing {jobs.length} of {pagination.total} jobs
+        </div>
+
         {loading ? (
-          <div className="p-8 text-center text-gray-500">Loading jobs...</div>
-        ) : jobs.length === 0 ? (
-          <div className="p-8 text-center text-gray-500">
-            No jobs found. {searchTerm || statusFilter !== 'all' || installerFilter !== 'all' ? 'Try adjusting your filters.' : 'Create your first job from a quote.'}
+          <div className="flex items-center justify-center py-12 bg-white rounded shadow">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0066CC]"></div>
+            <span className="ml-3 text-gray-600">Loading jobs...</span>
           </div>
         ) : (
           <>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-[#0066CC]">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider w-20">
+            <div className="bg-white rounded shadow overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="bg-[#0066CC] text-white">
+                    <th className="text-center px-4 py-3 text-xs font-semibold whitespace-nowrap">
                       Action
                     </th>
                     <th
-                      className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider cursor-pointer hover:bg-[#0052a3] w-32"
+                      className="text-left px-4 py-3 text-xs font-semibold whitespace-nowrap cursor-pointer hover:bg-[#0055aa]"
                       onClick={() => handleSort('job_number')}
                     >
-                      Job No. {sortField === 'job_number' && (sortDirection === 'asc' ? '↑' : '↓')}
+                      Job No. <SortArrow field="job_number" />
                     </th>
                     <th
-                      className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider cursor-pointer hover:bg-[#0052a3] w-32"
+                      className="text-left px-4 py-3 text-xs font-semibold whitespace-nowrap cursor-pointer hover:bg-[#0055aa]"
                       onClick={() => handleSort('quote_number')}
                     >
-                      Quote No. {sortField === 'quote_number' && (sortDirection === 'asc' ? '↑' : '↓')}
+                      Quote No. <SortArrow field="quote_number" />
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider w-40">
+                    <th className="text-left px-4 py-3 text-xs font-semibold whitespace-nowrap">
                       Company Name
                     </th>
                     <th
-                      className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider cursor-pointer hover:bg-[#0052a3] w-40"
+                      className="text-left px-4 py-3 text-xs font-semibold whitespace-nowrap cursor-pointer hover:bg-[#0055aa]"
                       onClick={() => handleSort('customer_last_name')}
                     >
-                      Contact Name {sortField === 'customer_last_name' && (sortDirection === 'asc' ? '↑' : '↓')}
+                      Contact Name <SortArrow field="customer_last_name" />
                     </th>
                     <th
-                      className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider cursor-pointer hover:bg-[#0052a3] w-56"
+                      className="text-left px-4 py-3 text-xs font-semibold whitespace-nowrap cursor-pointer hover:bg-[#0055aa]"
                       onClick={() => handleSort('site_address')}
                     >
-                      Site Address {sortField === 'site_address' && (sortDirection === 'asc' ? '↑' : '↓')}
+                      Site Address <SortArrow field="site_address" />
                     </th>
                     <th
-                      className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider cursor-pointer hover:bg-[#0052a3] w-32"
+                      className="text-left px-4 py-3 text-xs font-semibold whitespace-nowrap cursor-pointer hover:bg-[#0055aa]"
                       onClick={() => handleSort('scheduled_date')}
                     >
-                      Scheduled Date {sortField === 'scheduled_date' && (sortDirection === 'asc' ? '↑' : '↓')}
+                      Scheduled Date <SortArrow field="scheduled_date" />
                     </th>
                     <th
-                      className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider cursor-pointer hover:bg-[#0052a3] w-28"
+                      className="text-left px-4 py-3 text-xs font-semibold whitespace-nowrap cursor-pointer hover:bg-[#0055aa]"
                       onClick={() => handleSort('status')}
                     >
-                      Status {sortField === 'status' && (sortDirection === 'asc' ? '↑' : '↓')}
+                      Status <SortArrow field="status" />
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider w-32">
+                    <th className="text-left px-4 py-3 text-xs font-semibold whitespace-nowrap">
                       Installer
                     </th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-white uppercase tracking-wider w-32">
+                    <th className="text-right px-4 py-3 text-xs font-semibold whitespace-nowrap">
                       Quoted Amount
                     </th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-white uppercase tracking-wider w-32">
+                    <th className="text-right px-4 py-3 text-xs font-semibold whitespace-nowrap">
                       Actual Cost
                     </th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-white uppercase tracking-wider w-24">
+                    <th className="text-right px-4 py-3 text-xs font-semibold whitespace-nowrap">
                       Margin %
                     </th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {jobs.map((job) => (
-                    <tr 
-                      key={job.id}
-                      className="hover:bg-gray-50 cursor-pointer"
-                      onClick={() => router.push(`/jobs/${job.id}`)}
-                    >
-                      <td className="px-4 py-4 whitespace-nowrap">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            router.push(`/jobs/${job.id}`);
-                          }}
-                          className="text-orange-600 hover:text-orange-800 font-medium text-sm"
-                        >
-                          View
-                        </button>
-                      </td>
-                      <td className="px-4 py-4 whitespace-nowrap font-medium text-gray-900 text-sm">
-                        {job.job_number}
-                      </td>
-                      <td className="px-4 py-4 whitespace-nowrap text-sm">
-                        <Link
-                          href={`/quotes/${job.quote_id}`}
-                          onClick={(e) => e.stopPropagation()}
-                          className="text-blue-600 hover:text-blue-800"
-                        >
-                          {job.quote_number}
-                        </Link>
-                      </td>
-                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {job.customer_company || '-'}
-                      </td>
-                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {job.customer_first_name} {job.customer_last_name}
-                      </td>
-                      <td className="px-4 py-4 text-sm">
-                        <div className="text-gray-900 max-w-xs">{job.site_address}</div>
-                        {job.city && <div className="text-gray-500 text-xs mt-0.5">{job.city}</div>}
-                      </td>
-                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {job.scheduled_date ? new Date(job.scheduled_date).toLocaleDateString() : '-'}
-                      </td>
-                      <td className="px-4 py-4 whitespace-nowrap">
-                        <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(job.status)}`}>
-                          {job.status}
-                        </span>
-                      </td>
-                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {job.crew_lead_name || '-'}
-                      </td>
-                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 text-right font-medium">
-                        ${job.quoted_amount.toLocaleString('en-NZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </td>
-                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 text-right font-medium">
-                        {job.actual_cost > 0 
-                          ? `$${job.actual_cost.toLocaleString('en-NZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                          : '-'
-                        }
-                      </td>
-                      <td className="px-4 py-4 whitespace-nowrap text-sm text-right">
-                        {job.actual_cost > 0 ? (
-                          <span className={job.margin_percent >= 0 ? 'text-green-600 font-semibold' : 'text-red-600 font-semibold'}>
-                            {job.margin_percent.toFixed(1)}%
-                          </span>
-                        ) : (
-                          <span className="text-gray-400">-</span>
-                        )}
+                <tbody className="divide-y divide-gray-200">
+                  {jobs.length === 0 ? (
+                    <tr>
+                      <td colSpan={12} className="px-4 py-8 text-center text-gray-500">
+                        No jobs found
                       </td>
                     </tr>
-                  ))}
+                  ) : (
+                    jobs.map((job, index) => (
+                      <tr
+                        key={job.id}
+                        className={`hover:bg-blue-50 transition-colors cursor-pointer ${
+                          index % 2 === 0 ? 'bg-white' : 'bg-gray-50'
+                        }`}
+                        onClick={() => router.push(`/jobs/${job.id}`)}
+                      >
+                        <td className="text-center px-4 py-3 whitespace-nowrap">
+                          <div className="flex items-center justify-center gap-2">
+                            <Link
+                              href={`/jobs/${job.id}`}
+                              onClick={(e) => e.stopPropagation()}
+                              className="p-1 text-blue-600 hover:bg-blue-50 rounded"
+                              title="View"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </Link>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                router.push(`/jobs/${job.id}`);
+                              }}
+                              className="p-1 text-gray-600 hover:bg-gray-100 rounded"
+                              title="Edit"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap font-medium text-gray-900 text-sm">
+                          {job.job_number}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm">
+                          <Link
+                            href={`/quotes/${job.quote_id}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-[#0066CC] hover:underline"
+                          >
+                            {job.quote_number}
+                          </Link>
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                          {job.customer_company || '-'}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                          {job.customer_first_name} {job.customer_last_name}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-700">
+                          <div className="text-gray-900 max-w-xs">{job.site_address}</div>
+                          {job.city && <div className="text-gray-500 text-xs mt-0.5">{job.city}</div>}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                          {job.scheduled_date ? new Date(job.scheduled_date).toLocaleDateString() : '-'}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <span className={`px-2 py-1 text-xs font-medium rounded ${getStatusColor(job.status)}`}>
+                            {job.status}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                          {job.crew_lead_name || '-'}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 text-right font-medium">
+                          ${job.quoted_amount.toLocaleString('en-NZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 text-right font-medium">
+                          {job.actual_cost > 0
+                            ? `$${job.actual_cost.toLocaleString('en-NZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                            : '-'
+                          }
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-right">
+                          {job.actual_cost > 0 ? (
+                            <span className={job.margin_percent >= 0 ? 'text-green-600 font-semibold' : 'text-red-600 font-semibold'}>
+                              {job.margin_percent.toFixed(1)}%
+                            </span>
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
 
-            {/* Pagination */}
-            <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6">
-              <div className="flex-1 flex justify-between sm:hidden">
-                <button
-                  onClick={() => handlePageChange(pagination.page - 1)}
-                  disabled={pagination.page === 1}
-                  className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
-                >
-                  Previous
-                </button>
-                <button
-                  onClick={() => handlePageChange(pagination.page + 1)}
-                  disabled={pagination.page === totalPages}
-                  className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
-                >
-                  Next
-                </button>
-              </div>
-              <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-sm text-gray-700">
-                    Showing <span className="font-medium">{((pagination.page - 1) * pagination.pageSize) + 1}</span> to{' '}
-                    <span className="font-medium">{Math.min(pagination.page * pagination.pageSize, pagination.total)}</span> of{' '}
-                    <span className="font-medium">{pagination.total}</span> jobs
-                  </p>
+            {totalPages > 1 && (
+              <div className="mt-4 flex items-center justify-between bg-white px-4 py-3 rounded shadow">
+                <div className="text-sm text-gray-600">
+                  Page {pagination.page} of {totalPages}
                 </div>
-                <div>
-                  <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
-                    <button
-                      onClick={() => handlePageChange(pagination.page - 1)}
-                      disabled={pagination.page === 1}
-                      className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
-                    >
-                      Previous
-                    </button>
-                    {Array.from({ length: totalPages }, (_, i) => i + 1)
-                      .filter(page => {
-                        return page === 1 || 
-                               page === totalPages || 
-                               (page >= pagination.page - 1 && page <= pagination.page + 1);
-                      })
-                      .map((page, idx, arr) => {
-                        if (idx > 0 && page !== arr[idx - 1] + 1) {
-                          return (
-                            <>
-                              <span key={`ellipsis-${page}`} className="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700">
-                                ...
-                              </span>
-                              <button
-                                key={page}
-                                onClick={() => handlePageChange(page)}
-                                className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
-                                  page === pagination.page
-                                    ? 'z-10 bg-orange-50 border-orange-500 text-orange-600'
-                                    : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
-                                }`}
-                              >
-                                {page}
-                              </button>
-                            </>
-                          );
-                        }
-                        return (
-                          <button
-                            key={page}
-                            onClick={() => handlePageChange(page)}
-                            className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
-                              page === pagination.page
-                                ? 'z-10 bg-orange-50 border-orange-500 text-orange-600'
-                                : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
-                            }`}
-                          >
-                            {page}
-                          </button>
-                        );
-                      })}
-                    <button
-                      onClick={() => handlePageChange(pagination.page + 1)}
-                      disabled={pagination.page === totalPages}
-                      className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
-                    >
-                      Next
-                    </button>
-                  </nav>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handlePageChange(pagination.page - 1)}
+                    disabled={pagination.page === 1}
+                    className="px-3 py-1 border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                  >
+                    Previous
+                  </button>
+
+                  {Array.from({ length: totalPages }, (_, i) => i + 1)
+                    .filter(
+                      page =>
+                        page === 1 ||
+                        page === totalPages ||
+                        Math.abs(page - pagination.page) <= 2
+                    )
+                    .map((page, index, array) => (
+                      <span key={page}>
+                        {index > 0 && array[index - 1] !== page - 1 && (
+                          <span className="px-2 text-gray-400">...</span>
+                        )}
+                        <button
+                          onClick={() => handlePageChange(page)}
+                          className={`px-3 py-1 rounded text-sm ${
+                            pagination.page === page
+                              ? 'bg-[#0066CC] text-white'
+                              : 'border border-gray-300 hover:bg-gray-100'
+                          }`}
+                        >
+                          {page}
+                        </button>
+                      </span>
+                    ))}
+
+                  <button
+                    onClick={() => handlePageChange(pagination.page + 1)}
+                    disabled={pagination.page === totalPages}
+                    className="px-3 py-1 border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                  >
+                    Next
+                  </button>
                 </div>
               </div>
-            </div>
+            )}
           </>
         )}
       </div>

@@ -54,13 +54,6 @@ interface TeamMember {
     is_active: boolean;
 }
 
-interface JobType {
-    id: string;
-    name: string;
-    code?: string;
-    is_active?: boolean;
-}
-
 interface LineItem {
     id: string;
     marker?: string;
@@ -97,12 +90,11 @@ type PricingTier = 'Retail' | 'Trade' | 'VIP' | 'Custom';
 // ============================================
 // CONSTANTS
 // ============================================
-// GP% targets for each tier (displayed and used in calculations)
-const PRICING_TIER_GP: Record<PricingTier, number> = {
-    'Retail': 37.5,   // ~60% markup equivalent
-    'Trade': 28.5,    // ~40% markup equivalent
-    'VIP': 20,        // ~25% markup equivalent
-    'Custom': 37.5    // default
+const PRICING_TIER_MARKUPS: Record<PricingTier, number> = {
+    'Retail': 60,
+    'Trade': 40,
+    'VIP': 25,
+    'Custom': 0
 };
 
 const LABOUR_COST_PER_SQM = 1.50;
@@ -145,19 +137,14 @@ export default function AddNewQuotePage() {
     const [companyId, setCompanyId] = useState('');
     const [siteId, setSiteId] = useState('');
     const [siteAddress, setSiteAddress] = useState('');
-    const [city, setCity] = useState('Auckland');
+    const [city, setCity] = useState('');
     const [postcode, setPostcode] = useState('');
     const [regionId, setRegionId] = useState('');
     const [salesRepId, setSalesRepId] = useState('');
-    const [propertyType, setPropertyType] = useState('');
-    const [jobTypeId, setJobTypeId] = useState('');
-
-    // Property Types
-    const propertyTypes = ['Residential', 'Commercial', 'Industrial', 'Retail', 'Mixed Use', 'Other'];
 
     // Pricing Controls
     const [pricingTier, setPricingTier] = useState<PricingTier>('Retail');
-    const [targetGP, setTargetGP] = useState(PRICING_TIER_GP['Retail']);
+    const [markupPercent, setMarkupPercent] = useState(PRICING_TIER_MARKUPS['Retail']);
     const [labourRate, setLabourRate] = useState(DEFAULT_LABOUR_SELL_PER_SQM);
     const [wastePercent, setWastePercent] = useState(DEFAULT_WASTE_PERCENT);
 
@@ -172,7 +159,6 @@ export default function AddNewQuotePage() {
     const [appTypes, setAppTypes] = useState<ApplicationType[]>([]);
     const [regions, setRegions] = useState<Region[]>([]);
     const [salesReps, setSalesReps] = useState<TeamMember[]>([]);
-    const [jobTypes, setJobTypes] = useState<JobType[]>([]);
 
     // UI State
     const [loading, setLoading] = useState(true);
@@ -192,13 +178,12 @@ export default function AddNewQuotePage() {
     const loadLookupData = async () => {
         setLoading(true);
         try {
-            const [productsRes, stockRes, appTypesRes, regionsRes, teamMembersRes, jobTypesRes] = await Promise.all([
+            const [productsRes, stockRes, appTypesRes, regionsRes, teamMembersRes] = await Promise.all([
                 supabase.from('products').select('*').eq('is_active', true),
                 supabase.from('stock_levels').select('product_id, quantity_available, reorder_level'),
                 supabase.from('app_types').select('*').eq('is_active', true).order('sort_order'),
                 supabase.from('regions').select('*').order('name'),
                 supabase.from('team_members').select('*').order('first_name'),
-                supabase.from('job_types').select('*').order('name'),
             ]);
 
             // Merge stock data with products
@@ -220,7 +205,6 @@ export default function AddNewQuotePage() {
 
             if (appTypesRes.data) setAppTypes(appTypesRes.data as ApplicationType[]);
             if (regionsRes.data) setRegions(regionsRes.data as Region[]);
-            if (jobTypesRes.data) setJobTypes(jobTypesRes.data as JobType[]);
             
             if (teamMembersRes.data) {
                 const activeSalesReps = teamMembersRes.data.filter((tm: any) => 
@@ -241,7 +225,7 @@ export default function AddNewQuotePage() {
     const handlePricingTierChange = (tier: PricingTier) => {
         setPricingTier(tier);
         if (tier !== 'Custom') {
-            setTargetGP(PRICING_TIER_GP[tier]);
+            setMarkupPercent(PRICING_TIER_MARKUPS[tier]);
         }
         // Clear custom margins when tier changes (prices will recalculate)
         setCustomProductMargins({});
@@ -283,9 +267,8 @@ export default function AddNewQuotePage() {
                             sellPrice = customMargin.sell_price;
                             marginPercent = customMargin.margin_percent;
                         } else {
-                            // GP% formula: Sell = Cost / (1 - GP%/100)
-                            sellPrice = targetGP < 100 ? item.product.pack_price / (1 - targetGP / 100) : item.product.pack_price;
-                            marginPercent = targetGP;
+                            sellPrice = item.product.pack_price * (1 + markupPercent / 100);
+                            marginPercent = markupPercent > 0 ? (markupPercent / (100 + markupPercent)) * 100 : 0;
                         }
                         
                         const lineSell = packs * sellPrice;
@@ -312,7 +295,7 @@ export default function AddNewQuotePage() {
                 })
             }));
         });
-    }, [labourRate, wastePercent, targetGP, customProductMargins]);
+    }, [labourRate, wastePercent, markupPercent, customProductMargins]);
 
     // Recalculate when pricing controls change
     useEffect(() => {
@@ -430,30 +413,17 @@ export default function AddNewQuotePage() {
                 if (section.id === sectionId) {
                     let updatedItems = section.line_items.map(item => {
                         if (item.id === itemId) {
-                            // Calculate sell price based on target GP%
+                            // Check for custom margin for this product
                             const customMargin = customProductMargins[product.id];
                             let sellPrice: number;
+                            let marginPercent: number;
                             
                             if (customMargin) {
                                 sellPrice = customMargin.sell_price;
+                                marginPercent = customMargin.margin_percent;
                             } else {
-                                // GP% formula: Sell = Cost / (1 - GP%/100)
-                                sellPrice = targetGP < 100 ? product.pack_price / (1 - targetGP / 100) : product.pack_price;
-                            }
-
-                            // Calculate packs and line totals
-                            const areaWithWaste = item.area_sqm * (1 + wastePercent / 100);
-                            const packs = item.area_sqm > 0 ? Math.ceil(areaWithWaste / (product.bale_size_sqm || 1)) : 0;
-                            const lineCost = packs * product.pack_price;
-                            const lineSell = packs * sellPrice;
-                            
-                            // GP% only calculated when there are actual values
-                            const actualMargin = lineSell > 0 ? ((lineSell - lineCost) / lineSell) * 100 : 0;
-
-                            // Stock warning
-                            let stockWarning = '';
-                            if (product.quantity_available !== undefined && packs > 0 && packs > product.quantity_available) {
-                                stockWarning = `Need ${packs} packs, only ${product.quantity_available} available`;
+                                sellPrice = product.pack_price * (1 + markupPercent / 100);
+                                marginPercent = markupPercent > 0 ? (markupPercent / (100 + markupPercent)) * 100 : 0;
                             }
 
                             return {
@@ -462,11 +432,7 @@ export default function AddNewQuotePage() {
                                 product: product,
                                 cost_price: product.pack_price,
                                 sell_price: sellPrice,
-                                margin_percent: actualMargin,
-                                packs_required: packs,
-                                line_cost: lineCost,
-                                line_sell: lineSell,
-                                stock_warning: stockWarning
+                                margin_percent: marginPercent
                             };
                         }
                         return item;
@@ -521,37 +487,8 @@ export default function AddNewQuotePage() {
                     const currentItem = updatedItems[itemIndex];
                     
                     if (currentItem && !currentItem.is_labour) {
-                        // Calculate product line totals
-                        let packs = 0;
-                        let lineCost = 0;
-                        let lineSell = 0;
-                        let marginPercent = 0;
-                        let stockWarning = '';
-                        
-                        if (currentItem.product && newArea > 0) {
-                            const areaWithWaste = newArea * (1 + wastePercent / 100);
-                            packs = Math.ceil(areaWithWaste / (currentItem.product.bale_size_sqm || 1));
-                            lineCost = packs * currentItem.cost_price;
-                            lineSell = packs * currentItem.sell_price;
-                            
-                            // Calculate GP%
-                            marginPercent = lineSell > 0 ? ((lineSell - lineCost) / lineSell) * 100 : 0;
-                            
-                            if (currentItem.product.quantity_available !== undefined && packs > currentItem.product.quantity_available) {
-                                stockWarning = `Need ${packs} packs, only ${currentItem.product.quantity_available} available`;
-                            }
-                        }
-                        
-                        // Update the product row
-                        updatedItems[itemIndex] = { 
-                            ...currentItem, 
-                            area_sqm: newArea,
-                            packs_required: packs,
-                            line_cost: lineCost,
-                            line_sell: lineSell,
-                            margin_percent: marginPercent,
-                            stock_warning: stockWarning
-                        };
+                        // Update the area
+                        updatedItems[itemIndex] = { ...currentItem, area_sqm: newArea };
                         
                         // Check if labour row exists
                         const labourIndex = updatedItems.findIndex(i => i.parent_line_item_id === itemId);
@@ -772,33 +709,6 @@ export default function AddNewQuotePage() {
         try {
             const totals = calculateQuoteTotals();
 
-            // Create new site if needed (siteAddress filled but no siteId)
-            let finalSiteId = siteId;
-            if (!siteId && siteAddress && (clientId || companyId)) {
-                const { data: newSite, error: siteError } = await supabase
-                    .from('sites')
-                    .insert({
-                        client_id: clientId || null,
-                        company_id: companyId || null,
-                        site_name: siteAddress, // Use address as site name
-                        address_line_1: siteAddress,
-                        city: city || 'Auckland',
-                        postcode: postcode || '0000',
-                        region_id: regionId || null,
-                        property_type: propertyType || null,
-                        is_active: true
-                    })
-                    .select()
-                    .single();
-                
-                if (siteError) {
-                    console.warn('Could not create site:', siteError);
-                    // Continue without site_id - not critical
-                } else if (newSite) {
-                    finalSiteId = newSite.id;
-                }
-            }
-
             // Generate quote number
             const { data: lastQuote } = await supabase
                 .from('quotes')
@@ -821,25 +731,25 @@ export default function AddNewQuotePage() {
                 .from('quotes')
                 .insert({
                     quote_number: quoteNumber,
-                    quote_date: new Date().toISOString(),
                     client_id: clientId || null,
                     company_id: companyId || null,
-                    site_id: finalSiteId || null,
+                    site_id: siteId || null,
                     site_address: siteAddress,
                     city: city,
                     postcode: postcode,
                     region_id: regionId || null,
                     sales_rep_id: salesRepId || null,
-                    job_type_id: jobTypeId || null,
                     status: status,
                     pricing_tier: pricingTier,
-                    markup_percent: targetGP, // Storing GP% in this field
+                    markup_percent: markupPercent,
                     labour_rate_per_sqm: labourRate,
                     waste_percent: wastePercent,
                     total_cost_ex_gst: totals.totalCost,
                     total_sell_ex_gst: totals.totalSell,
                     gst_amount: totals.gstAmount,
                     total_inc_gst: totals.totalIncGst,
+                    gross_profit: totals.grossProfit,
+                    gross_profit_percent: totals.marginPercent,
                     custom_product_margins: customProductMargins,
                     version: 1
                 })
@@ -858,10 +768,13 @@ export default function AddNewQuotePage() {
                     .insert({
                         quote_id: quote.id,
                         app_type_id: section.app_type_id,
-                        section_name: section.custom_name || appTypes.find(a => a.id === section.app_type_id)?.name || 'Section',
                         custom_name: section.custom_name,
                         section_color: section.section_color,
-                        sort_order: i + 1
+                        sort_order: i + 1,
+                        total_cost_ex_gst: sectionTotals.totalCost,
+                        total_sell_ex_gst: sectionTotals.totalSell,
+                        gross_profit: sectionTotals.grossProfit,
+                        gross_profit_percent: sectionTotals.marginPercent
                     })
                     .select()
                     .single();
@@ -870,22 +783,18 @@ export default function AddNewQuotePage() {
 
                 // Insert line items
                 const lineItemsToInsert = section.line_items.map((item, idx) => ({
-                    quote_id: quote.id,
-                    section_id: savedSection.id,
+                    quote_section_id: savedSection.id,
                     product_id: item.product_id,
-                    description: item.is_labour ? 'Labour' : (item.product?.product_description || 'Product'),
-                    quantity: item.is_labour ? item.area_sqm : (item.packs_required || 1),
-                    unit_price: item.sell_price || 0,
-                    line_total: item.line_sell || 0,
                     marker: item.marker || null,
                     area_sqm: item.area_sqm,
                     is_labour: item.is_labour,
-                    packs_required: item.packs_required || 0,
-                    cost_price: item.cost_price || 0,
-                    sell_price: item.sell_price || 0,
-                    line_cost: item.line_cost || 0,
-                    line_sell: item.line_sell || 0,
-                    margin_percent: item.margin_percent || 0,
+                    parent_line_item_id: item.parent_line_item_id || null,
+                    packs_required: item.packs_required || null,
+                    cost_price: item.cost_price,
+                    sell_price: item.sell_price,
+                    line_cost: item.line_cost,
+                    line_sell: item.line_sell,
+                    margin_percent: item.margin_percent,
                     sort_order: idx + 1
                 }));
 
@@ -899,10 +808,9 @@ export default function AddNewQuotePage() {
             alert(`Quote ${quoteNumber} saved successfully!`);
             router.push(`/quotes/${quote.id}`);
 
-        } catch (error: any) {
+        } catch (error) {
             console.error('Error saving quote:', error);
-            console.error('Error details:', error?.message, error?.details, error?.hint);
-            alert(`Failed to save quote: ${error?.message || 'Unknown error'}. Check console for details.`);
+            alert('Failed to save quote. Please try again.');
         } finally {
             setSaving(false);
         }
@@ -943,7 +851,7 @@ export default function AddNewQuotePage() {
         <div className="min-h-screen bg-gray-50">
             {/* Header */}
             <div className="bg-white border-b border-gray-200 sticky top-0 z-40">
-                <div className="max-w-[1400px] mx-auto px-6 py-4">
+                <div className="max-w-7xl mx-auto px-6 py-4">
                     <div className="flex items-center justify-between">
                         <div>
                             <h1 className="text-2xl font-bold text-gray-900">Add New Quote</h1>
@@ -959,10 +867,7 @@ export default function AddNewQuotePage() {
                             <button
                                 onClick={() => handleSaveQuote('Draft')}
                                 disabled={saving}
-                                className="px-4 py-2 bg-white border border-[#0066CC] rounded-lg disabled:opacity-50 transition-colors"
-                                style={{ color: '#0066CC' }}
-                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#e0f2fe'}
-                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}
+                                className="px-4 py-2 text-[#0066CC] bg-white border border-[#0066CC] rounded-lg hover:bg-blue-50 disabled:opacity-50"
                             >
                                 {saving ? 'Saving...' : 'Save Draft'}
                             </button>
@@ -978,87 +883,66 @@ export default function AddNewQuotePage() {
                 </div>
             </div>
 
-            <div className="max-w-[1400px] mx-auto px-6 py-6 space-y-6">
-                {/* Pricing Controls - Single Row */}
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-                    <div className="flex flex-wrap items-center gap-4">
-                        {/* Pricing Tier Label */}
-                        <span className="text-sm font-medium text-gray-700">Pricing Tier:</span>
-                        
-                        {/* Tier Buttons */}
-                        {(['Retail', 'Trade', 'VIP', 'Custom'] as PricingTier[]).map(tier => (
-                            <button
-                                key={tier}
-                                onClick={() => handlePricingTierChange(tier)}
-                                className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
-                                    pricingTier === tier
-                                        ? 'bg-[#0066CC] text-white'
-                                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                                }`}
-                            >
-                                {tier} {tier !== 'Custom' && `(${PRICING_TIER_GP[tier]}%)`}
-                            </button>
-                        ))}
+            <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
+                {/* Pricing Controls */}
+                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                    <h2 className="text-lg font-semibold text-gray-900 mb-4">Pricing Settings</h2>
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                        {/* Pricing Tier */}
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Pricing Tier</label>
+                            <div className="flex flex-wrap gap-2">
+                                {(['Retail', 'Trade', 'VIP', 'Custom'] as PricingTier[]).map(tier => (
+                                    <button
+                                        key={tier}
+                                        onClick={() => handlePricingTierChange(tier)}
+                                        className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
+                                            pricingTier === tier
+                                                ? 'bg-[#0066CC] text-white'
+                                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                        }`}
+                                    >
+                                        {tier} {tier !== 'Custom' && `(${PRICING_TIER_MARKUPS[tier]}%)`}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
 
-                        {/* Divider */}
-                        <div className="h-8 w-px bg-gray-300"></div>
-
-                        {/* Custom GP % */}
-                        <div className="flex items-center gap-2">
-                            <label className="text-sm font-medium text-gray-700 whitespace-nowrap">Custom GP %</label>
+                        {/* Markup % (editable for Custom) */}
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Markup %</label>
                             <input
                                 type="number"
-                                step="0.1"
-                                min="0"
-                                max="99"
-                                value={targetGP}
+                                value={markupPercent}
                                 onChange={(e) => {
-                                    setTargetGP(parseFloat(e.target.value) || 0);
+                                    setMarkupPercent(parseFloat(e.target.value) || 0);
                                     if (pricingTier !== 'Custom') setPricingTier('Custom');
                                 }}
-                                className="w-20 px-2 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
                             />
                         </div>
 
                         {/* Labour Rate */}
-                        <div className="flex items-center gap-2">
-                            <label className="text-sm font-medium text-gray-700 whitespace-nowrap">Labour $/m²</label>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Labour $/m²</label>
                             <input
                                 type="number"
                                 step="0.01"
                                 value={labourRate}
                                 onChange={(e) => setLabourRate(parseFloat(e.target.value) || 0)}
-                                className="w-20 px-2 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
                             />
                         </div>
 
                         {/* Waste % */}
-                        <div className="flex items-center gap-2">
-                            <label className="text-sm font-medium text-gray-700 whitespace-nowrap">Waste %</label>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Waste %</label>
                             <input
                                 type="number"
                                 value={wastePercent}
                                 onChange={(e) => setWastePercent(parseFloat(e.target.value) || 0)}
-                                className="w-20 px-2 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
                             />
-                        </div>
-
-                        {/* Divider */}
-                        <div className="h-8 w-px bg-gray-300"></div>
-
-                        {/* Job Type */}
-                        <div className="flex items-center gap-2">
-                            <label className="text-sm font-medium text-gray-700 whitespace-nowrap">Job Type</label>
-                            <select
-                                value={jobTypeId}
-                                onChange={(e) => setJobTypeId(e.target.value)}
-                                className="w-40 px-2 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
-                            >
-                                <option value="">Select...</option>
-                                {jobTypes.map(jt => (
-                                    <option key={jt.id} value={jt.id}>{jt.name}</option>
-                                ))}
-                            </select>
                         </div>
                     </div>
                 </div>
@@ -1082,17 +966,15 @@ export default function AddNewQuotePage() {
                                         if (site) {
                                             setSiteId(site.id);
                                             setSiteAddress(site.address_line_1);
-                                            setCity(site.city || 'Auckland');
+                                            setCity(site.city || '');
                                             setPostcode(site.postcode || '');
                                             setRegionId(site.region_id || '');
-                                            setPropertyType(site.property_type || '');
                                         } else {
                                             setSiteId('');
                                             setSiteAddress('');
-                                            setCity('Auckland');
+                                            setCity('');
                                             setPostcode('');
                                             setRegionId('');
-                                            setPropertyType('');
                                         }
                                     }
                                 }}
@@ -1101,11 +983,10 @@ export default function AddNewQuotePage() {
                                     setCompanyId('');
                                     setSiteId('');
                                     setSiteAddress('');
-                                    setCity('Auckland');
+                                    setCity('');
                                     setPostcode('');
                                     setRegionId('');
                                     setSalesRepId('');
-                                    setPropertyType('');
                                 }}
                             />
                         </div>
@@ -1128,10 +1009,9 @@ export default function AddNewQuotePage() {
                                             onClick={() => {
                                                 setSiteId('');
                                                 setSiteAddress('');
-                                                setCity('Auckland');
+                                                setCity('');
                                                 setPostcode('');
                                                 setRegionId('');
-                                                setPropertyType('');
                                             }}
                                             className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
                                             title="Clear site address"
@@ -1176,34 +1056,19 @@ export default function AddNewQuotePage() {
                                 </div>
                             </div>
 
-                            {/* Sales Rep & Property Type */}
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Sales Rep</label>
-                                    <select
-                                        value={salesRepId}
-                                        onChange={(e) => setSalesRepId(e.target.value)}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
-                                    >
-                                        <option value="">Select sales rep...</option>
-                                        {salesReps.map(sr => (
-                                            <option key={sr.id} value={sr.id}>{sr.first_name} {sr.last_name}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Property Type</label>
-                                    <select
-                                        value={propertyType}
-                                        onChange={(e) => setPropertyType(e.target.value)}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
-                                    >
-                                        <option value="">Select property type...</option>
-                                        {propertyTypes.map(pt => (
-                                            <option key={pt} value={pt}>{pt}</option>
-                                        ))}
-                                    </select>
-                                </div>
+                            {/* Sales Rep */}
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Sales Rep</label>
+                                <select
+                                    value={salesRepId}
+                                    onChange={(e) => setSalesRepId(e.target.value)}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
+                                >
+                                    <option value="">Select sales rep...</option>
+                                    {salesReps.map(sr => (
+                                        <option key={sr.id} value={sr.id}>{sr.first_name} {sr.last_name}</option>
+                                    ))}
+                                </select>
                             </div>
                         </div>
                     </div>
@@ -1333,7 +1198,7 @@ export default function AddNewQuotePage() {
                                                                 type="text"
                                                                 value={item.marker || ''}
                                                                 onChange={(e) => updateLineItem(section.id, item.id, 'marker', e.target.value)}
-                                                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm text-gray-900"
+                                                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
                                                                 placeholder="A1"
                                                             />
                                                         )}
@@ -1368,7 +1233,7 @@ export default function AddNewQuotePage() {
                                                                         }, 200);
                                                                     }}
                                                                     placeholder="Search R-value, SKU, description..."
-                                                                    className="w-full px-3 py-1 border border-gray-300 rounded text-sm text-gray-900"
+                                                                    className="w-full px-3 py-1 border border-gray-300 rounded text-sm"
                                                                 />
                                                                 
                                                                 {/* Product Dropdown */}
@@ -1419,29 +1284,29 @@ export default function AddNewQuotePage() {
                                                                 type="number"
                                                                 value={item.area_sqm || ''}
                                                                 onChange={(e) => handleAreaChange(section.id, item.id, parseFloat(e.target.value) || 0)}
-                                                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm text-right text-gray-900"
+                                                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm text-right"
                                                                 placeholder="0"
                                                             />
                                                         ) : (
-                                                            <span className="text-sm text-gray-700 text-right block">{item.area_sqm.toFixed(2)}</span>
+                                                            <span className="text-sm text-gray-500 text-right block">{item.area_sqm.toFixed(2)}</span>
                                                         )}
                                                     </td>
 
                                                     {/* Packs */}
                                                     <td className="py-2 px-2 text-center">
                                                         {!item.is_labour && item.packs_required ? (
-                                                            <span className="text-sm font-medium text-gray-900">{item.packs_required}</span>
+                                                            <span className="text-sm font-medium">{item.packs_required}</span>
                                                         ) : null}
                                                     </td>
 
                                                     {/* Cost */}
                                                     <td className="py-2 px-2 text-right">
-                                                        <span className="text-sm text-gray-900">${item.line_cost.toFixed(2)}</span>
+                                                        <span className="text-sm">${item.line_cost.toFixed(2)}</span>
                                                     </td>
 
                                                     {/* Sell */}
                                                     <td className="py-2 px-2 text-right">
-                                                        <span className="text-sm text-gray-900">${item.line_sell.toFixed(2)}</span>
+                                                        <span className="text-sm">${item.line_sell.toFixed(2)}</span>
                                                     </td>
 
                                                     {/* GP% (Editable for products, display only for labour) */}
@@ -1452,18 +1317,18 @@ export default function AddNewQuotePage() {
                                                                 step="0.1"
                                                                 min="0"
                                                                 max="99.9"
-                                                                value={item.margin_percent !== undefined ? item.margin_percent.toFixed(1) : ''}
+                                                                value={item.margin_percent || ''}
                                                                 onChange={(e) => {
                                                                     const val = parseFloat(e.target.value);
                                                                     if (!isNaN(val) && val >= 0 && val < 100) {
                                                                         handleMarginChange(section.id, item.id, val, item.product_id!);
                                                                     }
                                                                 }}
-                                                                className="w-20 px-2 py-1 border border-gray-300 rounded text-sm text-right text-gray-900"
+                                                                className="w-20 px-2 py-1 border border-gray-300 rounded text-sm text-right"
                                                             />
-                                                        ) : item.is_labour ? (
-                                                            <span className="text-sm text-gray-900">{item.margin_percent.toFixed(1)}%</span>
-                                                        ) : null}
+                                                        ) : (
+                                                            <span className="text-sm">{item.margin_percent.toFixed(1)}%</span>
+                                                        )}
                                                     </td>
 
                                                     {/* Delete */}
@@ -1487,12 +1352,10 @@ export default function AddNewQuotePage() {
                                         <div className="flex items-center justify-between">
                                             <button
                                                 onClick={() => addLineItem(section.id)}
-                                                className="flex items-center gap-2 px-4 py-2 bg-blue-50 rounded-lg transition-colors text-[#0066CC]"
-                                                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#dbeafe'; }}
-                                                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#eff6ff'; }}
+                                                className="flex items-center gap-2 px-4 py-2 text-[#0066CC] bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
                                             >
-                                                <Plus className="w-4 h-4 text-[#0066CC]" />
-                                                <span className="text-[#0066CC]">Add Product</span>
+                                                <Plus className="w-4 h-4" />
+                                                Add Product
                                             </button>
 
                                             <div className="flex items-center gap-6 text-sm">
@@ -1523,10 +1386,7 @@ export default function AddNewQuotePage() {
                     {/* Add Section Button */}
                     <button
                         onClick={addSection}
-                        className="w-full flex items-center justify-center gap-2 p-4 bg-white border-2 border-dashed border-gray-300 rounded-lg font-medium transition-colors"
-                        style={{ color: '#0066CC' }}
-                        onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#dbeafe'; e.currentTarget.style.borderColor = '#0066CC'; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#d1d5db'; }}
+                        className="w-full flex items-center justify-center gap-2 p-4 bg-white border-2 border-dashed border-gray-300 rounded-lg hover:border-[#0066CC] hover:bg-blue-100 text-[#0066CC] font-medium transition-colors"
                     >
                         <Plus className="w-5 h-5" />
                         Add Section
@@ -1534,31 +1394,32 @@ export default function AddNewQuotePage() {
                 </div>
 
                 {/* Quote Totals */}
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-                    <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
-                        <div className="p-3 bg-gray-50 rounded-lg">
+                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                    <h2 className="text-lg font-semibold text-gray-900 mb-4">Quote Summary</h2>
+                    <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+                        <div className="p-4 bg-gray-50 rounded-lg">
                             <p className="text-xs text-gray-500 uppercase">Total Cost ex GST</p>
-                            <p className="text-base font-bold text-gray-900">${quoteTotals.totalCost.toFixed(2)}</p>
+                            <p className="text-xl font-bold text-gray-900">${quoteTotals.totalCost.toFixed(2)}</p>
                         </div>
-                        <div className="p-3 bg-gray-50 rounded-lg">
+                        <div className="p-4 bg-gray-50 rounded-lg">
                             <p className="text-xs text-gray-500 uppercase">Total Sell ex GST</p>
-                            <p className="text-base font-bold text-gray-900">${quoteTotals.totalSell.toFixed(2)}</p>
+                            <p className="text-xl font-bold text-gray-900">${quoteTotals.totalSell.toFixed(2)}</p>
                         </div>
-                        <div className="p-3 bg-green-50 rounded-lg">
+                        <div className="p-4 bg-green-50 rounded-lg">
                             <p className="text-xs text-green-600 uppercase">Gross Profit</p>
-                            <p className="text-base font-bold text-green-700">${quoteTotals.grossProfit.toFixed(2)}</p>
+                            <p className="text-xl font-bold text-green-700">${quoteTotals.grossProfit.toFixed(2)}</p>
                         </div>
-                        <div className="p-3 bg-green-50 rounded-lg">
+                        <div className="p-4 bg-green-50 rounded-lg">
                             <p className="text-xs text-green-600 uppercase">GP Margin</p>
-                            <p className="text-base font-bold text-green-700">{quoteTotals.marginPercent.toFixed(1)}%</p>
+                            <p className="text-xl font-bold text-green-700">{quoteTotals.marginPercent.toFixed(1)}%</p>
                         </div>
-                        <div className="p-3 bg-blue-50 rounded-lg">
+                        <div className="p-4 bg-blue-50 rounded-lg">
                             <p className="text-xs text-blue-600 uppercase">GST (15%)</p>
-                            <p className="text-base font-bold text-blue-700">${quoteTotals.gstAmount.toFixed(2)}</p>
+                            <p className="text-xl font-bold text-blue-700">${quoteTotals.gstAmount.toFixed(2)}</p>
                         </div>
-                        <div className="p-3 bg-[#0066CC] rounded-lg">
+                        <div className="p-4 bg-[#0066CC] rounded-lg">
                             <p className="text-xs text-blue-200 uppercase">Total Inc GST</p>
-                            <p className="text-base font-bold text-white">${quoteTotals.totalIncGst.toFixed(2)}</p>
+                            <p className="text-xl font-bold text-white">${quoteTotals.totalIncGst.toFixed(2)}</p>
                         </div>
                     </div>
                 </div>

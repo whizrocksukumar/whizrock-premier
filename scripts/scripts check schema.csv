@@ -1,0 +1,25 @@
+table_name,column_name,data_type,is_nullable,column_default
+quote_line_items,id,uuid,NO,uuid_generate_v4()
+quote_line_items,quote_id,uuid,NO,null
+quote_line_items,product_id,uuid,YES,null
+quote_line_items,product_code,text,YES,null
+quote_line_items,description,text,NO,null
+quote_line_items,quantity,numeric,NO,1
+quote_line_items,unit,text,YES,'sqm'::text
+quote_line_items,unit_cost,numeric,YES,null
+quote_line_items,unit_price,numeric,NO,null
+quote_line_items,line_total,numeric,NO,null
+quote_line_items,sort_order,integer,YES,null
+quote_line_items,notes,text,YES,null
+quote_line_items,created_at,timestamp without time zone,YES,now()
+quote_line_items,section_id,uuid,YES,null
+quote_line_items,marker,text,YES,null
+quote_line_items,area_sqm,numeric,YES,0
+quote_line_items,is_labour,boolean,YES,false
+quote_line_items,packs_required,integer,YES,0
+quote_line_items,cost_price,numeric,YES,0
+quote_line_items,sell_price,numeric,YES,0
+quote_line_items,line_cost,numeric,YES,0
+quote_line_items,line_sell,numeric,YES,0
+quote_line_items,margin_percent,numeric,YES,0
+quote_line_items,parent_line_item_id,uuid,YES,null
