@@ -10,7 +10,9 @@ import {
   TrendingDown,
   Settings,
   History,
-  ChevronDown
+  ChevronDown,
+  Building2,
+  PackagePlus
 } from 'lucide-react'
 
 interface StockLevel {
@@ -197,14 +199,34 @@ export default function InventoryPage() {
           </p>
         </div>
         <div className="flex gap-3">
-          <button disabled title="Coming Soon - Phase 2" className="bg-gray-100 text-gray-600 px-4 py-2 rounded-lg cursor-not-allowed flex items-center gap-2 border border-gray-300">
+          <Link
+            href="/inventory/vendors"
+            className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 flex items-center gap-2"
+          >
+            <Building2 className="w-5 h-5" />
+            Vendors
+          </Link>
+          <Link
+            href="/inventory/receive"
+            className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center gap-2"
+          >
+            <PackagePlus className="w-5 h-5" />
+            Receive Goods
+          </Link>
+          <Link
+            href="/inventory/movements"
+            className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 flex items-center gap-2"
+          >
             <History className="w-5 h-5" />
             Stock History
-          </button>
-          <button disabled title="Coming Soon - Phase 2" className="bg-gray-100 text-gray-600 px-4 py-2 rounded-lg cursor-not-allowed flex items-center gap-2 border border-gray-300">
+          </Link>
+          <Link
+            href="/inventory/adjust"
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2"
+          >
             <Settings className="w-5 h-5" />
             Adjust Stock
-          </button>
+          </Link>
         </div>
       </div>
 

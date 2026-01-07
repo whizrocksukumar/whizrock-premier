@@ -66,6 +66,7 @@ function CreateRecommendationForm() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const opportunityId = searchParams.get('opportunityId');
+    const assessmentId = searchParams.get('assessmentId');
 
     const [clientId, setClientId] = useState('');
     const [companyName, setCompanyName] = useState('');
@@ -74,6 +75,7 @@ function CreateRecommendationForm() {
     const [contactEmail, setContactEmail] = useState('');
     const [contactPhone, setContactPhone] = useState('');
     const [opportunityNumber, setOpportunityNumber] = useState('');
+    const [assessmentNumber, setAssessmentNumber] = useState('');
 
     const [sections, setSections] = useState<Section[]>([]);
     const [nextSectionId, setNextSectionId] = useState(1);
@@ -94,9 +96,14 @@ function CreateRecommendationForm() {
 
     useEffect(() => {
         loadLookupData();
-        if (opportunityId) loadOpportunityData(opportunityId);
-        else addInitialSection();
-    }, [opportunityId]);
+        if (assessmentId) {
+            loadAssessmentData(assessmentId);
+        } else if (opportunityId) {
+            loadOpportunityData(opportunityId);
+        } else {
+            addInitialSection();
+        }
+    }, [opportunityId, assessmentId]);
 
     const loadOpportunityData = async (oppId: string) => {
         try {
@@ -143,6 +150,78 @@ function CreateRecommendationForm() {
         } catch (err) {
             console.error('Error loading opportunity:', err);
             setError('Failed to load opportunity data');
+        }
+    };
+
+    const loadAssessmentData = async (assmtId: string) => {
+        try {
+            const { data: assessment, error } = await supabase
+                .from('assessments')
+                .select(`
+                    id,
+                    reference_number,
+                    client_id,
+                    site_id,
+                    notes,
+                    clients!client_id (
+                        id,
+                        contact_first_name,
+                        contact_last_name,
+                        contact_email,
+                        contact_phone,
+                        company_id,
+                        companies!company_id (
+                            company_name
+                        )
+                    ),
+                    sites!site_id (
+                        address_line_1,
+                        address_line_2,
+                        city,
+                        postcode
+                    )
+                `)
+                .eq('id', assmtId)
+                .single();
+
+            if (error) throw error;
+
+            if (assessment) {
+                setAssessmentNumber(assessment.reference_number);
+                setClientId(assessment.client_id);
+
+                // Set contact details from client
+                if (assessment.clients) {
+                    setContactPerson(`${assessment.clients.contact_first_name} ${assessment.clients.contact_last_name}`);
+                    setContactEmail(assessment.clients.contact_email || '');
+                    setContactPhone(assessment.clients.contact_phone || '');
+
+                    // Set company name
+                    if (assessment.clients.companies) {
+                        setCompanyName(assessment.clients.companies.company_name);
+                    }
+                }
+
+                // Set site address
+                if (assessment.sites) {
+                    const site = assessment.sites;
+                    const addressParts = [
+                        site.address_line_1,
+                        site.address_line_2,
+                        site.city,
+                        site.postcode
+                    ].filter(Boolean);
+                    setSiteAddress(addressParts.join(', '));
+                }
+
+                // Set notes
+                if (assessment.notes) setGeneralNotes(assessment.notes);
+            }
+
+            addInitialSection();
+        } catch (err) {
+            console.error('Error loading assessment:', err);
+            setError('Failed to load assessment data');
         }
     };
 
@@ -344,11 +423,12 @@ function CreateRecommendationForm() {
 
             <div className="max-w-6xl mx-auto p-6 space-y-6">
 
-                {/* OPPORTUNITY INFO */}
-                {opportunityNumber && (
+                {/* OPPORTUNITY/ASSESSMENT INFO */}
+                {(opportunityNumber || assessmentNumber) && (
                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                         <p className="text-sm font-semibold text-blue-900">
-                            Opportunity: {opportunityNumber}
+                            {opportunityNumber && `Opportunity: ${opportunityNumber}`}
+                            {assessmentNumber && `Assessment: ${assessmentNumber}`}
                         </p>
                     </div>
                 )}
@@ -426,31 +506,51 @@ function CreateRecommendationForm() {
                             </button>
                         </div>
 
-                        {/* Application Type Selector */}
-                        <div className="mb-4">
-                            <label className="block text-sm font-medium mb-2">Application Type</label>
+                        {/* Application Type, Custom Name, and Color Picker - Same layout as quote page */}
+                        <div className="mb-4 flex items-center gap-3">
                             <select
                                 value={section.app_type_id || ''}
                                 onChange={(e) => updateSection(section.id, 'app_type_id', e.target.value)}
-                                className="w-full border border-gray-300 rounded px-3 py-2"
+                                className="flex-1 max-w-xs px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white"
                             >
-                                <option value="">Select Application Type</option>
+                                <option value="">Select application type...</option>
                                 {appTypes.map(at => (
                                     <option key={at.id} value={at.id}>{at.name}</option>
                                 ))}
                             </select>
-                        </div>
 
-                        {/* Custom Name */}
-                        <div className="mb-4">
-                            <label className="block text-sm font-medium mb-2">Custom Section Name</label>
+                            <span className="text-gray-400">or</span>
+
                             <input
                                 type="text"
                                 value={section.custom_name}
                                 onChange={(e) => updateSection(section.id, 'custom_name', e.target.value)}
-                                className="w-full border border-gray-300 rounded px-3 py-2"
-                                placeholder="e.g., Living Room Ceiling"
+                                placeholder="Custom section name..."
+                                className="flex-1 max-w-xs px-3 py-2 border border-gray-300 rounded-lg text-sm"
                             />
+
+                            {/* Color Picker */}
+                            <div className="flex items-center gap-2 border border-gray-300 rounded-lg px-2 py-1 bg-white">
+                                <label className="text-xs text-gray-500">Color:</label>
+                                <input
+                                    type="color"
+                                    value={section.section_color || '#ffffff'}
+                                    onChange={(e) => updateSection(section.id, 'section_color', e.target.value)}
+                                    className="w-6 h-6 p-0 border-0 rounded cursor-pointer"
+                                />
+                                <input
+                                    type="text"
+                                    value={section.section_color || '#ffffff'}
+                                    onChange={(e) => {
+                                        const hex = e.target.value;
+                                        if (/^#[0-9A-Fa-f]{0,6}$/.test(hex)) {
+                                            updateSection(section.id, 'section_color', hex);
+                                        }
+                                    }}
+                                    className="w-20 text-xs border-0 focus:outline-none"
+                                    maxLength={7}
+                                />
+                            </div>
                         </div>
 
                         {/* LINE ITEMS TABLE */}

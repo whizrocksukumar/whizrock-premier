@@ -1,7 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
-import { ArrowLeft, Download, Mail, Printer } from 'lucide-react'
-import Image from 'next/image'
+import CertificateActions from './CertificateActions'
 
 interface JobDetail {
   id: string
@@ -82,7 +81,7 @@ export default async function JobCertificatePage({ params }: { params: { id: str
       <div className="min-h-screen bg-gray-100 p-6">
         <div className="max-w-4xl mx-auto bg-white rounded-lg shadow p-8 text-center">
           <h2 className="text-xl font-semibold text-gray-800">Job Not Found</h2>
-          <Link href="/jobs" className="text-blue-600 hover:underline mt-4 inline-block">
+          <Link href="/jobs" className="text-white hover:text-white hover:underline mt-4 inline-block">
             ← Back to Jobs
           </Link>
         </div>
@@ -119,38 +118,7 @@ export default async function JobCertificatePage({ params }: { params: { id: str
   return (
     <div className="min-h-screen bg-gray-50 py-8">
       {/* Action Buttons - Print/Download/Email */}
-      <div className="max-w-5xl mx-auto mb-6 px-6 print:hidden">
-        <div className="flex items-center justify-between">
-          <Link
-            href={`/jobs/${params.id}`}
-            className="flex items-center gap-2 text-gray-600 hover:text-gray-900"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Back to Job
-          </Link>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => window.print()}
-              className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 flex items-center gap-2"
-            >
-              <Printer className="w-4 h-4" />
-              Print
-            </button>
-            <button
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
-            >
-              <Download className="w-4 h-4" />
-              Download PDF
-            </button>
-            <button
-              className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 flex items-center gap-2"
-            >
-              <Mail className="w-4 h-4" />
-              Email to Customer
-            </button>
-          </div>
-        </div>
-      </div>
+      <CertificateActions jobId={params.id} />
 
       {/* Certificate Content - PDF Ready */}
       <div className="max-w-5xl mx-auto bg-white shadow-lg print:shadow-none" id="certificate">

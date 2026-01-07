@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { ArrowLeft, Mail, Printer, Edit, Download, CheckCircle, Clock, AlertCircle } from 'lucide-react'
+import { ArrowLeft, Mail, Printer, Download, CheckCircle, Clock, AlertCircle } from 'lucide-react'
 import Link from 'next/link'
 
 interface AssessmentDetail {
@@ -55,6 +55,7 @@ export default function AssessmentDetailPage() {
   const [areas, setAreas] = useState<AssessmentArea[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [completing, setCompleting] = useState(false)
 
   useEffect(() => {
     fetchAssessmentDetails()
@@ -65,26 +66,41 @@ export default function AssessmentDetailPage() {
       setLoading(true)
       setError(null)
 
-      // Fetch assessment with site relationship
-      const { data: assessmentData, error: assessmentError } = await supabase
+      console.log('Fetching assessment with ID:', assessmentId)
+
+      // Try fetching without relationships first to isolate the issue
+      const { data: basicData, error: basicError } = await supabase
         .from('assessments')
-        .select(`
-          *,
-          sites!site_id (
-            address_line_1,
-            address_line_2,
-            city,
-            postcode
-          )
-        `)
+        .select('*')
         .eq('id', assessmentId)
         .single()
 
-      if (assessmentError) throw assessmentError
-      if (!assessmentData) {
-        setError('Assessment not found')
+      console.log('Basic assessment query:', { data: basicData, error: basicError })
+
+      if (basicError || !basicData) {
+        console.error('Assessment not found with ID:', assessmentId)
+        setError('Assessment not found. Please check the assessment ID.')
+        setLoading(false)
         return
       }
+
+      // Now fetch site separately if exists
+      let siteData = null
+      if (basicData.site_id) {
+        const { data: site } = await supabase
+          .from('sites')
+          .select('address_line_1, address_line_2, city, postcode')
+          .eq('id', basicData.site_id)
+          .single()
+        siteData = site
+      }
+
+      const assessmentData = {
+        ...basicData,
+        sites: siteData
+      }
+
+      console.log('Successfully loaded assessment:', assessmentData.reference_number)
 
       // Fetch client details
       let clientData = null
@@ -178,6 +194,32 @@ export default function AssessmentDetailPage() {
   const handleDownloadPDF = () => {
     // TODO: Generate and download PDF
     alert('PDF download functionality to be implemented')
+  }
+
+  const handleMarkComplete = async () => {
+    if (!confirm('Mark this assessment as complete and notify VA to create product recommendation?')) {
+      return
+    }
+
+    setCompleting(true)
+    try {
+      const response = await fetch(`/api/assessments/${assessmentId}/complete`, {
+        method: 'POST',
+      })
+
+      const result = await response.json()
+
+      if (result.ok) {
+        alert('✓ Assessment marked complete!\n✉ VA has been notified via email to create product recommendation.')
+        fetchAssessmentDetails() // Refresh the page
+      } else {
+        alert(`Error: ${result.error}`)
+      }
+    } catch (error) {
+      alert('Failed to mark assessment complete')
+      console.error(error)
+    }
+    setCompleting(false)
   }
 
   const getResultBadgeColor = (result: string) => {
@@ -294,13 +336,16 @@ export default function AssessmentDetailPage() {
               <Download className="w-4 h-4" />
               PDF
             </button>
-            <Link
-              href={`/assessments/${assessmentId}/edit`}
-              className="px-4 py-2 text-sm bg-[#0066CC] text-white rounded hover:bg-[#0052a3] flex items-center gap-2"
-            >
-              <Edit className="w-4 h-4" />
-              Edit
-            </Link>
+            {assessment.status !== 'Completed' && (
+              <button
+                onClick={handleMarkComplete}
+                disabled={completing}
+                className="px-4 py-2 text-sm bg-green-600 text-white rounded transition-colors flex items-center gap-2 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <CheckCircle className="w-4 h-4" />
+                {completing ? 'Completing...' : 'Mark Complete & Notify VA'}
+              </button>
+            )}
           </div>
         </div>
       </div>

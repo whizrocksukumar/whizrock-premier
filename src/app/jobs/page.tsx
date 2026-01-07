@@ -24,6 +24,8 @@ interface Job {
   actual_cost: number;
   margin_percent: number;
   created_at: string;
+  certificate_issued_date?: string | null;
+  certificate_number?: string | null;
 }
 
 type SortField = 'job_number' | 'quote_number' | 'customer_last_name' | 'site_address' | 'scheduled_date' | 'status' | 'created_at';
@@ -180,10 +182,22 @@ export default function JobsPage() {
             .select('first_name, last_name')
             .eq('id', job.crew_lead_id)
             .single();
-          
+
           if (installer) {
             crewLeadName = `${installer.first_name} ${installer.last_name}`;
           }
+        }
+
+        // Fetch certificate data
+        let certificateData = null;
+        const { data: certificate } = await supabase
+          .from('job_completion_certificates')
+          .select('certificate_number, issued_date')
+          .eq('job_id', job.id)
+          .single();
+
+        if (certificate) {
+          certificateData = certificate;
         }
 
         const quote = job.quote_id ? quoteMap[job.quote_id] : null;
@@ -193,7 +207,7 @@ export default function JobsPage() {
         const derivedAddress = buildSiteAddress(site);
 
         const actual_cost = job.actual_amount || 0;
-        const margin_percent = job.quoted_amount > 0 
+        const margin_percent = job.quoted_amount > 0
           ? ((job.quoted_amount - actual_cost) / job.quoted_amount * 100)
           : 0;
 
@@ -214,7 +228,9 @@ export default function JobsPage() {
           quoted_amount: job.quoted_amount || 0,
           actual_cost: actual_cost,
           margin_percent: margin_percent,
-          created_at: job.created_at
+          created_at: job.created_at,
+          certificate_issued_date: certificateData?.issued_date || null,
+          certificate_number: certificateData?.certificate_number || null
         };
       }));
 
@@ -298,11 +314,11 @@ export default function JobsPage() {
           </div>
           <div className="flex items-center gap-2">
             <Link
-              href="/jobs/create-from-quote"
+              href="/jobs/new"
               className="px-4 py-2 text-sm bg-[#0066CC] text-white rounded hover:bg-[#0052a3] hover:shadow-md transition-all duration-200 flex items-center gap-2"
             >
               <Plus className="w-4 h-4" />
-              Create Job from Quote
+              Schedule a New Job
             </Link>
           </div>
         </div>
@@ -444,6 +460,9 @@ export default function JobsPage() {
                     <th className="text-left px-4 py-3 text-xs font-semibold whitespace-nowrap">
                       Installer
                     </th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold whitespace-nowrap">
+                      Certificate
+                    </th>
                     <th className="text-right px-4 py-3 text-xs font-semibold whitespace-nowrap">
                       Quoted Amount
                     </th>
@@ -458,7 +477,7 @@ export default function JobsPage() {
                 <tbody className="divide-y divide-gray-200">
                   {jobs.length === 0 ? (
                     <tr>
-                      <td colSpan={12} className="px-4 py-8 text-center text-gray-500">
+                      <td colSpan={13} className="px-4 py-8 text-center text-gray-500">
                         No jobs found
                       </td>
                     </tr>
@@ -484,7 +503,7 @@ export default function JobsPage() {
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                router.push(`/jobs/${job.id}`);
+                                router.push(`/jobs/${job.id}?edit=true`);
                               }}
                               className="p-1 text-gray-600 hover:bg-gray-100 rounded"
                               title="Edit"
@@ -493,8 +512,14 @@ export default function JobsPage() {
                             </button>
                           </div>
                         </td>
-                        <td className="px-4 py-3 whitespace-nowrap font-medium text-gray-900 text-sm">
-                          {job.job_number}
+                        <td className="px-4 py-3 whitespace-nowrap text-sm">
+                          <Link
+                            href={`/jobs/${job.id}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="font-medium text-blue-600 hover:text-blue-800 hover:underline"
+                          >
+                            {job.job_number}
+                          </Link>
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-sm">
                           <Link
@@ -525,6 +550,22 @@ export default function JobsPage() {
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
                           {job.crew_lead_name || '-'}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm">
+                          {job.certificate_issued_date ? (
+                            <div className="flex flex-col">
+                              <span className="text-green-600 font-medium">Issued</span>
+                              <span className="text-xs text-gray-500">
+                                {new Date(job.certificate_issued_date).toLocaleDateString('en-NZ', {
+                                  year: 'numeric',
+                                  month: 'short',
+                                  day: 'numeric'
+                                })}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 text-right font-medium">
                           ${job.quoted_amount.toLocaleString('en-NZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}

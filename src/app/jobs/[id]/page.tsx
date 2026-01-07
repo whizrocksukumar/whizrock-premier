@@ -1,12 +1,12 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import ClientOverviewCard from '@/components/client/ClientOverviewCard';
 import { fetchClientWithRelations, ClientWithRelations } from '@/lib/utils/clients-helpers';
-import { ArrowLeft, Edit, FileText } from 'lucide-react';
+import { ArrowLeft, Edit, FileText, X, Save, CheckCircle } from 'lucide-react';
 
 interface JobDetail {
   id: string;
@@ -74,7 +74,7 @@ interface Comment {
   is_internal: boolean;
 }
 
-type TabName = 'overview' | 'materials' | 'labour' | 'history' | 'comments';
+type TabName = 'overview' | 'materials' | 'labour' | 'stock' | 'history' | 'comments';
 
 const formatDate = (dateString: string | null) =>
   dateString
@@ -119,24 +119,41 @@ const getStatusBadge = (status: string) => {
 
 export default function JobDetailPage({ params }: { params: { id: string } }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const jobId = params.id;
   const [job, setJob] = useState<JobDetail | null>(null);
   const [clientOverview, setClientOverview] = useState<ClientWithRelations | null>(null);
   const [quoteNumber, setQuoteNumber] = useState('');
   const [derivedSiteAddress, setDerivedSiteAddress] = useState('');
   const [crewLeadName, setCrewLeadName] = useState('');
+  const [installers, setInstallers] = useState<Array<{ id: string; first_name: string; last_name: string }>>([]);
   const [lineItems, setLineItems] = useState<LineItem[]>([]);
   const [labourItems, setLabourItems] = useState<LabourItem[]>([]);
   const [statusHistory, setStatusHistory] = useState<StatusHistory[]>([]);
   const [comments, setComments] = useState<Comment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [completing, setCompleting] = useState(false);
   const [activeTab, setActiveTab] = useState<TabName>('overview');
+  const [isEditMode, setIsEditMode] = useState(searchParams.get('edit') === 'true');
+  const [originalStatus, setOriginalStatus] = useState<string>('');
 
   useEffect(() => {
     if (!jobId) return;
     fetchJobData();
+    fetchInstallers();
   }, [jobId]);
+
+  const fetchInstallers = async () => {
+    const { data } = await supabase
+      .from('team_members')
+      .select('id, first_name, last_name')
+      .eq('role', 'Installer')
+      .eq('status', 'active')
+      .order('first_name');
+
+    if (data) setInstallers(data);
+  };
 
   const fetchJobData = async () => {
     try {
@@ -151,6 +168,7 @@ export default function JobDetailPage({ params }: { params: { id: string } }) {
 
       if (jobError || !jobData) throw jobError;
       setJob(jobData);
+      setOriginalStatus(jobData.status); // Track original status for history
 
       // Fetch quote, client, and site details
       if (jobData.quote_id) {
@@ -252,6 +270,39 @@ export default function JobDetailPage({ params }: { params: { id: string } }) {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleMarkComplete = async () => {
+    if (!confirm('Mark this job as complete and issue certificate to customer?')) {
+      return;
+    }
+
+    const completionNotes = prompt('Enter completion notes (optional):');
+
+    setCompleting(true);
+    try {
+      const response = await fetch(`/api/jobs/${jobId}/complete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          completionDate: new Date().toISOString(),
+          completionNotes: completionNotes || '',
+        }),
+      });
+
+      const result = await response.json();
+
+      if (result.ok) {
+        alert(`✓ Job completed successfully!\n\nCertificate Number: ${result.certificateNumber}\n✉ Certificate has been emailed to customer.`);
+        fetchJobData(); // Refresh
+      } else {
+        alert(`Error: ${result.error}`);
+      }
+    } catch (error) {
+      alert('Failed to complete job');
+      console.error(error);
+    }
+    setCompleting(false);
   };
 
   if (loading) {
@@ -360,17 +411,96 @@ export default function JobDetailPage({ params }: { params: { id: string } }) {
         </div>
 
         <div className="flex gap-2">
-          <Link
-            href={`/jobs/${job.id}/certificate`}
-            className="px-4 py-2 text-sm bg-green-600 text-white rounded hover:bg-green-700 flex items-center gap-1"
-          >
-            <FileText className="w-4 h-4" /> Certificate
-          </Link>
+          {/* Show Certificate button only for Completed jobs */}
+          {job.status === 'Completed' && (
+            <Link
+              href={`/jobs/${job.id}/certificate`}
+              className="px-4 py-2 text-sm bg-green-600 text-white rounded hover:bg-green-700 flex items-center gap-1"
+            >
+              <FileText className="w-4 h-4" /> Certificate
+            </Link>
+          )}
 
-          <button className="px-4 py-2 text-sm bg-[#0066CC] text-white rounded hover:bg-[#0052a3] flex items-center gap-2">
-            <Edit className="w-4 h-4" />
-            Edit
-          </button>
+          {/* Toggle Edit Mode */}
+          {isEditMode ? (
+            <>
+              <button
+                onClick={() => setIsEditMode(false)}
+                className="px-4 py-2 text-sm bg-gray-500 text-white rounded hover:bg-gray-600 flex items-center gap-2"
+              >
+                <X className="w-4 h-4" />
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  try {
+                    // Update job details in database
+                    const { error: updateError } = await supabase
+                      .from('jobs')
+                      .update({
+                        status: job.status,
+                        scheduled_date: job.scheduled_date,
+                        crew_lead_id: job.crew_lead_id,
+                        // Update completion_date when status is changed to Completed
+                        completion_date: job.status === 'Completed' && !job.completion_date
+                          ? new Date().toISOString()
+                          : job.completion_date,
+                        updated_at: new Date().toISOString()
+                      })
+                      .eq('id', jobId);
+
+                    if (updateError) {
+                      console.error('Error updating job:', updateError);
+                      setError('Failed to save changes');
+                      return;
+                    }
+
+                    // Record status change in history only if status actually changed
+                    if (originalStatus !== job.status) {
+                      await supabase.from('job_status_history').insert({
+                        job_id: jobId,
+                        old_status: originalStatus,
+                        new_status: job.status,
+                        changed_at: new Date().toISOString()
+                      });
+                    }
+
+                    // Refresh job data
+                    await fetchJobData();
+                    setIsEditMode(false);
+                    setError('');
+                  } catch (err) {
+                    console.error('Error saving:', err);
+                    setError('Failed to save changes');
+                  }
+                }}
+                className="px-4 py-2 text-sm bg-[#0066CC] text-white rounded hover:bg-[#0052a3] flex items-center gap-2"
+              >
+                <Save className="w-4 h-4" />
+                Save Changes
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={() => setIsEditMode(true)}
+                className="px-4 py-2 text-sm bg-[#0066CC] text-white rounded hover:bg-[#0052a3] flex items-center gap-2"
+              >
+                <Edit className="w-4 h-4" />
+                Edit
+              </button>
+              {job && job.status !== 'Completed' && job.status !== 'Cancelled' && (
+                <button
+                  onClick={handleMarkComplete}
+                  disabled={completing}
+                  className="px-4 py-2 text-sm bg-green-600 text-white rounded transition-colors flex items-center gap-2 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <CheckCircle className="w-4 h-4" />
+                  {completing ? 'Completing...' : 'Mark Complete & Issue Certificate'}
+                </button>
+              )}
+            </>
+          )}
         </div>
       </div>
 
@@ -400,17 +530,17 @@ export default function JobDetailPage({ params }: { params: { id: string } }) {
                   : 'border-transparent text-gray-600 bg-gray-50 hover:text-[#0066CC]'
               }`}
             >
-              Materials & Products
+              Products & Labour
             </button>
             <button
-              onClick={() => setActiveTab('labour')}
+              onClick={() => setActiveTab('stock')}
               className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
-                activeTab === 'labour'
+                activeTab === 'stock'
                   ? 'border-[#0066CC] text-white bg-[#0066CC]'
                   : 'border-transparent text-gray-600 bg-gray-50 hover:text-[#0066CC]'
               }`}
             >
-              Labour
+              Stock Allocation
             </button>
             <button
               onClick={() => setActiveTab('history')}
@@ -441,80 +571,128 @@ export default function JobDetailPage({ params }: { params: { id: string } }) {
             {activeTab === 'overview' && (
               <div className="space-y-6">
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                  <div className="lg:col-span-2">
+                  {/* Customer Card */}
+                  <div>
                     {customerCard}
                   </div>
-                  <div className="space-y-4">
-                    <div className="bg-white rounded-lg shadow p-4">
-                      <h2 className="text-base font-semibold mb-4">Job Information</h2>
 
-                      <div className="space-y-2 text-sm">
-                        <div className="flex justify-between">
-                          <span className="text-gray-500">Status</span>
+                  {/* Job Information Card */}
+                  <div className="bg-white rounded-lg shadow p-4">
+                    <h2 className="text-base font-semibold mb-4">Job Information</h2>
+
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-500">Status</span>
+                        {isEditMode ? (
+                          <select
+                            value={job.status}
+                            onChange={(e) => setJob({ ...job, status: e.target.value })}
+                            className="px-2 py-1 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
+                          >
+                            <option value="Draft">Draft</option>
+                            <option value="Scheduled">Scheduled</option>
+                            <option value="In Progress">In Progress</option>
+                            <option value="Completed">Completed</option>
+                            <option value="Cancelled">Cancelled</option>
+                          </select>
+                        ) : (
                           <span className={`px-2 py-1 text-xs rounded-full ${getStatusBadge(job.status)}`}>
                             {job.status}
                           </span>
-                        </div>
+                        )}
+                      </div>
 
-                        <div className="flex justify-between">
-                          <span className="text-gray-500">Scheduled</span>
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-500">Scheduled</span>
+                        {isEditMode ? (
+                          <input
+                            type="date"
+                            value={job.scheduled_date || ''}
+                            onChange={(e) => setJob({ ...job, scheduled_date: e.target.value })}
+                            className="px-2 py-1 text-sm border border-gray-300 rounded"
+                          />
+                        ) : (
                           <span className="font-medium">{formatDate(job.scheduled_date)}</span>
-                        </div>
-
-                        {job.start_date && (
-                          <div className="flex justify-between">
-                            <span className="text-gray-500">Start</span>
-                            <span className="font-medium">{formatDate(job.start_date)}</span>
-                          </div>
                         )}
+                      </div>
 
-                        {job.completion_date && (
-                          <div className="flex justify-between">
-                            <span className="text-gray-500">Completed</span>
-                            <span className="font-medium">{formatDate(job.completion_date)}</span>
-                          </div>
-                        )}
-
+                      {job.start_date && (
                         <div className="flex justify-between">
-                          <span className="text-gray-500">Installer</span>
+                          <span className="text-gray-500">Start</span>
+                          <span className="font-medium">{formatDate(job.start_date)}</span>
+                        </div>
+                      )}
+
+                      {job.completion_date && (
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Completed</span>
+                          <span className="font-medium">{formatDate(job.completion_date)}</span>
+                        </div>
+                      )}
+
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-500">Installer</span>
+                        {isEditMode ? (
+                          <select
+                            value={job.crew_lead_id || ''}
+                            onChange={(e) => {
+                              const newCrewLeadId = e.target.value;
+                              setJob({ ...job, crew_lead_id: newCrewLeadId });
+                              // Update crew lead name display
+                              const selected = installers.find(i => i.id === newCrewLeadId);
+                              if (selected) {
+                                setCrewLeadName(`${selected.first_name} ${selected.last_name}`);
+                              }
+                            }}
+                            className="px-2 py-1 text-sm border border-gray-300 rounded"
+                          >
+                            <option value="">-- Select Installer --</option>
+                            {installers.map((installer) => (
+                              <option key={installer.id} value={installer.id}>
+                                {installer.first_name} {installer.last_name}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
                           <span className="font-medium">{crewLeadName || '-'}</span>
-                        </div>
+                        )}
+                      </div>
 
-                        <div className="flex justify-between">
-                          <span className="text-gray-500">Site Address</span>
-                          <span className="font-medium text-right text-xs">{displayAddress}</span>
-                        </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Site Address</span>
+                        <span className="font-medium text-right text-xs">{displayAddress}</span>
+                      </div>
 
-                        <div className="flex justify-between">
-                          <span className="text-gray-500">Warranty</span>
-                          <span className="font-medium">
-                            {job.warranty_period_months ? `${job.warranty_period_months} months` : '-'}
-                          </span>
-                        </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Warranty</span>
+                        <span className="font-medium">
+                          {job.warranty_period_months ? `${job.warranty_period_months} months` : '-'}
+                        </span>
                       </div>
                     </div>
+                  </div>
 
-                    <div className="bg-white rounded-lg shadow p-4">
-                      <h2 className="text-base font-semibold mb-4">Quick Stats</h2>
+                  {/* Quick Stats Card */}
+                  <div className="bg-white rounded-lg shadow p-4">
+                    <h2 className="text-base font-semibold mb-4">Quick Stats</h2>
 
-                      <div className="space-y-2 text-sm">
-                        <div className="flex justify-between">
-                          <span className="text-gray-500">Total Quoted</span>
-                          <span className="font-bold">{formatCurrency(totalQuoted)}</span>
-                        </div>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Total Quoted</span>
+                        <span className="font-bold">{formatCurrency(totalQuoted)}</span>
+                      </div>
 
-                        <div className="flex justify-between">
-                          <span className="text-gray-500">Total Actual</span>
-                          <span className="font-bold">{formatCurrency(totalActual)}</span>
-                        </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Total Actual</span>
+                        <span className="font-bold">{formatCurrency(totalActual)}</span>
+                      </div>
 
-                        <div className="flex justify-between">
-                          <span className="text-gray-500">Variance</span>
-                          <span className={`font-bold ${variance >= 0 ? 'text-red-600' : 'text-green-600'}`}>
-                            {formatCurrency(Math.abs(variance))}
-                            <span className="text-xs ml-1">({variancePercent.toFixed(1)}%)</span>
-                          </span>
-                        </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Variance</span>
+                        <span className={`font-bold ${variance >= 0 ? 'text-red-600' : 'text-green-600'}`}>
+                          {formatCurrency(Math.abs(variance))}
+                          <span className="text-xs ml-1">({variancePercent.toFixed(1)}%)</span>
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -544,87 +722,209 @@ export default function JobDetailPage({ params }: { params: { id: string } }) {
               </div>
             )}
             
-            {/* MATERIALS TAB */}
+            {/* PRODUCTS & LABOUR TAB */}
             {activeTab === 'materials' && (
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Code</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Qty Quoted</th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Qty Actual</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Unit</th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Unit Cost</th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Line Total</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {lineItems?.length === 0 ? (
-                      <tr>
-                        <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
-                          No materials added yet
-                        </td>
-                      </tr>
-                    ) : (
-                      lineItems?.map((item) => (
-                        <tr key={item.id} className="hover:bg-gray-50">
-                          <td className="px-6 py-4 text-sm text-gray-900">{item.product_code || '—'}</td>
-                          <td className="px-6 py-4 text-sm text-gray-900">{item.description}</td>
-                          <td className="px-6 py-4 text-sm text-gray-900 text-right">{item.quantity_quoted}</td>
-                          <td className="px-6 py-4 text-sm text-gray-900 text-right">{item.quantity_actual || '—'}</td>
-                          <td className="px-6 py-4 text-sm text-gray-900">{item.unit || '—'}</td>
-                          <td className="px-6 py-4 text-sm text-gray-900 text-right">{formatCurrency(item.unit_cost)}</td>
-                          <td className="px-6 py-4 text-sm font-medium text-gray-900 text-right">{formatCurrency(item.line_cost)}</td>
+              <div className="space-y-6">
+                {/* Products Section */}
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-900 mb-3 px-6">Products</h3>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Code</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
+                          <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Qty Quoted</th>
+                          <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Qty Actual</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Unit</th>
+                          <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Unit Cost</th>
+                          <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Line Total</th>
                         </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {lineItems?.length === 0 ? (
+                          <tr>
+                            <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
+                              No products added yet
+                            </td>
+                          </tr>
+                        ) : (
+                          lineItems?.map((item) => (
+                            <tr key={item.id} className="hover:bg-gray-50">
+                              <td className="px-6 py-4 text-sm text-gray-900">{item.product_code || '—'}</td>
+                              <td className="px-6 py-4 text-sm text-gray-900">{item.description}</td>
+                              <td className="px-6 py-4 text-sm text-gray-900 text-right">{item.quantity_quoted}</td>
+                              <td className="px-6 py-4 text-sm text-gray-900 text-right">{item.quantity_actual || '—'}</td>
+                              <td className="px-6 py-4 text-sm text-gray-900">{item.unit || '—'}</td>
+                              <td className="px-6 py-4 text-sm text-gray-900 text-right">{formatCurrency(item.unit_cost)}</td>
+                              <td className="px-6 py-4 text-sm font-medium text-gray-900 text-right">{formatCurrency(item.line_cost)}</td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Labour Section */}
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-900 mb-3 px-6">Labour</h3>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
+                          <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Area (sqm)</th>
+                          <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Quoted Hours</th>
+                          <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actual Hours</th>
+                          <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Rate</th>
+                          <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Quoted Amount</th>
+                          <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actual Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {labourItems?.length === 0 ? (
+                          <tr>
+                            <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
+                              No labour items added yet
+                            </td>
+                          </tr>
+                        ) : (
+                          labourItems?.map((item) => (
+                            <tr key={item.id} className="hover:bg-gray-50">
+                              <td className="px-6 py-4 text-sm text-gray-900">{item.description}</td>
+                              <td className="px-6 py-4 text-sm text-gray-900 text-right">{item.area_sqm || '—'}</td>
+                              <td className="px-6 py-4 text-sm text-gray-900 text-right">{item.quoted_hours || '—'}</td>
+                              <td className="px-6 py-4 text-sm text-gray-900 text-right">{item.actual_hours || '—'}</td>
+                              <td className="px-6 py-4 text-sm text-gray-900 text-right">
+                                {formatCurrency(item.actual_rate || item.quoted_rate)}
+                              </td>
+                              <td className="px-6 py-4 text-sm text-gray-900 text-right">{formatCurrency(item.quoted_amount)}</td>
+                              <td className="px-6 py-4 text-sm font-medium text-gray-900 text-right">
+                                {item.actual_amount ? formatCurrency(item.actual_amount) : '—'}
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               </div>
             )}
 
-            {/* LABOUR TAB */}
-            {activeTab === 'labour' && (
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Area (sqm)</th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Quoted Hours</th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actual Hours</th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Rate</th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Quoted Amount</th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actual Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {labourItems?.length === 0 ? (
+            {/* STOCK ALLOCATION TAB */}
+            {activeTab === 'stock' && (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">Stock Allocation</h3>
+                    <p className="text-sm text-gray-600 mt-1">
+                      Manage stock reservations and allocations for this job
+                    </p>
+                  </div>
+                  <Link
+                    href={`/jobs/${jobId}/stock/manage`}
+                    className="bg-[#0066CC] text-white px-4 py-2 rounded-lg hover:bg-[#0052a3] flex items-center gap-2"
+                  >
+                    Manage Stock
+                  </Link>
+                </div>
+
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="flex-shrink-0">
+                      <svg className="w-5 h-5 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                    <div className="flex-1">
+                      <h4 className="text-sm font-medium text-blue-900">About Stock Allocation</h4>
+                      <p className="text-sm text-blue-800 mt-1">
+                        Stock allocation reserves materials for this job. When the job is scheduled, stock moves to "Reserved" status.
+                        On completion, record actual usage and return unused stock.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white border border-gray-200 rounded-lg">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
                       <tr>
-                        <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
-                          No labour items added yet
-                        </td>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
+                        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Quoted</th>
+                        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Allocated</th>
+                        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Used</th>
+                        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Returned</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Unit</th>
+                        <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Status</th>
                       </tr>
-                    ) : (
-                      labourItems?.map((item) => (
-                        <tr key={item.id} className="hover:bg-gray-50">
-                          <td className="px-6 py-4 text-sm text-gray-900">{item.description}</td>
-                          <td className="px-6 py-4 text-sm text-gray-900 text-right">{item.area_sqm || '—'}</td>
-                          <td className="px-6 py-4 text-sm text-gray-900 text-right">{item.quoted_hours || '—'}</td>
-                          <td className="px-6 py-4 text-sm text-gray-900 text-right">{item.actual_hours || '—'}</td>
-                          <td className="px-6 py-4 text-sm text-gray-900 text-right">
-                            {formatCurrency(item.actual_rate || item.quoted_rate)}
-                          </td>
-                          <td className="px-6 py-4 text-sm text-gray-900 text-right">{formatCurrency(item.quoted_amount)}</td>
-                          <td className="px-6 py-4 text-sm font-medium text-gray-900 text-right">
-                            {item.actual_amount ? formatCurrency(item.actual_amount) : '—'}
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {lineItems?.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
+                            No products in this job. Add products first to allocate stock.
                           </td>
                         </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
+                      ) : (
+                        lineItems?.map((item) => (
+                          <tr key={item.id} className="hover:bg-gray-50">
+                            <td className="px-6 py-4">
+                              <div>
+                                <div className="text-sm font-medium text-gray-900">{item.description}</div>
+                                <div className="text-xs text-gray-500">{item.product_code}</div>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 text-sm text-gray-900 text-right">{item.quantity_quoted}</td>
+                            <td className="px-6 py-4 text-sm text-gray-900 text-right">
+                              <span className="text-blue-600 font-medium">0</span>
+                            </td>
+                            <td className="px-6 py-4 text-sm text-gray-900 text-right">-</td>
+                            <td className="px-6 py-4 text-sm text-gray-900 text-right">-</td>
+                            <td className="px-6 py-4 text-sm text-gray-700">{item.unit}</td>
+                            <td className="px-6 py-4 text-center">
+                              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-800">
+                                Pending
+                              </span>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                  <h4 className="text-sm font-medium text-gray-900 mb-3">Stock Allocation Workflow</h4>
+                  <div className="space-y-2 text-sm text-gray-700">
+                    <div className="flex items-start gap-2">
+                      <span className="flex-shrink-0 w-6 h-6 bg-gray-200 text-gray-700 rounded-full flex items-center justify-center text-xs font-semibold">1</span>
+                      <div>
+                        <span className="font-medium">Pending:</span> Job created, no stock reserved yet
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <span className="flex-shrink-0 w-6 h-6 bg-blue-200 text-blue-700 rounded-full flex items-center justify-center text-xs font-semibold">2</span>
+                      <div>
+                        <span className="font-medium">Reserved:</span> Job scheduled, stock allocated and reserved
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <span className="flex-shrink-0 w-6 h-6 bg-orange-200 text-orange-700 rounded-full flex items-center justify-center text-xs font-semibold">3</span>
+                      <div>
+                        <span className="font-medium">Issued:</span> Job in progress, stock issued to crew
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <span className="flex-shrink-0 w-6 h-6 bg-green-200 text-green-700 rounded-full flex items-center justify-center text-xs font-semibold">4</span>
+                      <div>
+                        <span className="font-medium">Completed:</span> Job done, actual usage recorded, unused stock returned
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
 

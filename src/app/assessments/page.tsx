@@ -475,9 +475,9 @@ export default function AssessmentsPage() {
                               <Eye className="w-4 h-4" />
                             </Link>
                             <Link
-                              href={`/assessments/${assessment.id}/edit`}
+                              href={`/assessments/${assessment.id}`}
                               className="p-1 text-gray-600 hover:bg-gray-100 rounded"
-                              title="Edit"
+                              title="View Details"
                             >
                               <Edit className="w-4 h-4" />
                             </Link>

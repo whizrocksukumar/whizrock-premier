@@ -15,6 +15,9 @@ interface Task {
   due_date: string;
   completion_percent: number;
   notes: string;
+  related_entity_type?: string;
+  related_entity_id?: string;
+  task_metadata?: any;
   opportunity?: {
     id: string;
     opp_number: string;
@@ -128,7 +131,10 @@ export default function VAWorkspacePage() {
           due_date,
           completion_percent,
           notes,
-          opportunity_id
+          opportunity_id,
+          related_entity_type,
+          related_entity_id,
+          task_metadata
         `)
         .eq('assigned_to_user_id', teamMember.id)
         .eq('is_active', true)
@@ -581,12 +587,16 @@ export default function VAWorkspacePage() {
                           )}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                          {task.opportunity && (
+                          {(task.task_metadata?.assessmentId || task.opportunity) && (
                             <Link
-                              href={`/va-workspace/new?opportunityId=${task.opportunity.id}`}
+                              href={
+                                task.task_metadata?.assessmentId
+                                  ? `/va-workspace/new?assessmentId=${task.task_metadata.assessmentId}`
+                                  : `/va-workspace/new?opportunityId=${task.opportunity?.id}`
+                              }
                               className={`inline-flex items-center px-3 py-1.5 rounded text-white ${
-                                task.status === 'Not Started' 
-                                  ? 'bg-blue-600 hover:bg-blue-700' 
+                                task.status === 'Not Started'
+                                  ? 'bg-blue-600 hover:bg-blue-700'
                                   : 'bg-yellow-600 hover:bg-yellow-700'
                               }`}
                             >

@@ -97,6 +97,9 @@ export default function CompanyDetailPage({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [formError, setFormError] = useState('');
 
+  type TabType = 'contacts' | 'quotes' | 'assessments' | 'jobs' | 'invoices';
+  const [activeTab, setActiveTab] = useState<TabType>('contacts');
+
   const [editForm, setEditForm] = useState<CompanyFormData>({
     company_name: '',
     industry: '',
@@ -536,18 +539,47 @@ export default function CompanyDetailPage({
           </div>
         </div>
 
-        {/* Contacts Table */}
-        <div className="bg-white rounded-lg shadow mb-6">
-          <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-900">Contacts</h2>
-            <Link
-              href={`/clients/new?company_id=${company.id}`}
-              className="px-4 py-2 text-sm bg-[#0066CC] text-white rounded hover:bg-[#0052a3] transition-colors flex items-center gap-2"
-            >
-              <Plus className="w-4 h-4" />
-              Add Contact
-            </Link>
+        {/* TABS SECTION */}
+        <div className="bg-white rounded-lg shadow">
+          {/* Tab Headers */}
+          <div className="border-b border-gray-200">
+            <div className="flex overflow-x-auto">
+              {(['contacts', 'quotes', 'assessments', 'jobs', 'invoices'] as const).map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`px-6 py-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                    activeTab === tab
+                      ? 'border-[#0066CC] text-[#0066CC]'
+                      : 'border-transparent text-gray-600 hover:text-gray-900 hover:border-gray-300'
+                  }`}
+                >
+                  {tab.charAt(0).toUpperCase() + tab.slice(1)}{' '}
+                  ({tab === 'contacts' ? contacts.length :
+                    tab === 'quotes' ? quotes.length :
+                    tab === 'assessments' ? assessments.length :
+                    tab === 'jobs' ? jobs.length :
+                    0})
+                </button>
+              ))}
+            </div>
           </div>
+
+          {/* Tab Content */}
+          <div className="p-6">
+            {/* CONTACTS TAB */}
+            {activeTab === 'contacts' && (
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-lg font-semibold text-gray-900">Contacts</h2>
+                  <Link
+                    href={`/clients/new?company_id=${company.id}`}
+                    className="px-4 py-2 text-sm bg-[#0066CC] text-white rounded hover:bg-[#0052a3] transition-colors flex items-center gap-2"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add Contact
+                  </Link>
+                </div>
 
           {contacts.length > 0 ? (
             <div className="overflow-x-auto">
@@ -609,20 +641,22 @@ export default function CompanyDetailPage({
               </Link>
             </div>
           )}
-        </div>
+              </div>
+            )}
 
-        {/* Quotes Section */}
-        <div className="bg-white rounded-lg shadow mb-6">
-          <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-900">Quotes</h2>
-            <Link
-              href={`/quotes/add-new-quote?company_id=${company.id}`}
-              className="px-4 py-2 text-sm bg-[#0066CC] text-white rounded hover:bg-[#0052a3] transition-colors flex items-center gap-2"
-            >
-              <Plus className="w-4 h-4" />
-              New Quote
-            </Link>
-          </div>
+            {/* QUOTES TAB */}
+            {activeTab === 'quotes' && (
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-lg font-semibold text-gray-900">Quotes</h2>
+                  <Link
+                    href={`/quotes/add-new-quote?company_id=${company.id}`}
+                    className="px-4 py-2 text-sm bg-[#0066CC] text-white rounded hover:bg-[#0052a3] transition-colors flex items-center gap-2"
+                  >
+                    <Plus className="w-4 h-4" />
+                    New Quote
+                  </Link>
+                </div>
           {quotes.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="w-full">
@@ -681,20 +715,22 @@ export default function CompanyDetailPage({
               </Link>
             </div>
           )}
-        </div>
+              </div>
+            )}
 
-        {/* Assessments Section */}
-        <div className="bg-white rounded-lg shadow mb-6">
-          <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-900">Assessments</h2>
-            <Link
-              href={`/assessments/new?company_id=${company.id}`}
-              className="px-4 py-2 text-sm bg-[#0066CC] text-white rounded hover:bg-[#0052a3] transition-colors flex items-center gap-2"
-            >
-              <Plus className="w-4 h-4" />
-              New Assessment
-            </Link>
-          </div>
+            {/* ASSESSMENTS TAB */}
+            {activeTab === 'assessments' && (
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-lg font-semibold text-gray-900">Assessments</h2>
+                  <Link
+                    href={`/assessments/new?company_id=${company.id}`}
+                    className="px-4 py-2 text-sm bg-[#0066CC] text-white rounded hover:bg-[#0052a3] transition-colors flex items-center gap-2"
+                  >
+                    <Plus className="w-4 h-4" />
+                    New Assessment
+                  </Link>
+                </div>
           {assessments.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="w-full">
@@ -745,20 +781,22 @@ export default function CompanyDetailPage({
               </Link>
             </div>
           )}
-        </div>
+              </div>
+            )}
 
-        {/* Jobs Section */}
-        <div className="bg-white rounded-lg shadow">
-          <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-900">Jobs</h2>
-            <Link
-              href={`/jobs/new?company_id=${company.id}`}
-              className="px-4 py-2 text-sm bg-[#0066CC] text-white rounded hover:bg-[#0052a3] transition-colors flex items-center gap-2"
-            >
-              <Plus className="w-4 h-4" />
-              New Job
-            </Link>
-          </div>
+            {/* JOBS TAB */}
+            {activeTab === 'jobs' && (
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-lg font-semibold text-gray-900">Jobs</h2>
+                  <Link
+                    href={`/jobs/new?company_id=${company.id}`}
+                    className="px-4 py-2 text-sm bg-[#0066CC] text-white rounded hover:bg-[#0052a3] transition-colors flex items-center gap-2"
+                  >
+                    <Plus className="w-4 h-4" />
+                    New Job
+                  </Link>
+                </div>
           {jobs.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="w-full">
@@ -809,6 +847,31 @@ export default function CompanyDetailPage({
               </Link>
             </div>
           )}
+              </div>
+            )}
+
+            {/* INVOICES TAB - Placeholder for future */}
+            {activeTab === 'invoices' && (
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-lg font-semibold text-gray-900">Invoices</h2>
+                  <button
+                    disabled
+                    className="px-4 py-2 text-sm bg-gray-400 text-white rounded cursor-not-allowed flex items-center gap-2"
+                  >
+                    <Plus className="w-4 h-4" />
+                    New Invoice (Coming Soon)
+                  </button>
+                </div>
+
+                <div className="text-center py-12">
+                  <Building2 className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                  <p className="text-gray-500 mb-2">Invoices feature coming soon</p>
+                  <p className="text-sm text-gray-400">This tab will display all invoices for this company</p>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

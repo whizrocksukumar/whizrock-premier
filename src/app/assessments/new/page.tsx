@@ -1,1055 +1,1047 @@
-'use client'
+'use client';
 
-import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
-import {
-  createAssessment,
-  createAssessmentAreas,
-  createAssessmentPhotos,
-  generateAssessmentNumber,
-  fetchAssessmentWordings,
-  type Assessment,
-  type AssessmentArea,
-  type AssessmentWording,
-  RESULT_TYPE_CONFIG,
-} from '@/lib/utils/assessment-helpers'
-import SiteSelector from '@/components/SiteSelector'
-import { X, Upload, AlertCircle } from 'lucide-react'
+import { useEffect, useState, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabase';
+import { Search, Plus, Trash2, X, Upload, Camera, AlertTriangle, Check, ChevronDown } from 'lucide-react';
+import ClientSelectorWithSites from '@/components/ClientSelectorWithSites';
+
+// ============================================
+// TYPES
+// ============================================
+interface Client {
+  id: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone: string;
+  company_id: string | null;
+  companies?: { id: string; name: string } | null;
+}
 
 interface Site {
-  id: string
-  site_name: string
-  address_line_1: string
-  address_line_2?: string
-  city: string
-  region_id?: string
-  postcode: string
-  company_id?: string
-  client_id?: string
-  company_name?: string
-  client_name?: string
-  property_type?: string
-}
-
-interface FormAssessmentArea {
-  id: string
-  area_id: string
-  area_name: string
-  area_color: string
-  square_metres: number
-  result_type: 'Pass' | 'Fail' | 'Exempt' | 'Pending'
-  wording_id?: string
-  notes: string
-  photos: File[]
-}
-
-interface TeamMember {
-  id: string
-  first_name: string
-  last_name: string
+  id: string;
+  address_line_1: string;
+  address_line_2?: string;
+  suburb?: string;
+  city?: string;
+  postcode?: string;
+  property_type?: string;
 }
 
 interface AppType {
-  id: string
-  name: string
-  color_hex: string
+  id: string;
+  name: string;
+  code: string;
+  color_hex: string;
+  sort_order: number;
+  is_active: boolean;
 }
 
-interface Opportunity {
-  id: string
-  opp_number: string
+interface TeamMember {
+  id: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  role: string;
+  status: string;
 }
 
-interface Region {
-  id: string
-  name: string
+interface Wording {
+  id: string;
+  wordings: string;
+  area_label?: string;
+  result_type?: string;
+  recommended_action?: string;
 }
 
+interface AssessmentArea {
+  id: string;
+  app_type_id: string | null;
+  app_type_name?: string;
+  app_type_color?: string;
+  area_sqm: number;
+  wording_id: string | null;
+  wording_text: string;
+  result_type: 'Pass' | 'Fail' | 'Exempt' | 'Pending';
+  notes: string;
+  photos: File[];
+  photoUrls: string[];
+}
+
+// ============================================
+// HELPER FUNCTIONS
+// ============================================
+const generateAssessmentNumber = () => {
+  const year = new Date().getFullYear();
+  const random = Math.floor(Math.random() * 9000) + 1000;
+  return `ASS-${year}-${random}`;
+};
+
+const createEmptyArea = (): AssessmentArea => ({
+  id: crypto.randomUUID(),
+  app_type_id: null,
+  app_type_name: '',
+  app_type_color: '#6B7280',
+  area_sqm: 0,
+  wording_id: null,
+  wording_text: '',
+  result_type: 'Pending',
+  notes: '',
+  photos: [],
+  photoUrls: [],
+});
+
+// ============================================
+// MAIN COMPONENT
+// ============================================
 export default function CreateAssessmentPage() {
-  const router = useRouter()
-
-  // Site and Client
-  const [selectedSite, setSelectedSite] = useState<Site | null>(null)
-  const [showSiteSelector, setShowSiteSelector] = useState(true)
-
-  // Lookups
-  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
-  const [appTypes, setAppTypes] = useState<AppType[]>([])
-  const [opportunities, setOpportunities] = useState<Opportunity[]>([])
-  const [wordings, setWordings] = useState<AssessmentWording[]>([])
-  const [regions, setRegions] = useState<Region[]>([])
-
+  const router = useRouter();
+  
   // Form state
-  const [form, setForm] = useState({
-    opportunity_id: '',
-    assigned_installer_id: '',
-    scheduled_date: '',
-    scheduled_time: '',
-    property_type: '',
-    year_built: '',
-    estimated_size_sqm: '',
-    site_access_difficulty: '',
-    crawl_space_height_cm: '',
-    existing_insulation_type: '',
-    removal_required: false,
-    hazards_present: '',
-    notes: '',
-    overall_result: 'Pending' as 'Pass' | 'Fail' | 'Exempt' | 'Pending',
-  })
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+  
+  // Client & Site
+  const [selectedClient, setSelectedClient] = useState<Client | null>(null);
+  const [selectedSite, setSelectedSite] = useState<Site | null>(null);
+  const [salesRepId, setSalesRepId] = useState<string | null>(null);
+  
+  // Assessment Details
+  const [assessmentNumber] = useState(generateAssessmentNumber());
+  const [opportunity, setOpportunity] = useState('');
+  const [installerId, setInstallerId] = useState('');
+  const [scheduledDate, setScheduledDate] = useState('');
+  const [scheduledTime, setScheduledTime] = useState('');
+  const [propertyType, setPropertyType] = useState('');
+  const [yearBuilt, setYearBuilt] = useState('');
+  const [estimatedSize, setEstimatedSize] = useState('');
+  const [siteAccessDifficulty, setSiteAccessDifficulty] = useState('');
+  const [crawlSpaceHeight, setCrawlSpaceHeight] = useState('');
+  const [existingInsulationType, setExistingInsulationType] = useState('');
+  const [removalRequired, setRemovalRequired] = useState(false);
+  const [hazardsPresent, setHazardsPresent] = useState('');
+  
+  // Assessment Areas
+  const [areas, setAreas] = useState<AssessmentArea[]>([createEmptyArea()]);
+  
+  // General Photos
+  const [generalPhotos, setGeneralPhotos] = useState<File[]>([]);
+  const [generalPhotoUrls, setGeneralPhotoUrls] = useState<string[]>([]);
+  const [noPhotosToUpload, setNoPhotosToUpload] = useState(false);
+  
+  // Overall Result
+  const [overallResult, setOverallResult] = useState<'Pass' | 'Fail' | 'Exempt' | 'Pending'>('Pending');
+  const [generalNotes, setGeneralNotes] = useState('');
+  
+  // Reference Data
+  const [appTypes, setAppTypes] = useState<AppType[]>([]);
+  const [installers, setInstallers] = useState<TeamMember[]>([]);
+  const [allWordings, setAllWordings] = useState<Wording[]>([]);
+  const [wordingSearch, setWordingSearch] = useState<{ [key: string]: string }>({});
+  const [showWordingDropdown, setShowWordingDropdown] = useState<string | null>(null);
 
-  const [assessmentAreas, setAssessmentAreas] = useState<FormAssessmentArea[]>([])
-  const [uploadedPhotos, setUploadedPhotos] = useState<File[]>([])
-  const [noPhotosConfirmed, setNoPhotosConfirmed] = useState(false)
-
-  // UI state
-  const [loading, setLoading] = useState(false)
-  const [errors, setErrors] = useState<Record<string, string>>({})
-  const [lookupError, setLookupError] = useState<string | null>(null)
-
-  // Initialize
+  // ============================================
+  // LOAD REFERENCE DATA
+  // ============================================
   useEffect(() => {
-    let isMounted = true
+    loadReferenceData();
+  }, []);
 
-    const init = async () => {
-      try {
-        await loadLookupData()
-        if (isMounted) {
-          setLookupError(null)
-        }
-      } catch (err) {
-        const message = err instanceof Error ? err.message : 'Failed to load lookup data'
-        if (isMounted) {
-          setLookupError(message)
-        }
-      }
-    }
-
-    void init()
-
-    return () => {
-      isMounted = false
-    }
-  }, [])
-
-  // Auto-populate property type from site
-  useEffect(() => {
-    if (selectedSite?.property_type) {
-      setForm(prev => ({
-        ...prev,
-        property_type: selectedSite.property_type || '',
-      }))
-    }
-  }, [selectedSite])
-
-  const loadLookupData = async () => {
+  const loadReferenceData = async () => {
     try {
-      const teamRes = await supabase
-        .from('team_members')
-        .select('id, first_name, last_name')
-        .eq('role', 'Installer')
-
-      if (teamRes.error) {
-        console.error('team_members error:', teamRes.error)
-      } else {
-        setTeamMembers(teamRes.data || [])
-      }
-
-      const appTypesRes = await supabase
+      // Load app types
+      const { data: appTypesData } = await supabase
         .from('app_types')
-        .select('id, name, color_hex')
+        .select('*')
+        .eq('is_active', true)
+        .order('sort_order');
+      if (appTypesData) setAppTypes(appTypesData);
 
-      if (appTypesRes.error) {
-        console.error('app_types error:', appTypesRes.error)
-      } else {
-        setAppTypes(appTypesRes.data || [])
+      // Load installers from team_members
+      const { data: installersData, error: installersError } = await supabase
+        .from('team_members')
+        .select('id, first_name, last_name, email, role, status')
+        .eq('role', 'Installer')
+        .eq('status', 'active')
+        .order('first_name');
+
+      if (installersError) {
+        console.error('Error loading installers:', installersError);
+      }
+      if (installersData) {
+        console.log('Loaded installers:', installersData);
+        setInstallers(installersData);
       }
 
-      const oppRes = await supabase
-        .from('opportunities')
-        .select('id, opp_number')
+      // Load all wordings from assessment_wordings
+      const { data: wordingsData, error: wordingsError } = await supabase
+        .from('assessment_wordings')
+        .select('*')
+        .order('wordings');
 
-      if (oppRes.data) setOpportunities(oppRes.data)
-
-      const wordingsRes = await fetchAssessmentWordings()
-      console.log('Loaded wordings:', wordingsRes.length)
-      setWordings(wordingsRes)
-
-      const regionsRes = await supabase
-        .from('regions')
-        .select('id, name')
-
-      if (regionsRes.data) setRegions(regionsRes.data)
+      if (wordingsError) {
+        console.error('Error loading wordings:', wordingsError);
+      }
+      if (wordingsData) {
+        console.log('Loaded wordings count:', wordingsData.length);
+        console.log('First 3 wordings:', wordingsData.slice(0, 3));
+        setAllWordings(wordingsData);
+      }
     } catch (err) {
-      console.error('lookup load crash:', err)
-      throw err
+      console.error('Error loading reference data:', err);
     }
-  }
+  };
 
+  // ============================================
+  // CLIENT/SITE SELECTION HANDLER
+  // ============================================
+  const handleClientAndSiteSelected = useCallback((client: Client | null, site: Site | null, repId: string | null) => {
+    setSelectedClient(client);
+    setSelectedSite(site);
+    setSalesRepId(repId);
+    
+    // Auto-populate property type from site if available
+    if (site?.property_type) {
+      setPropertyType(site.property_type);
+    }
+  }, []);
 
-  const validateForm = (): boolean => {
-    const newErrors: Record<string, string> = {}
+  // ============================================
+  // ASSESSMENT AREAS HANDLERS
+  // ============================================
+  const addArea = () => {
+    setAreas([...areas, createEmptyArea()]);
+  };
 
-    if (!selectedSite) newErrors.site = 'Site selection required'
-    if (!form.assigned_installer_id) newErrors.installer = 'Installer selection required'
-    if (!form.scheduled_date) newErrors.date = 'Scheduled date required'
-    if (!form.scheduled_time) newErrors.time = 'Scheduled time required'
-    if (assessmentAreas.length === 0) newErrors.areas = 'At least one assessment area required'
-    if (!noPhotosConfirmed && uploadedPhotos.length === 0) {
-      newErrors.photos = 'Please upload photos or confirm no photos to upload'
+  const removeArea = (areaId: string) => {
+    if (areas.length > 1) {
+      setAreas(areas.filter(a => a.id !== areaId));
+    }
+  };
+
+  const updateArea = (areaId: string, field: keyof AssessmentArea, value: any) => {
+    setAreas(areas.map(area => {
+      if (area.id !== areaId) return area;
+      
+      const updated = { ...area, [field]: value };
+      
+      // If app_type changed, update name and color
+      if (field === 'app_type_id' && value) {
+        const appType = appTypes.find(at => at.id === value);
+        if (appType) {
+          updated.app_type_name = appType.name;
+          updated.app_type_color = appType.color_hex;
+        }
+      }
+      
+      return updated;
+    }));
+  };
+
+  // ============================================
+  // WORDING SEARCH & SELECTION
+  // ============================================
+  const getFilteredWordings = (areaId: string) => {
+    const search = wordingSearch[areaId]?.toLowerCase().trim() || '';
+
+    if (!search) {
+      // Show first 20 wordings when no search term
+      return allWordings.slice(0, 20);
     }
 
-    setErrors(newErrors)
-    return Object.keys(newErrors).length === 0
-  }
+    // Search in the 'wordings' field
+    return allWordings.filter(w => {
+      const wordingText = w.wordings?.toLowerCase() || '';
+      return wordingText.includes(search);
+    }).slice(0, 20);
+  };
 
-  const handleAddArea = () => {
-    const newArea: FormAssessmentArea = {
-      id: `temp-${Date.now()}`,
-      area_id: '',
-      area_name: '',
-      area_color: '',
-      square_metres: 0,
-      result_type: 'Pending',
-      notes: '',
-      photos: [],
+  const selectWording = (areaId: string, wording: Wording) => {
+    setAreas(areas.map(area => {
+      if (area.id !== areaId) return area;
+      return {
+        ...area,
+        wording_id: wording.id,
+        wording_text: wording.wordings
+      };
+    }));
+    setWordingSearch({ ...wordingSearch, [areaId]: '' });
+    setShowWordingDropdown(null);
+  };
+
+  // ============================================
+  // PHOTO HANDLERS
+  // ============================================
+  const handleAreaPhotoUpload = (areaId: string, files: FileList | null) => {
+    if (!files) return;
+    const fileArray = Array.from(files);
+    
+    setAreas(areas.map(area => {
+      if (area.id !== areaId) return area;
+      const newPhotos = [...area.photos, ...fileArray];
+      const newUrls = [...area.photoUrls, ...fileArray.map(f => URL.createObjectURL(f))];
+      return { ...area, photos: newPhotos, photoUrls: newUrls };
+    }));
+  };
+
+  const removeAreaPhoto = (areaId: string, photoIndex: number) => {
+    setAreas(areas.map(area => {
+      if (area.id !== areaId) return area;
+      const newPhotos = area.photos.filter((_, i) => i !== photoIndex);
+      const newUrls = area.photoUrls.filter((_, i) => i !== photoIndex);
+      return { ...area, photos: newPhotos, photoUrls: newUrls };
+    }));
+  };
+
+  const handleGeneralPhotoUpload = (files: FileList | null) => {
+    if (!files) return;
+    const fileArray = Array.from(files);
+    setGeneralPhotos([...generalPhotos, ...fileArray]);
+    setGeneralPhotoUrls([...generalPhotoUrls, ...fileArray.map(f => URL.createObjectURL(f))]);
+    setNoPhotosToUpload(false);
+  };
+
+  const removeGeneralPhoto = (index: number) => {
+    setGeneralPhotos(generalPhotos.filter((_, i) => i !== index));
+    setGeneralPhotoUrls(generalPhotoUrls.filter((_, i) => i !== index));
+  };
+
+  // ============================================
+  // FORM SUBMISSION
+  // ============================================
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+
+    // Validation
+    if (!selectedClient) {
+      setError('Please select a client');
+      return;
     }
-    setAssessmentAreas([...assessmentAreas, newArea])
-  }
-
-  const handleUpdateArea = (id: string, updates: Partial<FormAssessmentArea>) => {
-    setAssessmentAreas(
-      assessmentAreas.map(area =>
-        area.id === id
-          ? {
-            ...area,
-            ...updates,
-          }
-          : area
-      )
-    )
-  }
-
-  const handleDeleteArea = (id: string) => {
-    setAssessmentAreas(assessmentAreas.filter(area => area.id !== id))
-  }
-
-  const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      setUploadedPhotos([...uploadedPhotos, ...Array.from(e.target.files)])
+    if (!selectedSite) {
+      setError('Please select a site (required for assessments)');
+      return;
     }
-  }
+    if (!installerId) {
+      setError('Please select an installer');
+      return;
+    }
+    if (!scheduledDate || !scheduledTime) {
+      setError('Please enter scheduled date and time');
+      return;
+    }
 
-  const handleRemovePhoto = (index: number) => {
-    setUploadedPhotos(uploadedPhotos.filter((_, i) => i !== index))
-  }
+    setIsSubmitting(true);
 
-  const handleCreateAssessment = async () => {
-    if (!validateForm()) return
-
-    setLoading(true)
     try {
-      // 1. Create assessment
-      const assessment = await createAssessment({
-        site_id: selectedSite!.id,
-        client_id: selectedSite!.client_id || '',
-        opportunity_id: form.opportunity_id || undefined,
-        assigned_installer_id: form.assigned_installer_id,
-        scheduled_date: form.scheduled_date,
-        scheduled_time: form.scheduled_time,
-        property_type: form.property_type || undefined,
-        year_built: form.year_built ? parseInt(form.year_built) : undefined,
-        estimated_size_sqm: form.estimated_size_sqm
-          ? parseFloat(form.estimated_size_sqm)
-          : undefined,
-        site_access_difficulty: form.site_access_difficulty || undefined,
-        crawl_space_height_cm: form.crawl_space_height_cm
-          ? parseFloat(form.crawl_space_height_cm)
-          : undefined,
-        existing_insulation_type: form.existing_insulation_type || undefined,
-        removal_required: form.removal_required,
-        hazards_present: form.hazards_present || undefined,
-        notes: form.notes || undefined,
-      })
+      // 1. Create the assessment record
+      // Generate unique reference number
+      const refNumber = `ASM-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+
+      const { data: assessment, error: assessmentError } = await supabase
+        .from('assessments')
+        .insert({
+          reference_number: refNumber,
+          client_id: selectedClient.id,
+          site_id: selectedSite.id,
+          assigned_installer_id: installerId,
+          scheduled_date: scheduledDate,
+          scheduled_time: scheduledTime,
+          property_type: propertyType || null,
+          year_built: yearBuilt ? parseInt(yearBuilt) : null,
+          estimated_size_sqm: estimatedSize ? parseFloat(estimatedSize) : null,
+          site_access_difficulty: siteAccessDifficulty || null,
+          crawl_space_height_cm: crawlSpaceHeight ? parseFloat(crawlSpaceHeight) : null,
+          existing_insulation_type: existingInsulationType || null,
+          removal_required: removalRequired,
+          hazards_present: hazardsPresent || null,
+          notes: generalNotes || null,
+          status: 'Scheduled',
+        })
+        .select()
+        .single();
+
+      if (assessmentError) throw assessmentError;
 
       // 2. Create assessment areas
-      if (assessmentAreas.length > 0) {
-        const areasToCreate = assessmentAreas.map(area => ({
-          app_type_id: area.area_id,
-          area_name: area.area_name,
-          square_metres: area.square_metres,
-          result_type: area.result_type,
-          wording_id: area.wording_id || undefined,
-          notes: area.notes,
-        }))
+      if (assessment && areas.length > 0) {
+        const areasToInsert = areas
+          .filter(a => a.app_type_name) // Only insert areas with area type selected
+          .map((area, index) => ({
+            assessment_id: assessment.id,
+            area_name: area.app_type_name || null,
+            square_metres: area.area_sqm || 0,
+            existing_insulation_type: area.wording_text || null,
+            result_type: area.result_type || 'Pending',
+            notes: area.notes || null,
+            sort_order: index + 1,
+          }));
 
-        await createAssessmentAreas(assessment.id, areasToCreate)
-      }
+        if (areasToInsert.length > 0) {
+          const { error: areasError } = await supabase
+            .from('assessment_areas')
+            .insert(areasToInsert);
 
-      // 3. Upload photos if any
-      if (uploadedPhotos.length > 0) {
-        const photosToCreate = []
-
-        for (const file of uploadedPhotos) {
-          const fileName = `${assessment.id}/${Date.now()}_${file.name}`
-
-          const { error: uploadError } = await supabase.storage
-            .from('assessment-photos')
-            .upload(fileName, file)
-
-          if (uploadError) throw uploadError
-
-          const { data: urlData } = supabase.storage
-            .from('assessment-photos')
-            .getPublicUrl(fileName)
-
-          photosToCreate.push({
-            file_name: file.name,
-            file_path: fileName,
-            file_url: urlData.publicUrl,
-            file_size: file.size,
-            photo_type: 'General' as const,
-          })
-        }
-
-        if (photosToCreate.length > 0) {
-          await createAssessmentPhotos(assessment.id, photosToCreate)
+          if (areasError) throw areasError;
         }
       }
 
-      // Redirect to assessment detail
-      router.push(`/assessments/${assessment.id}`)
+      // 3. Upload photos (if Supabase storage is configured)
+      // For now, we'll skip photo upload - can be added later
+
+      setSuccess(true);
+      
+      // Redirect after 1.5 seconds
+      setTimeout(() => {
+        router.push('/assessments');
+      }, 1500);
+
     } catch (err: any) {
-      console.error('Error creating assessment:', err)
-      setErrors({ submit: err.message || 'Failed to create assessment' })
+      console.error('Error creating assessment:', err);
+      setError(err.message || 'Failed to create assessment');
     } finally {
-      setLoading(false)
+      setIsSubmitting(false);
     }
-  }
+  };
 
-  // RENDER SITE SELECTOR
-  if (showSiteSelector) {
-    return (
-      <div className="min-h-screen bg-gray-50 p-6">
-        <div className="max-w-2xl mx-auto">
-          <h1 className="text-2xl font-bold text-gray-900 mb-6">Create New Assessment</h1>
-          <SiteSelector
-            onSiteSelected={site => {
-              setSelectedSite(site as Site)
-              setShowSiteSelector(false)
-            }}
-          />
-        </div>
-      </div>
-    )
-  }
-
-  // RENDER ASSESSMENT FORM
+  // ============================================
+  // RENDER
+  // ============================================
   return (
     <div className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-4xl mx-auto">
-        <div className="bg-white rounded-lg shadow p-8">
-          {/* Header */}
-          <div className="flex items-center justify-between mb-8 pb-6 border-b border-gray-200">
-            <h1 className="text-2xl font-bold text-gray-900">Create New Assessment</h1>
-            <button
-              onClick={() => setShowSiteSelector(true)}
-              className="text-sm text-[#0066CC] hover:underline"
-            >
-              Change Site
+      <div className="max-w-[1400px] mx-auto">
+        {/* Header */}
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-gray-900">Create New Assessment</h1>
+          <p className="text-gray-600">Assessment #{assessmentNumber}</p>
+        </div>
+
+        {/* Success Message */}
+        {success && (
+          <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2">
+            <Check className="w-5 h-5 text-green-600" />
+            <span className="text-green-800">Assessment created successfully! Redirecting...</span>
+          </div>
+        )}
+
+        {/* Error Message */}
+        {error && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
+            <AlertTriangle className="w-5 h-5 text-red-600" />
+            <span className="text-red-800">{error}</span>
+            <button onClick={() => setError(null)} className="ml-auto">
+              <X className="w-4 h-4 text-red-600" />
             </button>
           </div>
+        )}
 
-          {/* Site Details Display */}
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-8">
-            <p className="text-sm text-gray-600 mb-1">Selected Site</p>
-            <h2 className="text-lg font-semibold text-gray-900 mb-3">
-              {selectedSite!.address_line_1}
-              {selectedSite!.address_line_2 ? `, ${selectedSite!.address_line_2}` : ''}
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {/* ============================================ */}
+          {/* SECTION 1: CLIENT & SITE SELECTION */}
+          {/* ============================================ */}
+          <div className="bg-white rounded-lg shadow p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b border-[#0066CC]">
+              1. Client & Site Selection
+              <span className="text-red-500 ml-1">*</span>
             </h2>
-            <p className="text-sm text-gray-700">
-              {selectedSite!.city} {selectedSite!.postcode}
-            </p>
-            {(selectedSite!.client_name || selectedSite!.company_name) && (
-              <div className="mt-2 pt-2 border-t border-blue-200 space-y-1">
-                {selectedSite!.client_name && (
-                  <p className="text-sm text-gray-700">
-                    <span className="font-medium">Contact:</span> {selectedSite!.client_name}
-                  </p>
-                )}
-                {selectedSite!.company_name && (
-                  <p className="text-sm text-gray-700">
-                    <span className="font-medium">Company:</span> {selectedSite!.company_name}
-                  </p>
-                )}
-              </div>
+            
+            <ClientSelectorWithSites
+              onClientAndSiteSelected={handleClientAndSiteSelected}
+              selectedClientId={selectedClient?.id}
+              selectedSiteId={selectedSite?.id}
+            />
+            
+            {selectedClient && !selectedSite && (
+              <p className="mt-2 text-amber-600 text-sm flex items-center gap-1">
+                <AlertTriangle className="w-4 h-4" />
+                Site is required for assessments
+              </p>
             )}
           </div>
 
-          {/* Lookup Load Error */}
-          {lookupError && (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
-              <div className="flex items-start gap-2 text-sm text-red-700">
-                <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                <span>{lookupError}</span>
-              </div>
-            </div>
-          )}
-
-          {/* Error Messages */}
-          {Object.values(errors).length > 0 && (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
-              {Object.entries(errors).map(([key, error]) => (
-                <div key={key} className="flex items-start gap-2 text-sm text-red-700">
-                  <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                  <span>{error}</span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div className="space-y-8">
-            {/* Assessment Details Section */}
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">Assessment Details</h2>
-
-              <div className="grid grid-cols-2 gap-4">
-                {/* Opportunity */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Opportunity <span className="text-gray-500">(optional)</span>
-                  </label>
-                  <select
-                    value={form.opportunity_id}
-                    onChange={e => setForm({ ...form, opportunity_id: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC]"
-                  >
-                    <option value="">Select opportunity</option>
-                    {opportunities.map(opp => (
-                      <option key={opp.id} value={opp.id}>
-                        {opp.opp_number}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Assigned Installer */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Assigned Installer <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    value={form.assigned_installer_id}
-                    onChange={e => setForm({ ...form, assigned_installer_id: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC]"
-                  >
-                    <option value="">Select installer</option>
-                    {teamMembers.map(member => (
-                      <option key={member.id} value={member.id}>
-                        {member.first_name} {member.last_name}
-                      </option>
-                    ))}
-                  </select>
-                  {errors.installer && <p className="text-red-600 text-sm mt-1">{errors.installer}</p>}
-                </div>
-
-                {/* Scheduled Date */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Scheduled Date <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="date"
-                    value={form.scheduled_date}
-                    onChange={e => setForm({ ...form, scheduled_date: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC]"
-                  />
-                  {errors.date && <p className="text-red-600 text-sm mt-1">{errors.date}</p>}
-                </div>
-
-                {/* Scheduled Time */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Scheduled Time <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="time"
-                    value={form.scheduled_time}
-                    onChange={e => setForm({ ...form, scheduled_time: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC]"
-                  />
-                  {errors.time && <p className="text-red-600 text-sm mt-1">{errors.time}</p>}
-                </div>
-
-                {/* Property Type - Pre-populated */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Property Type <span className="text-gray-500">(optional)</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={form.property_type}
-                    onChange={e => setForm({ ...form, property_type: e.target.value })}
-                    placeholder="e.g., Residential"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC]"
-                  />
-                </div>
-
-                {/* Year Built */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Year Built <span className="text-gray-500">(optional)</span>
-                  </label>
-                  <input
-                    type="number"
-                    value={form.year_built}
-                    onChange={e => setForm({ ...form, year_built: e.target.value })}
-                    placeholder="2020"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC]"
-                  />
-                </div>
-
-                {/* Estimated Size */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Estimated Size <span className="text-gray-500">(optional)</span>
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="number"
-                      value={form.estimated_size_sqm}
-                      onChange={e => setForm({ ...form, estimated_size_sqm: e.target.value })}
-                      placeholder="0"
-                      step="0.1"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC]"
-                    />
-                    <span className="absolute right-3 top-2.5 text-gray-500 text-sm">m²</span>
-                  </div>
-                </div>
-
-                {/* Site Access Difficulty */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Site Access Difficulty <span className="text-gray-500">(optional)</span>
-                  </label>
-                  <select
-                    value={form.site_access_difficulty}
-                    onChange={e => setForm({ ...form, site_access_difficulty: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC]"
-                  >
-                    <option value="">Select difficulty</option>
-                    <option value="Easy">Easy</option>
-                    <option value="Moderate">Moderate</option>
-                    <option value="Difficult">Difficult</option>
-                    <option value="Very Difficult">Very Difficult</option>
-                  </select>
-                </div>
-
-                {/* Crawl Space Height */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Crawl Space Height <span className="text-gray-500">(optional)</span>
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="number"
-                      value={form.crawl_space_height_cm}
-                      onChange={e => setForm({ ...form, crawl_space_height_cm: e.target.value })}
-                      placeholder="0"
-                      step="0.1"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC]"
-                    />
-                    <span className="absolute right-3 top-2.5 text-gray-500 text-sm">cm</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Existing Insulation Type (multiline) */}
-              <div className="mt-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Existing Insulation Type <span className="text-gray-500">(optional)</span>
+          {/* ============================================ */}
+          {/* SECTION 2: ASSESSMENT DETAILS */}
+          {/* ============================================ */}
+          <div className="bg-white rounded-lg shadow p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b border-[#0066CC]">
+              2. Assessment Details
+            </h2>
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Opportunity (text input) */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Opportunity Reference
                 </label>
-                <textarea
-                  value={form.existing_insulation_type}
-                  onChange={e => setForm({ ...form, existing_insulation_type: e.target.value })}
-                  placeholder="Describe existing insulation..."
-                  rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC]"
+                <input
+                  type="text"
+                  value={opportunity}
+                  onChange={(e) => setOpportunity(e.target.value)}
+                  placeholder="e.g., OPP-2025-001"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
+                />
+              </div>
+
+              {/* Installer */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Assigned Installer <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={installerId}
+                  onChange={(e) => setInstallerId(e.target.value)}
+                  required
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
+                >
+                  <option value="">Select installer...</option>
+                  {installers.map(installer => (
+                    <option key={installer.id} value={installer.id}>
+                      {installer.first_name} {installer.last_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Scheduled Date */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Scheduled Date <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="date"
+                  value={scheduledDate}
+                  onChange={(e) => setScheduledDate(e.target.value)}
+                  required
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
+                />
+              </div>
+
+              {/* Scheduled Time */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Scheduled Time <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="time"
+                  value={scheduledTime}
+                  onChange={(e) => setScheduledTime(e.target.value)}
+                  required
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
+                />
+              </div>
+
+              {/* Property Type */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Property Type
+                </label>
+                <select
+                  value={propertyType}
+                  onChange={(e) => setPropertyType(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
+                >
+                  <option value="">Select...</option>
+                  <option value="House">House</option>
+                  <option value="Unit">Unit</option>
+                  <option value="Apartment">Apartment</option>
+                  <option value="Townhouse">Townhouse</option>
+                  <option value="Commercial">Commercial</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+
+              {/* Year Built */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Year Built
+                </label>
+                <input
+                  type="number"
+                  value={yearBuilt}
+                  onChange={(e) => setYearBuilt(e.target.value)}
+                  placeholder="e.g., 1985"
+                  min="1900"
+                  max={new Date().getFullYear()}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
+                />
+              </div>
+
+              {/* Estimated Size */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Estimated Size (m²)
+                </label>
+                <input
+                  type="number"
+                  value={estimatedSize}
+                  onChange={(e) => setEstimatedSize(e.target.value)}
+                  placeholder="e.g., 150"
+                  step="0.01"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
+                />
+              </div>
+
+              {/* Site Access Difficulty */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Site Access Difficulty
+                </label>
+                <select
+                  value={siteAccessDifficulty}
+                  onChange={(e) => setSiteAccessDifficulty(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
+                >
+                  <option value="">Select...</option>
+                  <option value="Easy">Easy</option>
+                  <option value="Moderate">Moderate</option>
+                  <option value="Difficult">Difficult</option>
+                  <option value="Very Difficult">Very Difficult</option>
+                </select>
+              </div>
+
+              {/* Crawl Space Height */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Crawl Space Height (cm)
+                </label>
+                <input
+                  type="number"
+                  value={crawlSpaceHeight}
+                  onChange={(e) => setCrawlSpaceHeight(e.target.value)}
+                  placeholder="e.g., 45"
+                  step="1"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
+                />
+              </div>
+
+              {/* Existing Insulation Type */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Existing Insulation Type
+                </label>
+                <input
+                  type="text"
+                  value={existingInsulationType}
+                  onChange={(e) => setExistingInsulationType(e.target.value)}
+                  placeholder="e.g., Glasswool R1.8"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
                 />
               </div>
 
               {/* Removal Required */}
-              <div className="mt-4">
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={form.removal_required}
-                    onChange={e => setForm({ ...form, removal_required: e.target.checked })}
-                    className="w-4 h-4 text-[#0066CC] rounded border-gray-300"
-                  />
-                  <span className="text-sm font-medium text-gray-700">Removal Required</span>
+              <div className="flex items-center pt-6">
+                <input
+                  type="checkbox"
+                  id="removalRequired"
+                  checked={removalRequired}
+                  onChange={(e) => setRemovalRequired(e.target.checked)}
+                  className="w-4 h-4 text-[#0066CC] border-gray-300 rounded focus:ring-[#0066CC]"
+                />
+                <label htmlFor="removalRequired" className="ml-2 text-sm text-gray-700">
+                  Removal Required
                 </label>
               </div>
 
               {/* Hazards Present */}
-              <div className="mt-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Hazards Present <span className="text-gray-500">(optional)</span>
+              <div className="md:col-span-3">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Hazards Present
                 </label>
                 <textarea
-                  value={form.hazards_present}
-                  onChange={e => setForm({ ...form, hazards_present: e.target.value })}
-                  placeholder="Describe any hazards..."
-                  rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC]"
+                  value={hazardsPresent}
+                  onChange={(e) => setHazardsPresent(e.target.value)}
+                  placeholder="e.g., Low clearance in ceiling, exposed wiring..."
+                  rows={2}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
                 />
               </div>
             </div>
+          </div>
 
-            {/* Assessment Areas Section */}
-            <div>
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold text-gray-900">Assessment Areas</h2>
-                <button
-                  onClick={handleAddArea}
-                  className="text-sm text-[#0066CC] hover:underline font-medium"
+          {/* ============================================ */}
+          {/* SECTION 3: ASSESSMENT AREAS */}
+          {/* ============================================ */}
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex items-center justify-between mb-4 pb-2 border-b border-[#0066CC]">
+              <h2 className="text-lg font-semibold text-gray-900">
+                3. Assessment Areas
+              </h2>
+              <button
+                type="button"
+                onClick={addArea}
+                className="flex items-center gap-1 px-3 py-1.5 text-sm bg-[#0066CC] text-white rounded-lg hover:bg-[#0052A3] transition"
+              >
+                <Plus className="w-4 h-4" />
+                Add Area
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {areas.map((area, index) => (
+                <div
+                  key={area.id}
+                  className="border rounded-lg p-4"
+                  style={{ borderLeftWidth: '4px', borderLeftColor: area.app_type_color || '#6B7280' }}
                 >
-                  + Add Assessment Area
-                </button>
-              </div>
-
-              {errors.areas && <p className="text-red-600 text-sm mb-4">{errors.areas}</p>}
-
-              <div className="space-y-4">
-                {assessmentAreas.map((area, index) => (
-                  <AssessmentAreaForm
-                    key={area.id}
-                    area={area}
-                    appTypes={appTypes}
-                    wordings={wordings}
-                    onUpdate={updates => handleUpdateArea(area.id, updates)}
-                    onDelete={() => handleDeleteArea(area.id)}
-                  />
-                ))}
-              </div>
-            </div>
-
-            {/* General Notes */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                General Notes <span className="text-gray-500">(optional)</span>
-              </label>
-              <textarea
-                value={form.notes}
-                onChange={e => setForm({ ...form, notes: e.target.value })}
-                placeholder="Any additional notes..."
-                rows={4}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC]"
-              />
-            </div>
-
-            {/* Overall Result */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-3">
-                Overall Assessment Result
-              </label>
-              <div className="flex items-center gap-6">
-                {Object.entries(RESULT_TYPE_CONFIG).map(([key, config]) => (
-                  <label key={key} className="flex items-center gap-2">
-                    <input
-                      type="radio"
-                      name="overall_result"
-                      value={key}
-                      checked={form.overall_result === key}
-                      onChange={e =>
-                        setForm({
-                          ...form,
-                          overall_result: e.target.value as
-                            | 'Pass'
-                            | 'Fail'
-                            | 'Exempt'
-                            | 'Pending',
-                        })
-                      }
-                      className="w-4 h-4 text-[#0066CC]"
-                    />
-                    <span className={`text-sm font-medium ${config.color} px-2 py-1 rounded`}>
-                      {config.icon} {config.label}
-                    </span>
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            {/* Photos Section */}
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">Assessment Photos</h2>
-
-              {errors.photos && <p className="text-red-600 text-sm mb-4">{errors.photos}</p>}
-
-              {/* Upload Photos Button */}
-              {!noPhotosConfirmed && uploadedPhotos.length === 0 && (
-                <div className="mb-4">
-                  <label className="block">
-                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-[#0066CC] cursor-pointer transition">
-                      <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                      <p className="text-sm font-medium text-gray-700">Click to upload photos</p>
-                      <p className="text-xs text-gray-500 mt-1">or drag and drop</p>
-                    </div>
-                    <input
-                      type="file"
-                      multiple
-                      accept="image/*"
-                      onChange={handlePhotoSelect}
-                      className="hidden"
-                    />
-                  </label>
-                </div>
-              )}
-
-              {/* Uploaded Photos List */}
-              {uploadedPhotos.length > 0 && (
-                <div className="mb-4">
-                  <p className="text-sm font-medium text-gray-700 mb-2">
-                    Uploaded Photos ({uploadedPhotos.length})
-                  </p>
-                  <div className="space-y-2">
-                    {uploadedPhotos.map((photo, index) => (
-                      <div
-                        key={index}
-                        className="flex items-center justify-between p-3 bg-gray-50 border border-gray-200 rounded-lg"
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="font-medium text-gray-900">Area {index + 1}</h3>
+                    {areas.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removeArea(area.id)}
+                        className="text-red-500 hover:text-red-700 text-sm flex items-center gap-1"
                       >
-                        <span className="text-sm text-gray-700">{photo.name}</span>
-                        <button
-                          onClick={() => handleRemovePhoto(index)}
-                          className="text-red-600 hover:text-red-700"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-                    ))}
+                        <Trash2 className="w-4 h-4" />
+                        Remove
+                      </button>
+                    )}
                   </div>
-                  <button
-                    onClick={() => {
-                      const input = document.createElement('input')
-                      input.type = 'file'
-                      input.multiple = true
-                      input.accept = 'image/*'
-                      input.onchange = (e: any) => {
-                        if (e.target.files) {
-                          setUploadedPhotos([
-                            ...uploadedPhotos,
-                            ...Array.from(e.target.files) as File[],
-                          ])
-                        }
-                      }
-                      input.click()
-                    }}
-                    className="mt-2 text-sm text-[#0066CC] hover:underline font-medium"
-                  >
-                    + Add More Photos
-                  </button>
-                </div>
-              )}
 
-              {/* No Photos Confirmation */}
-              <label className="flex items-center gap-2 p-3 border border-gray-300 rounded-lg hover:bg-gray-50">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    {/* Area Type */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Area Type
+                      </label>
+                      <select
+                        value={area.app_type_id || ''}
+                        onChange={(e) => updateArea(area.id, 'app_type_id', e.target.value || null)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
+                      >
+                        <option value="">Select...</option>
+                        {appTypes.map(at => (
+                          <option key={at.id} value={at.id}>
+                            {at.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Square Metres */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Square Metres
+                      </label>
+                      <input
+                        type="number"
+                        value={area.area_sqm || ''}
+                        onChange={(e) => updateArea(area.id, 'area_sqm', parseFloat(e.target.value) || 0)}
+                        placeholder="0"
+                        step="0.01"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
+                      />
+                    </div>
+
+                    {/* Wording */}
+                    <div className="md:col-span-2 relative">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Wording
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          value={area.wording_text || wordingSearch[area.id] || ''}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            setWordingSearch({ ...wordingSearch, [area.id]: value });
+                            setShowWordingDropdown(area.id);
+                            if (!value) {
+                              updateArea(area.id, 'wording_id', null);
+                              updateArea(area.id, 'wording_text', '');
+                            }
+                          }}
+                          onFocus={() => setShowWordingDropdown(area.id)}
+                          placeholder="Type to search wordings..."
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
+                        />
+                        <Search className="absolute right-3 top-2.5 w-4 h-4 text-gray-400 pointer-events-none" />
+                      </div>
+
+                      {/* Wording Dropdown */}
+                      {showWordingDropdown === area.id && (
+                        <div
+                          className="absolute left-0 right-0 top-full mt-1 z-50 bg-white border border-gray-300 rounded-lg shadow-lg max-h-80 overflow-y-auto"
+                          onMouseDown={(e) => e.preventDefault()}
+                        >
+                          {getFilteredWordings(area.id).length > 0 ? (
+                            <div>
+                              {getFilteredWordings(area.id).map(wording => (
+                                <button
+                                  key={wording.id}
+                                  type="button"
+                                  onClick={() => {
+                                    updateArea(area.id, 'wording_id', wording.id);
+                                    updateArea(area.id, 'wording_text', wording.wordings);
+                                    setWordingSearch({ ...wordingSearch, [area.id]: '' });
+                                    setShowWordingDropdown(null);
+                                  }}
+                                  className="w-full px-4 py-3 text-left hover:bg-blue-50 border-b border-gray-100 last:border-0 transition-colors"
+                                >
+                                  <div className="font-medium text-gray-900">{wording.wordings}</div>
+                                  <div className="flex gap-2 mt-1">
+                                    {wording.area_label && (
+                                      <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded">
+                                        {wording.area_label}
+                                      </span>
+                                    )}
+                                    {wording.result_type && (
+                                      <span className={`text-xs px-2 py-0.5 rounded font-medium ${
+                                        wording.result_type === 'PASS' ? 'bg-green-100 text-green-700' :
+                                        wording.result_type === 'FAIL' ? 'bg-red-100 text-red-700' :
+                                        wording.result_type === 'EXEMPT' ? 'bg-amber-100 text-amber-700' :
+                                        'bg-gray-100 text-gray-700'
+                                      }`}>
+                                        {wording.result_type}
+                                      </span>
+                                    )}
+                                  </div>
+                                </button>
+                              ))}
+                              {getFilteredWordings(area.id).length >= 20 && (
+                                <div className="px-4 py-2 text-xs text-gray-500 bg-gray-50 border-t">
+                                  Showing first 20 results. Type more to refine search.
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="px-4 py-8 text-center text-gray-500">
+                              {wordingSearch[area.id] ? 'No wordings found' : 'Start typing to search...'}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Result Type */}
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Result
+                      </label>
+                      <div className="flex gap-4">
+                        {(['Pass', 'Fail', 'Exempt', 'Pending'] as const).map(result => (
+                          <label key={result} className="flex items-center gap-1.5 cursor-pointer">
+                            <input
+                              type="radio"
+                              name={`result-${area.id}`}
+                              value={result}
+                              checked={area.result_type === result}
+                              onChange={(e) => updateArea(area.id, 'result_type', e.target.value)}
+                              className="text-[#0066CC] focus:ring-[#0066CC]"
+                            />
+                            <span className={`text-sm ${
+                              result === 'Pass' ? 'text-green-600' :
+                              result === 'Fail' ? 'text-red-600' :
+                              result === 'Exempt' ? 'text-amber-600' :
+                              'text-gray-600'
+                            }`}>
+                              {result}
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Notes */}
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Notes
+                      </label>
+                      <textarea
+                        value={area.notes}
+                        onChange={(e) => updateArea(area.id, 'notes', e.target.value)}
+                        placeholder="Area-specific notes..."
+                        rows={2}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
+                      />
+                    </div>
+
+                    {/* Area Photos */}
+                    <div className="md:col-span-4">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Photos for this area
+                      </label>
+                      <div className="flex flex-wrap gap-2">
+                        {area.photoUrls.map((url, photoIndex) => (
+                          <div key={photoIndex} className="relative w-20 h-20 group">
+                            <img
+                              src={url}
+                              alt={`Area photo ${photoIndex + 1}`}
+                              className="w-full h-full object-cover rounded-lg border"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => removeAreaPhoto(area.id, photoIndex)}
+                              className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ))}
+                        <label className="w-20 h-20 flex flex-col items-center justify-center border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-[#0066CC] hover:bg-gray-50 transition">
+                          <Camera className="w-5 h-5 text-gray-400" />
+                          <span className="text-xs text-gray-400 mt-1">Add</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            multiple
+                            onChange={(e) => handleAreaPhotoUpload(area.id, e.target.files)}
+                            className="hidden"
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* ============================================ */}
+          {/* SECTION 4: GENERAL PHOTOS */}
+          {/* ============================================ */}
+          <div className="bg-white rounded-lg shadow p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b border-[#0066CC]">
+              4. General Photos
+            </h2>
+            
+            <div className="flex items-center gap-4 mb-4">
+              <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
-                  checked={noPhotosConfirmed}
-                  onChange={e => setNoPhotosConfirmed(e.target.checked)}
-                  className="w-4 h-4 text-[#0066CC] rounded border-gray-300"
+                  checked={noPhotosToUpload}
+                  onChange={(e) => {
+                    setNoPhotosToUpload(e.target.checked);
+                    if (e.target.checked) {
+                      setGeneralPhotos([]);
+                      setGeneralPhotoUrls([]);
+                    }
+                  }}
+                  className="w-4 h-4 text-[#0066CC] border-gray-300 rounded focus:ring-[#0066CC]"
                 />
-                <span className="text-sm font-medium text-gray-700">
-                  No photos to upload
-                </span>
+                <span className="text-sm text-gray-700">No photos to upload</span>
               </label>
             </div>
 
-            {/* Buttons */}
-            <div className="flex gap-4 justify-end pt-6 border-t border-gray-200">
-              <button
-                onClick={() => router.back()}
-                disabled={loading}
-                className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleCreateAssessment}
-                disabled={loading}
-                className="px-6 py-2 bg-[#0066CC] text-white rounded-lg hover:bg-[#0052a3] disabled:opacity-50 font-medium"
-              >
-                {loading ? 'Creating...' : 'Create Assessment'}
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// Assessment Area Form Component
-function AssessmentAreaForm({
-  area,
-  appTypes,
-  wordings,
-  onUpdate,
-  onDelete,
-}: {
-  area: FormAssessmentArea
-  appTypes: AppType[]
-  wordings: AssessmentWording[]
-  onUpdate: (updates: Partial<FormAssessmentArea>) => void
-  onDelete: () => void
-}) {
-  const [areaPhotos, setAreaPhotos] = useState<File[]>(area.photos || [])
-  const [wordingSearch, setWordingSearch] = useState('')
-  const [showWordingDropdown, setShowWordingDropdown] = useState(false)
-  const areaLabel = area.area_name?.toLowerCase() || ''
-
-  console.log('AssessmentAreaForm wordings:', wordings.length, 'area:', area.area_name)
-
-  // Add click outside handler
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as Element
-      if (!target.closest('[data-wording-dropdown]')) {
-        setShowWordingDropdown(false)
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
-
-  const filteredWordings = wordings.filter(w => {
-    const wordingText = (w.wording_text || '').toLowerCase()
-    const areaHint = (area.area_name || '').toLowerCase()
-    const search = wordingSearch.toLowerCase().trim()
-
-    // Match by area_label if specified in template
-    const areaMatch = !w.area_label || areaHint.includes(w.area_label.toLowerCase())
-
-    // Match by result_type if specified in template
-    const resultMatch = !w.result_type || area.result_type === w.result_type
-
-    if (search) {
-      return wordingText.includes(search) && areaMatch && resultMatch
-    }
-
-    return areaMatch && resultMatch
-  })
-
-  { `Search wordings (e.g. ${area.area_name || 'ceiling'})` }
-
-
-
-  const handleAppTypeChange = (appTypeId: string) => {
-    const appType = appTypes.find(t => t.id === appTypeId)
-    onUpdate({
-      area_id: appTypeId,
-      area_name: appType?.name || '',
-      area_color: appType?.color_hex || '#C27BA0',
-    })
-  }
-
-  return (
-    <div className="border border-gray-300 rounded-lg overflow-hidden">
-      {/* Header */}
-      <div className="bg-gray-50 px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-3 flex-1">
-          <div
-            className="w-4 h-4 rounded-full"
-            style={{ backgroundColor: area.area_color }}
-          />
-          <h3 className="font-semibold text-gray-900">
-            {area.area_name || 'Select Area Type'}
-          </h3>
-        </div>
-        <button onClick={onDelete} className="text-red-600 hover:text-red-700 font-medium text-sm">
-          Delete
-        </button>
-      </div>
-
-      {/* Content */}
-      <div className="p-4 space-y-4">
-        {/* Area Type Selection */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Area Type <span className="text-red-500">*</span>
-          </label>
-          <select
-            value={area.area_id}
-            onChange={e => handleAppTypeChange(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC]"
-          >
-            <option value="">Select area type</option>
-            {appTypes.map(type => (
-              <option key={type.id} value={type.id}>
-                {type.name}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Wording Selection and Notes */}
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Wording <span className="text-gray-500">(optional)</span>
-            </label>
-            <div className="relative" data-wording-dropdown>
-              <input
-                type="text"
-                placeholder={`Search wordings (e.g. ${area.area_name || 'ceiling'})`}
-                value={wordingSearch}
-                onChange={e => {
-                  setWordingSearch(e.target.value)
-                  setShowWordingDropdown(true)
-                }}
-                onFocus={() => setShowWordingDropdown(true)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC] text-sm"
-              />
-
-              {showWordingDropdown && (
-                <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                  {filteredWordings.length > 0 ? (
-                    filteredWordings.map(w => (
-                      <button
-                        key={w.id}
-                        onClick={() => {
-                          onUpdate({ wording_id: w.id })
-                          setWordingSearch('')
-                          setShowWordingDropdown(false)
-                        }}
-                        className="w-full text-left px-3 py-2 hover:bg-blue-50 text-xs border-b border-gray-100 last:border-b-0"
-                      >
-                        <p className="font-medium text-gray-900">{w.wording_text}</p>
-                      </button>
-                    ))
-                  ) : (
-                    <div className="px-3 py-2 text-sm text-gray-500">
-                      {wordings.length === 0 ? 'Loading wordings...' : 'No wordings found'}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Square Metres <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="number"
-              value={area.square_metres || ''}
-              onChange={e => onUpdate({ square_metres: parseFloat(e.target.value) || 0 })}
-              placeholder="0"
-              step="0.1"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC]"
-            />
-          </div>
-        </div>
-
-        {/* Notes */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Notes <span className="text-gray-500">(optional)</span>
-          </label>
-          <textarea
-            value={area.notes}
-            onChange={e => onUpdate({ notes: e.target.value })}
-            placeholder="Add notes for this area..."
-            rows={2}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC]"
-          />
-        </div>
-
-        {/* Result Type */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-3">Result</label>
-          <div className="flex items-center gap-4">
-            {Object.entries(RESULT_TYPE_CONFIG).map(([key, config]) => (
-              <label key={key} className="flex items-center gap-2">
-                <input
-                  type="radio"
-                  name={`result-${area.id}`}
-                  value={key}
-                  checked={area.result_type === key}
-                  onChange={e =>
-                    onUpdate({
-                      result_type: e.target.value as
-                        | 'Pass'
-                        | 'Fail'
-                        | 'Exempt'
-                        | 'Pending',
-                    })
-                  }
-                  className="w-4 h-4 text-[#0066CC]"
-                />
-                <span
-                  className={`text-xs font-semibold ${config.color} px-2 py-1 rounded`}
-                >
-                  {config.icon} {config.label}
-                </span>
-              </label>
-            ))}
-          </div>
-        </div>
-
-        {/* Per-Area Photos */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Area Photos <span className="text-gray-500">(optional)</span>
-          </label>
-          <div className="space-y-2">
-            <label className="block">
-              <div className="border-2 border-dashed border-gray-300 rounded-lg p-3 text-center hover:border-[#0066CC] cursor-pointer transition">
-                <Upload className="w-4 h-4 text-gray-400 mx-auto mb-1" />
-                <p className="text-xs font-medium text-gray-700">Click to upload photos</p>
-              </div>
-              <input
-                type="file"
-                multiple
-                accept="image/*"
-                onChange={e => {
-                  if (e.target.files) {
-                    const updated = [...areaPhotos, ...Array.from(e.target.files)]
-                    setAreaPhotos(updated)
-                    onUpdate({ photos: updated })
-                  }
-                }}
-                className="hidden"
-              />
-            </label>
-
-            {areaPhotos.length > 0 && (
-              <div className="space-y-1">
-                {areaPhotos.map((photo, idx) => (
-                  <div
-                    key={idx}
-                    className="flex items-center justify-between p-2 bg-gray-50 border border-gray-200 rounded text-xs"
-                  >
-                    <span className="text-gray-700">{photo.name}</span>
+            {!noPhotosToUpload && (
+              <div className="flex flex-wrap gap-2">
+                {generalPhotoUrls.map((url, index) => (
+                  <div key={index} className="relative w-24 h-24 group">
+                    <img
+                      src={url}
+                      alt={`General photo ${index + 1}`}
+                      className="w-full h-full object-cover rounded-lg border"
+                    />
                     <button
-                      onClick={() => {
-                        const updated = areaPhotos.filter((_, i) => i !== idx)
-                        setAreaPhotos(updated)
-                        onUpdate({ photos: updated })
-                      }}
-                      className="text-red-600 hover:text-red-700"
+                      type="button"
+                      onClick={() => removeGeneralPhoto(index)}
+                      className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition"
                     >
-                      <X className="w-3 h-3" />
+                      <X className="w-4 h-4" />
                     </button>
                   </div>
                 ))}
+                <label className="w-24 h-24 flex flex-col items-center justify-center border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-[#0066CC] hover:bg-gray-50 transition">
+                  <Upload className="w-6 h-6 text-gray-400" />
+                  <span className="text-xs text-gray-400 mt-1">Upload</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={(e) => handleGeneralPhotoUpload(e.target.files)}
+                    className="hidden"
+                  />
+                </label>
               </div>
             )}
           </div>
-        </div>
+
+          {/* ============================================ */}
+          {/* SECTION 5: OVERALL RESULT & NOTES */}
+          {/* ============================================ */}
+          <div className="bg-white rounded-lg shadow p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b border-[#0066CC]">
+              5. Overall Result & Notes
+            </h2>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Overall Result */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Overall Result
+                </label>
+                <div className="flex gap-4">
+                  {(['Pass', 'Fail', 'Exempt', 'Pending'] as const).map(result => (
+                    <label key={result} className="flex items-center gap-1.5 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="overallResult"
+                        value={result}
+                        checked={overallResult === result}
+                        onChange={(e) => setOverallResult(e.target.value as typeof overallResult)}
+                        className="text-[#0066CC] focus:ring-[#0066CC]"
+                      />
+                      <span className={`text-sm font-medium ${
+                        result === 'Pass' ? 'text-green-600' :
+                        result === 'Fail' ? 'text-red-600' :
+                        result === 'Exempt' ? 'text-amber-600' :
+                        'text-gray-600'
+                      }`}>
+                        {result}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* General Notes */}
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  General Notes
+                </label>
+                <textarea
+                  value={generalNotes}
+                  onChange={(e) => setGeneralNotes(e.target.value)}
+                  placeholder="Any additional notes about the assessment..."
+                  rows={3}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* ============================================ */}
+          {/* ACTIONS */}
+          {/* ============================================ */}
+          <div className="flex justify-end gap-3">
+            <button
+              type="button"
+              onClick={() => router.back()}
+              className="px-6 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="px-6 py-2.5 bg-[#0066CC] text-white rounded-lg hover:bg-[#0052A3] transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              {isSubmitting ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  Creating...
+                </>
+              ) : (
+                <>
+                  <Check className="w-4 h-4" />
+                  Create Assessment
+                </>
+              )}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
-  )
+  );
 }

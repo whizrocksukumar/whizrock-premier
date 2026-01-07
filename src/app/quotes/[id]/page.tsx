@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { Search, Plus, Trash2, X, AlertTriangle, Check, ArrowLeft, Printer, Mail, Edit2 } from 'lucide-react';
+import { Search, Plus, Trash2, X, AlertTriangle, Check, CheckCircle, ArrowLeft, Printer, Mail, Edit2 } from 'lucide-react';
 
 // Helper function for date formatting (dd-mm-yyyy)
 const formatDateDisplay = (dateString: string | null | undefined): string => {
@@ -183,6 +183,8 @@ export default function QuoteDetailPage() {
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [isEditing, setIsEditing] = useState(false);
+    const [sending, setSending] = useState(false);
+    const [accepting, setAccepting] = useState(false);
     const [productSearch, setProductSearch] = useState<{ [key: string]: string }>({});
     const [showProductSuggestions, setShowProductSuggestions] = useState<{ [key: string]: boolean }>({});
 
@@ -898,6 +900,61 @@ export default function QuoteDetailPage() {
         }
     };
 
+    const handleSendToCustomer = async () => {
+        if (!confirm('Send this quote to the customer via email?')) {
+            return;
+        }
+
+        setSending(true);
+        try {
+            const response = await fetch(`/api/send-quote-email`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ quoteId: params.id }),
+            });
+
+            const result = await response.json();
+
+            if (result.ok) {
+                alert(`✓ Quote sent successfully!\n✉ Email sent to: ${result.sentTo}`);
+                loadQuote(); // Refresh
+            } else {
+                alert(`Error: ${result.error}`);
+            }
+        } catch (error) {
+            alert('Failed to send quote');
+            console.error(error);
+        }
+        setSending(false);
+    };
+
+    const handleAcceptQuote = async () => {
+        if (!confirm('Customer has accepted this quote. Create a job now?')) {
+            return;
+        }
+
+        setAccepting(true);
+        try {
+            const response = await fetch(`/api/quotes/${params.id}/accept`, {
+                method: 'POST',
+            });
+
+            const result = await response.json();
+
+            if (result.ok) {
+                alert(`✓ Job created successfully!\n\nJob Number: ${result.jobNumber}\n\nRedirecting to job page...`);
+                // Redirect to the new job
+                router.push(`/jobs/${result.job.id}`);
+            } else {
+                alert(`Error: ${result.error}`);
+            }
+        } catch (error) {
+            alert('Failed to accept quote and create job');
+            console.error(error);
+        }
+        setAccepting(false);
+    };
+
     if (loading) {
         return (
             <div className="min-h-screen bg-gray-100 flex items-center justify-center">
@@ -969,6 +1026,26 @@ export default function QuoteDetailPage() {
                                 <button className="p-2 hover:bg-gray-100 rounded transition-colors">
                                     <Mail className="w-5 h-5 text-gray-600" />
                                 </button>
+                                {quoteStatus === 'Draft' && getTotals().totalSell > 0 && (
+                                    <button
+                                        onClick={handleSendToCustomer}
+                                        disabled={sending}
+                                        className="px-4 py-2 bg-blue-600 text-white rounded transition-colors flex items-center gap-2 hover:bg-[#0052a3] disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        <Mail className="w-4 h-4" />
+                                        {sending ? 'Sending...' : 'Send to Customer'}
+                                    </button>
+                                )}
+                                {quote?.sent_at && (quoteStatus === 'Sent' || quoteStatus === 'Draft') && quoteStatus !== 'Accepted' && quoteStatus !== 'Won' && (
+                                    <button
+                                        onClick={handleAcceptQuote}
+                                        disabled={accepting}
+                                        className="px-4 py-2 bg-green-600 text-white rounded transition-colors flex items-center gap-2 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        <CheckCircle className="w-4 h-4" />
+                                        {accepting ? 'Creating Job...' : 'Customer Accepted - Create Job'}
+                                    </button>
+                                )}
                             </>
                         ) : (
                             <>

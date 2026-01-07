@@ -23,6 +23,8 @@ interface Product {
     waste_percentage: number;
     is_active?: boolean;
     is_labour?: boolean;
+    quantity_on_hand?: number;
+    quantity_reserved?: number;
     quantity_available?: number;
     reorder_level?: number;
     stock_status?: 'IN_STOCK' | 'LOW_STOCK' | 'OUT_OF_STOCK';
@@ -192,27 +194,23 @@ export default function AddNewQuotePage() {
     const loadLookupData = async () => {
         setLoading(true);
         try {
-            const [productsRes, stockRes, appTypesRes, regionsRes, teamMembersRes, jobTypesRes] = await Promise.all([
+            const [productsRes, appTypesRes, regionsRes, teamMembersRes, jobTypesRes] = await Promise.all([
                 supabase.from('products').select('*').eq('is_active', true),
-                supabase.from('stock_levels').select('product_id, quantity_available, reorder_level'),
                 supabase.from('app_types').select('*').eq('is_active', true).order('sort_order'),
                 supabase.from('regions').select('*').order('name'),
                 supabase.from('team_members').select('*').order('first_name'),
                 supabase.from('job_types').select('*').order('name'),
             ]);
 
-            // Merge stock data with products
-            if (productsRes.data && stockRes.data) {
-                const stockMap = new Map(stockRes.data.map((s: any) => [s.product_id, s]));
+            // Products already have quantity_on_hand, quantity_reserved, and quantity_available in the table
+            if (productsRes.data) {
                 const productsWithStock = productsRes.data.map((p: any) => {
-                    const stock = stockMap.get(p.id) as any;
-                    const quantity = stock?.quantity_available;
-                    const reorder = stock?.reorder_level;
+                    // quantity_available is calculated in database as (quantity_on_hand - quantity_reserved)
+                    const available = p.quantity_available || 0;
+                    const reorder = p.reorder_level;
                     return {
                         ...p,
-                        quantity_available: quantity,
-                        reorder_level: reorder,
-                        stock_status: calculateStockStatus(quantity, reorder)
+                        stock_status: calculateStockStatus(available, reorder)
                     };
                 });
                 setProducts(productsWithStock as Product[]);
@@ -1386,14 +1384,26 @@ export default function AddNewQuotePage() {
                                                                                         product.stock_status === 'OUT_OF_STOCK' ? 'opacity-50 cursor-not-allowed' : ''
                                                                                     }`}
                                                                                 >
-                                                                                    <div className="flex items-center justify-between">
-                                                                                        <div>
+                                                                                    <div className="flex items-start justify-between gap-3">
+                                                                                        <div className="flex-1 min-w-0">
                                                                                             <p className="text-sm font-medium text-gray-900">{product.product_description}</p>
                                                                                             <p className="text-xs text-gray-500">{product.sku} | R{product.r_value} | Bale: {product.bale_size_sqm}m²</p>
                                                                                         </div>
-                                                                                        <span className={`text-xs px-2 py-1 rounded ${stockDisplay.bg} ${stockDisplay.color}`}>
-                                                                                            {stockDisplay.label}
-                                                                                        </span>
+                                                                                        <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                                                                                            <span className={`text-xs px-2 py-1 rounded whitespace-nowrap ${stockDisplay.bg} ${stockDisplay.color}`}>
+                                                                                                {stockDisplay.label}
+                                                                                            </span>
+                                                                                            {product.quantity_reserved !== undefined && product.quantity_reserved > 0 && (
+                                                                                                <span className="text-xs text-gray-500 whitespace-nowrap">
+                                                                                                    Reserved: {product.quantity_reserved}
+                                                                                                </span>
+                                                                                            )}
+                                                                                            {product.quantity_on_hand !== undefined && (
+                                                                                                <span className="text-xs text-gray-500 whitespace-nowrap">
+                                                                                                    On Hand: {product.quantity_on_hand}
+                                                                                                </span>
+                                                                                            )}
+                                                                                        </div>
                                                                                     </div>
                                                                                 </button>
                                                                             );

@@ -35,7 +35,7 @@ function Row({
 
 export default function ClientOverviewCard({ client }: ClientOverviewProps) {
   return (
-    <div className="rounded-lg bg-white px-6 py-4">
+    <div className="rounded-lg bg-white shadow px-6 py-4">
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-semibold text-gray-900">
