@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { Calendar, Clock, Users, Check, AlertTriangle, X, Package, FileText, ClipboardList } from 'lucide-react';
@@ -139,7 +139,7 @@ const getResultTypeBadge = (resultType?: string) => {
 // Skip static generation for this page
 export const dynamic = 'force-dynamic'
 
-export default function CreateJobPage() {
+function CreateJobPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const quoteIdParam = searchParams.get('quote_id');
@@ -987,5 +987,14 @@ export default function CreateJobPage() {
         </form>
       </div>
     </div>
+  );
+}
+
+// Wrapper component with Suspense
+export default function CreateJobPage() {
+  return (
+    <Suspense fallback={<div className="p-6">Loading...</div>}>
+      <CreateJobPageContent />
+    </Suspense>
   );
 }
