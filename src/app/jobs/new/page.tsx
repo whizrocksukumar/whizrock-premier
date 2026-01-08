@@ -136,6 +136,9 @@ const getResultTypeBadge = (resultType?: string) => {
 // ============================================
 // MAIN COMPONENT
 // ============================================
+// Skip static generation for this page
+export const dynamic = 'force-dynamic'
+
 export default function CreateJobPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
