@@ -1,21 +1,26 @@
-import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
-import './globals.css';
-import Sidebar from './components/Sidebar';
-import HelpMenu from '@/components/HelpMenu';
+import type { Metadata, Viewport } from 'next'
+import { Inter } from 'next/font/google'
+import './globals.css'
 
-const inter = Inter({ subsets: ['latin'] });
+import Sidebar from './components/Sidebar'
+import HelpMenu from '@/components/HelpMenu'
+
+const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'Premier Insulation | Quote & Job Management',
-  description: 'Modern quote and job management system for Premier Insulation',
-  viewport: 'width=device-width, initial-scale=1',
-};
+  title: 'Premier',
+  description: 'Premier Insulation App',
+}
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+}
 
 export default function RootLayout({
   children,
 }: {
-  children: React.ReactNode;
+  children: React.ReactNode
 }) {
   return (
     <html lang="en">
@@ -23,22 +28,21 @@ export default function RootLayout({
         {/* Sidebar */}
         <Sidebar />
 
-        {/* Main content area with header */}
+        {/* Main content area */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Header Bar */}
+          {/* Header */}
           <header className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-end shadow-sm">
             <HelpMenu />
           </header>
 
-          {/* Main content */}
+          {/* Page content */}
           <main className="flex-1 overflow-y-auto">
-          <div className="mx-auto w-full max-w-[90%] px-4 py-6">
-            {children}
-          </div>
-        </main>
-
+            <div className="mx-auto w-full max-w-[90%] px-4 py-6">
+              {children}
+            </div>
+          </main>
         </div>
       </body>
     </html>
-  );
+  )
 }
