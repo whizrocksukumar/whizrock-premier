@@ -13,7 +13,7 @@ interface Product {
   bale_size_sqm: number;
   retail_price: number;
   pack_price: number;
-  quantity_on_hand: number;
+  stock_level: number;
 }
 
 interface CalculationResult {
@@ -47,7 +47,7 @@ export default function InsulationCalculatorPage() {
     try {
       const { data, error } = await supabase
         .from('products')
-        .select('id, sku, product_description, r_value, application_type, bale_size_sqm, retail_price, pack_price, quantity_on_hand')
+        .select('id, sku, product_description, r_value, application_type, bale_size_sqm, retail_price, pack_price, stock_level')
         .eq('is_active', true)
         .order('sku');
 
@@ -79,7 +79,7 @@ export default function InsulationCalculatorPage() {
     const totalSqmProvided = packsRequired * selectedProduct.bale_size_sqm;
     const excessSqm = totalSqmProvided - totalAreaWithWaste;
     const totalCost = packsRequired * selectedProduct.pack_price;
-    const currentStock = selectedProduct.quantity_on_hand || 0;
+    const currentStock = selectedProduct.stock_level || 0;
     const stockShortfall = Math.max(0, packsRequired - currentStock);
 
     setResult({
