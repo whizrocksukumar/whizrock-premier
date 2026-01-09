@@ -23,9 +23,7 @@ interface Product {
     waste_percentage: number;
     is_active?: boolean;
     is_labour?: boolean;
-    quantity_on_hand?: number;
-    quantity_reserved?: number;
-    quantity_available?: number;
+    stock_level?: number;
     reorder_level?: number;
     stock_status?: 'IN_STOCK' | 'LOW_STOCK' | 'OUT_OF_STOCK';
 }
@@ -202,12 +200,11 @@ export default function AddNewQuotePage() {
                 supabase.from('job_types').select('*').order('name'),
             ]);
 
-            // Products already have quantity_on_hand, quantity_reserved, and quantity_available in the table
+            // Products have stock_level field
             if (productsRes.data) {
                 const productsWithStock = productsRes.data.map((p: any) => {
-                    // quantity_available is calculated in database as (quantity_on_hand - quantity_reserved)
-                    const available = p.quantity_available || 0;
-                    const reorder = p.reorder_level;
+                    const available = p.stock_level || 0;
+                    const reorder = p.reorder_level || 0;
                     return {
                         ...p,
                         stock_status: calculateStockStatus(available, reorder)
@@ -291,8 +288,8 @@ export default function AddNewQuotePage() {
 
                         // Stock warning
                         let stockWarning = '';
-                        if (item.product.quantity_available !== undefined && packs > item.product.quantity_available) {
-                            stockWarning = `Need ${packs} packs, only ${item.product.quantity_available} available`;
+                        if (item.product.stock_level !== undefined && packs > item.product.stock_level) {
+                            stockWarning = `Need ${packs} packs, only ${item.product.stock_level} available`;
                         }
 
                         return {
@@ -450,8 +447,8 @@ export default function AddNewQuotePage() {
 
                             // Stock warning
                             let stockWarning = '';
-                            if (product.quantity_available !== undefined && packs > 0 && packs > product.quantity_available) {
-                                stockWarning = `Need ${packs} packs, only ${product.quantity_available} available`;
+                            if (product.stock_level !== undefined && packs > 0 && packs > product.stock_level) {
+                                stockWarning = `Need ${packs} packs, only ${product.stock_level} available`;
                             }
 
                             return {
@@ -535,8 +532,8 @@ export default function AddNewQuotePage() {
                             // Calculate GP%
                             marginPercent = lineSell > 0 ? ((lineSell - lineCost) / lineSell) * 100 : 0;
                             
-                            if (currentItem.product.quantity_available !== undefined && packs > currentItem.product.quantity_available) {
-                                stockWarning = `Need ${packs} packs, only ${currentItem.product.quantity_available} available`;
+                            if (currentItem.product.stock_level !== undefined && packs > currentItem.product.stock_level) {
+                                stockWarning = `Need ${packs} packs, only ${currentItem.product.stock_level} available`;
                             }
                         }
                         
@@ -1373,7 +1370,7 @@ export default function AddNewQuotePage() {
                                                                 {showProductSuggestions[`${section.id}-${item.id}`] && (
                                                                     <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
                                                                         {getFilteredProducts(`${section.id}-${item.id}`).map(product => {
-                                                                            const stockDisplay = getStockStatusDisplay(product.stock_status || 'IN_STOCK', product.quantity_available);
+                                                                            const stockDisplay = getStockStatusDisplay(product.stock_status || 'IN_STOCK', product.stock_level);
                                                                             return (
                                                                                 <button
                                                                                     key={product.id}
@@ -1393,14 +1390,9 @@ export default function AddNewQuotePage() {
                                                                                             <span className={`text-xs px-2 py-1 rounded whitespace-nowrap ${stockDisplay.bg} ${stockDisplay.color}`}>
                                                                                                 {stockDisplay.label}
                                                                                             </span>
-                                                                                            {product.quantity_reserved !== undefined && product.quantity_reserved > 0 && (
+                                                                                            {product.stock_level !== undefined && (
                                                                                                 <span className="text-xs text-gray-500 whitespace-nowrap">
-                                                                                                    Reserved: {product.quantity_reserved}
-                                                                                                </span>
-                                                                                            )}
-                                                                                            {product.quantity_on_hand !== undefined && (
-                                                                                                <span className="text-xs text-gray-500 whitespace-nowrap">
-                                                                                                    On Hand: {product.quantity_on_hand}
+                                                                                                    Stock: {product.stock_level}
                                                                                                 </span>
                                                                                             )}
                                                                                         </div>
