@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
-import { HelpCircle, Book, FileText, Package, AlertCircle, Briefcase, X } from 'lucide-react'
+import { HelpCircle, Book, FileText, Package, AlertCircle, Briefcase, X, Calculator } from 'lucide-react'
 
 export default function HelpMenu() {
   const [isOpen, setIsOpen] = useState(false)
@@ -31,6 +31,13 @@ export default function HelpMenu() {
       icon: Book,
       href: '/help',
       description: 'Learn the basics'
+    },
+    {
+      title: 'Insulation Calculator',
+      icon: Calculator,
+      href: '/help/calculator',
+      description: 'Calculate materials & costs',
+      highlight: true
     },
     {
       title: 'Quotes',
@@ -93,13 +100,21 @@ export default function HelpMenu() {
                   key={section.href}
                   href={section.href}
                   onClick={() => setIsOpen(false)}
-                  className="flex items-start gap-3 px-4 py-3 hover:bg-gray-50 transition-colors"
+                  className={`flex items-start gap-3 px-4 py-3 hover:bg-gray-50 transition-colors ${
+                    section.highlight ? 'bg-blue-50 border-l-4 border-blue-500' : ''
+                  }`}
                 >
-                  <div className="flex-shrink-0 w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
-                    <Icon className="w-4 h-4 text-blue-600" />
+                  <div className={`flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center ${
+                    section.highlight ? 'bg-blue-500' : 'bg-blue-100'
+                  }`}>
+                    <Icon className={`w-4 h-4 ${
+                      section.highlight ? 'text-white' : 'text-blue-600'
+                    }`} />
                   </div>
                   <div>
-                    <p className="text-sm font-medium text-gray-900">{section.title}</p>
+                    <p className={`text-sm font-medium ${
+                      section.highlight ? 'text-blue-900' : 'text-gray-900'
+                    }`}>{section.title}</p>
                     <p className="text-xs text-gray-500">{section.description}</p>
                   </div>
                 </Link>
