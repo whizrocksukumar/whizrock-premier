@@ -33,13 +33,6 @@ export default function HelpMenu() {
       description: 'Learn the basics'
     },
     {
-      title: 'Insulation Calculator',
-      icon: Calculator,
-      href: '/help/calculator',
-      description: 'Calculate materials & costs',
-      highlight: true
-    },
-    {
       title: 'Quotes',
       icon: FileText,
       href: '/help/quotes',

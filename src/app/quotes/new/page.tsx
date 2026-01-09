@@ -115,8 +115,7 @@ const DEFAULT_WASTE_PERCENT = 10;
 const generateId = () => Math.random().toString(36).substring(2, 15);
 
 const calculateStockStatus = (available: number | undefined, reorderLevel: number | undefined): 'IN_STOCK' | 'LOW_STOCK' | 'OUT_OF_STOCK' => {
-    if (available === undefined || available === null) return 'IN_STOCK';
-    if (available <= 0) return 'OUT_OF_STOCK';
+    if (available === undefined || available === null) return 'LOW_STOCK';
     if (reorderLevel && available <= reorderLevel) return 'LOW_STOCK';
     return 'IN_STOCK';
 };
