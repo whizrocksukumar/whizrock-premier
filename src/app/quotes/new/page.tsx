@@ -824,7 +824,7 @@ export default function AddNewQuotePage() {
                     postcode: postcode,
                     region_id: regionId || null,
                     sales_rep_id: salesRepId || null,
-                    job_type_id: jobTypeId || null,
+                    job_type: jobTypeId || null,
                     status: status,
                     pricing_tier: pricingTier,
                     markup_percent: targetGP, // Storing GP% in this field
