@@ -7,13 +7,13 @@ import { supabase } from '@/lib/supabase';
 interface Product {
   id: string;
   sku: string;
-  product_name: string;
+  product_description: string;
   r_value: string;
   application_type: string;
   bale_size_sqm: number;
   retail_price: number;
   pack_price: number;
-  stock_quantity: number;
+  quantity_on_hand: number;
 }
 
 interface CalculationResult {
@@ -47,7 +47,8 @@ export default function InsulationCalculatorPage() {
     try {
       const { data, error } = await supabase
         .from('products')
-        .select('id, sku, product_name, r_value, application_type, bale_size_sqm, retail_price, pack_price, stock_quantity')
+        .select('id, sku, product_description, r_value, application_type, bale_size_sqm, retail_price, pack_price, quantity_on_hand')
+        .eq('is_active', true)
         .order('sku');
 
       if (error) throw error;
@@ -60,7 +61,7 @@ export default function InsulationCalculatorPage() {
   const filteredProducts = products.filter((p) =>
     searchTerm === '' ||
     p.sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    p.product_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    p.product_description.toLowerCase().includes(searchTerm.toLowerCase()) ||
     p.r_value.toLowerCase().includes(searchTerm.toLowerCase()) ||
     p.application_type.toLowerCase().includes(searchTerm.toLowerCase())
   );
@@ -78,7 +79,7 @@ export default function InsulationCalculatorPage() {
     const totalSqmProvided = packsRequired * selectedProduct.bale_size_sqm;
     const excessSqm = totalSqmProvided - totalAreaWithWaste;
     const totalCost = packsRequired * selectedProduct.pack_price;
-    const currentStock = selectedProduct.stock_quantity || 0;
+    const currentStock = selectedProduct.quantity_on_hand || 0;
     const stockShortfall = Math.max(0, packsRequired - currentStock);
 
     setResult({
@@ -132,7 +133,7 @@ export default function InsulationCalculatorPage() {
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-center justify-between">
               <div>
                 <div className="font-semibold text-gray-900">{selectedProduct.sku}</div>
-                <div className="text-sm text-gray-600">{selectedProduct.product_name}</div>
+                <div className="text-sm text-gray-600">{selectedProduct.product_description}</div>
                 <div className="text-xs text-gray-500 mt-1">
                   {selectedProduct.r_value} • {selectedProduct.application_type} •
                   {selectedProduct.bale_size_sqm}m² per pack
@@ -165,7 +166,7 @@ export default function InsulationCalculatorPage() {
                         className="w-full text-left px-4 py-3 hover:bg-gray-50 border-b border-gray-100 last:border-b-0"
                       >
                         <div className="font-medium text-gray-900">{product.sku}</div>
-                        <div className="text-sm text-gray-600">{product.product_name}</div>
+                        <div className="text-sm text-gray-600">{product.product_description}</div>
                         <div className="text-xs text-gray-500 mt-1">
                           {product.r_value} • {product.application_type}
                         </div>
