@@ -105,9 +105,9 @@ const PRICING_TIER_GP: Record<PricingTier, number> = {
     'Custom': 37.5    // default
 };
 
-const LABOUR_COST_PER_SQM = 1.50;
-const DEFAULT_LABOUR_SELL_PER_SQM = 3.00;
-const DEFAULT_WASTE_PERCENT = 10;
+const LABOUR_COST_PER_SQM = 2.00;
+const DEFAULT_LABOUR_SELL_PER_SQM = 0;
+const DEFAULT_WASTE_PERCENT = 0;
 
 // ============================================
 // HELPER FUNCTIONS
