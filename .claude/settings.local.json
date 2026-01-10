@@ -17,7 +17,8 @@
       "Bash(git add:*)",
       "Bash(git commit -m \"$\\(cat <<''EOF''\nfix: quote detail page and sales rep population\n\nKey fixes:\n- Fixed quote detail page table name from ''quote_items'' to ''quote_line_items''\n- Implemented separate fetch strategy for quote sections and line items to avoid Supabase relationship errors\n- Fixed sales rep population timing issue by adding referenceDataLoaded flag\n- 3-tier sales rep fallback now works correctly \\(quote → opportunity → client\\)\n- Reorganized lib helpers into utils/ directory for better structure\n- Added comprehensive scripts for populating and verifying quote data\n- Updated assessment areas display with proper formatting\n- Added Google Calendar API integration\n- Improved client and site selectors with better UX\n\nDatabase changes:\n- Added follow_up_date to opportunities table\n- Added completed_date to assessments table\n- Created wordings_templates table\n- Fixed sales_rep foreign key constraints\n\n🤖 Generated with [Claude Code]\\(https://claude.com/claude-code\\)\n\nCo-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
       "Bash(git push:*)",
-      "Bash(dir:*)"
+      "Bash(dir:*)",
+      "Bash(git rm:*)"
     ]
   }
 }

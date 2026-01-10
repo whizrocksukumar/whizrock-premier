@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
-import { Plus, Search, Eye, Edit, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, Search, Eye, Edit, ChevronLeft, ChevronRight, Copy, Trash2 } from 'lucide-react';
 
 // Types
 interface Quote {
@@ -336,6 +336,179 @@ export default function QuotesPage() {
     }
   };
 
+  const handleDeleteQuote = async (quoteId: string, quoteNumber: string) => {
+    if (!confirm(`Are you sure you want to delete quote ${quoteNumber}? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      // Delete line items first
+      const { error: itemsError } = await supabase
+        .from('quote_line_items')
+        .delete()
+        .eq('quote_id', quoteId);
+
+      if (itemsError) {
+        console.error('Error deleting line items:', itemsError);
+      }
+
+      // Delete sections
+      const { error: sectionsError } = await supabase
+        .from('quote_sections')
+        .delete()
+        .eq('quote_id', quoteId);
+
+      if (sectionsError) {
+        console.error('Error deleting sections:', sectionsError);
+      }
+
+      // Delete quote
+      const { error: quoteError } = await supabase
+        .from('quotes')
+        .delete()
+        .eq('id', quoteId);
+
+      if (quoteError) {
+        alert(`Failed to delete quote: ${quoteError.message}`);
+        return;
+      }
+
+      alert(`Quote ${quoteNumber} deleted successfully`);
+      fetchQuotes();
+    } catch (error) {
+      console.error('Error deleting quote:', error);
+      alert('Failed to delete quote');
+    }
+  };
+
+  const handleCloneQuote = async (quoteId: string) => {
+    try {
+      if (!confirm('Clone this quote? A copy will be created with all sections and line items.')) {
+        return;
+      }
+
+      // Fetch the original quote
+      const { data: originalQuote, error: quoteError } = await supabase
+        .from('quotes')
+        .select('*')
+        .eq('id', quoteId)
+        .single();
+
+      if (quoteError || !originalQuote) {
+        alert('Failed to fetch quote for cloning');
+        return;
+      }
+
+      // Fetch sections and line items
+      const { data: sections, error: sectionsError } = await supabase
+        .from('quote_sections')
+        .select('*, quote_line_items(*)')
+        .eq('quote_id', quoteId);
+
+      if (sectionsError) {
+        alert('Failed to fetch quote sections');
+        return;
+      }
+
+      // Use "Copy - " prefix for cloned quote number
+      const clonedQuoteNumber = `Copy - ${originalQuote.quote_number}`;
+
+      // Create new quote (copy of original)
+      // Exclude system-generated and calculated fields
+      const {
+        id,
+        created_at,
+        updated_at,
+        gross_profit,
+        gp_percent,
+        gross_profit_percent,
+        clients,
+        assessments,
+        team_members,
+        ...quoteData
+      } = originalQuote as any;
+
+      const { data: newQuote, error: newQuoteError } = await supabase
+        .from('quotes')
+        .insert({
+          ...quoteData,
+          quote_number: clonedQuoteNumber,
+          reference: originalQuote.reference || null,
+          status: 'Draft',
+          sent_at: null,
+          accepted_date: null,
+          customer_viewed_at: null,
+        })
+        .select()
+        .single();
+
+      if (newQuoteError || !newQuote) {
+        console.error('Clone error:', newQuoteError);
+        alert(`Failed to create cloned quote: ${newQuoteError?.message || 'Unknown error'}`);
+        return;
+      }
+
+      // Clone sections and line items
+      for (let i = 0; i < (sections || []).length; i++) {
+        const section = sections![i];
+        const { data: newSection, error: sectionError } = await supabase
+          .from('quote_sections')
+          .insert({
+            quote_id: newQuote.id,
+            app_type_id: section.app_type_id,
+            section_name: section.section_name || section.custom_name || 'Section',
+            custom_name: section.custom_name,
+            section_color: section.section_color,
+            sort_order: i + 1,
+          })
+          .select()
+          .single();
+
+        if (sectionError || !newSection) {
+          console.error('Section clone error:', sectionError);
+          continue;
+        }
+
+        // Clone line items for this section
+        const lineItems = section.quote_line_items || [];
+        for (let j = 0; j < lineItems.length; j++) {
+          const item = lineItems[j];
+          const { error: itemError } = await supabase
+            .from('quote_line_items')
+            .insert({
+              quote_id: newQuote.id,
+              section_id: newSection.id,
+              product_id: item.product_id,
+              description: item.description || (item.is_labour ? 'Labour' : 'Product'),
+              quantity: item.quantity || (item.is_labour ? item.area_sqm : item.packs_required),
+              unit_price: item.unit_price || item.sell_price || 0,
+              line_total: item.line_total || item.line_sell || 0,
+              marker: item.marker,
+              area_sqm: item.area_sqm,
+              is_labour: item.is_labour,
+              packs_required: item.packs_required,
+              cost_price: item.cost_price,
+              sell_price: item.sell_price,
+              line_cost: item.line_cost,
+              line_sell: item.line_sell,
+              margin_percent: item.margin_percent,
+              sort_order: j + 1,
+            });
+
+          if (itemError) {
+            console.error('Line item clone error:', itemError);
+          }
+        }
+      }
+
+      alert(`Quote cloned successfully as ${clonedQuoteNumber}`);
+      fetchQuotes(); // Refresh the list
+    } catch (error) {
+      console.error('Error cloning quote:', error);
+      alert('Failed to clone quote');
+    }
+  };
+
   // Sort indicator arrow
   const SortArrow = ({ field }: { field: SortField }) => {
     if (sortField !== field) return <span className="ml-1 text-blue-200">⇅</span>;
@@ -654,12 +827,26 @@ export default function QuotesPage() {
                                 <Eye className="w-4 h-4" />
                               </Link>
                               <Link
-                                href={`/quotes/${quote.id}/edit`}
+                                href={`/quotes/${quote.id}`}
                                 className="p-1 text-gray-600 hover:bg-gray-200 rounded"
                                 title="Edit"
                               >
                                 <Edit className="w-4 h-4" />
                               </Link>
+                              <button
+                                onClick={() => handleCloneQuote(quote.id)}
+                                className="p-1 text-gray-600 hover:bg-gray-200 rounded"
+                                title="Clone Quote"
+                              >
+                                <Copy className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteQuote(quote.id, quote.quote_number)}
+                                className="p-1 text-red-600 hover:bg-red-50 rounded"
+                                title="Delete Quote"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
                             </div>
                           </td>
                           <td className="px-4 py-3 text-sm">

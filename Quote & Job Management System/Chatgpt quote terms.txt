@@ -1,0 +1,49 @@
+Yes — this is ringing the right bell. Here’s the clean refresher, without digging you back into the weeds.
+
+### Where the **Terms & Conditions** live (the ones we created for quotes)
+
+They are **not** in a PDF file or hard-coded in the quote template.
+
+They live here:
+
+**Supabase → `quote_terms` table**
+
+That table was designed specifically so:
+
+* T&Cs can be **versioned**
+* One version is marked **active**
+* The active version is **pulled automatically into every quote PDF**
+
+### How they surface in the system
+
+* The **content** is stored as rich HTML in `quote_terms.content`
+* The **active record** (`is_active = true`) is:
+
+  * Injected into the **Quote PDF footer**
+  * Included when the quote is **emailed to the customer**
+* Older versions remain for **audit / legal history**, but are not shown
+
+### Where you edit them in the app (by design)
+
+In the **Settings page** we mapped earlier:
+
+**Settings → Quotes & Invoices → 📄 Terms & Conditions**
+
+That editor is the UI layer for the `quote_terms` table:
+
+* Edit text
+* Increment version
+* Activate / deactivate
+* No code changes required
+
+### Quick mental model (so it sticks)
+
+* **PDF template** = layout only
+* **`quote_terms`** = legal truth
+* **Settings → T&Cs editor** = control panel
+* **Active version** = what customers see on quotes
+
+If you want, next we can:
+
+* Re-open the actual wording we drafted and review it line-by-line, or
+* Decide exactly *where* it appears in the quote (full page vs footer vs appendix) and lock that in.

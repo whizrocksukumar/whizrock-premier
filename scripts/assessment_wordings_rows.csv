@@ -1,0 +1,3 @@
+id,assessment_id,area_label,result_type,wordings,recommended_action,created_at,updated_at,area_name,app_type_id
+01c015e0-88ac-49bc-93d7-ebbda2abd9e9,,Walls,PASS,Premier Acoustic Wall Blanket R2.2 90mm,,2026-01-04 13:52:52.000179,2026-01-04 13:52:52.000179,,
+0212c11d-f2ac-4599-bf00-6102bc6886d3,,Underfloor,PASS,Insulation present but the coverage is between 70mm-100mm. Topped up with Premier Polyester Ceiling Blanket R1.8 75mm,,2026-01-04 13:52:52.000179,2026-01-04 14:22:18.745922,,fb688898-b448-4d7f-b079-d53a73ec8d93

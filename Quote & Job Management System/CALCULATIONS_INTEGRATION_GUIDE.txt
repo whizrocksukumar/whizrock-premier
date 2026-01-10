@@ -1,0 +1,339 @@
+================================================================================
+INTEGRATION GUIDE: MATERIAL CALCULATIONS TO USERS & PROCUREMENT
+================================================================================
+
+PART 1: BACKEND CALCULATION FLOW (FILE 3C)
+================================================================================
+
+DATABASE FUNCTION: calculate_material_requirements(quote_id)
+───────────────────────────────────────────────────────────────────────────
+
+INPUT:
+  - quote_id (UUID of the quote)
+
+OUTPUT FIELDS:
+  - product_sku
+  - product_description
+  - application_type
+  - r_value
+  - base_area_sqm (area entered by VA)
+  - waste_percent (default 10%)
+  - total_area_with_waste (calculated)
+  - bale_size_sqm (from product table)
+  - packs_required (CEIL calculation - industry standard)
+  - total_sqm_provided (packs × bale_size)
+  - excess_sqm (buffer material)
+  - retail_price_per_unit ($/m²)
+  - pack_price ($/pack)
+  - total_pack_cost (packs × pack_price)
+  - current_stock_packs (inventory check)
+  - stock_shortfall_packs (ordering trigger)
+
+EXAMPLE QUERY:
+──────────────
+
+SELECT * FROM calculate_material_requirements('quote-uuid-here');
+
+RESULT:
+───────
+
+| sku     | product_description              | application_type | r_value   | base_area_sqm | waste_percent | total_area_with_waste | bale_size_sqm | packs_required | total_sqm_provided | excess_sqm | retail_price_per_unit | pack_price | total_pack_cost | current_stock_packs | stock_shortfall_packs |
+|---------|----------------------------------|------------------|-----------|---------------|---------------|-----------------------|---------------|----------------|--------------------|------------|------------------------|------------|-----------------|---------------------|-----------------------|
+| PIL-006 | Premier Glasswool R2.4 90mm     | Wall, Mid-Floor  | R2.4 90mm | 100.00        | 10.00         | 110.00                | 12.00         | 10             | 120.00             | 10.00      | 6.21                   | 74.50      | 745.00          | 4.17                | 6                     |
+
+================================================================================
+PART 2: REACT COMPONENT - QUOTE VIEW INTEGRATION
+================================================================================
+
+WHERE TO DISPLAY:
+  - Quote summary page
+  - After customer adds quote items (sections + products)
+  - "Materials & Costs" tab or section
+
+COMPONENTS NEEDED:
+
+1. API CALL (in useEffect when quote loads):
+──────────────────────────────────────────────────
+
+const [materialRequirements, setMaterialRequirements] = useState([]);
+const [loadingCalc, setLoadingCalc] = useState(false);
+
+useEffect(() => {
+  if (quoteId) {
+    fetchMaterialRequirements(quoteId);
+  }
+}, [quoteId]);
+
+const fetchMaterialRequirements = async (qId) => {
+  setLoadingCalc(true);
+  try {
+    const { data, error } = await supabase
+      .rpc('calculate_material_requirements', { p_quote_id: qId });
+    
+    if (error) throw error;
+    setMaterialRequirements(data);
+  } catch (error) {
+    console.error('Error fetching material requirements:', error);
+  } finally {
+    setLoadingCalc(false);
+  }
+};
+
+2. DISPLAY COMPONENT:
+──────────────────────
+
+MaterialRequirementsSummary.jsx
+
+Features:
+  ✓ Shows each product with area, waste, packs required
+  ✓ Displays total costs
+  ✓ Highlights stock shortfalls (red warning)
+  ✓ "Generate Procurement Order" button
+  ✓ Export to PDF (quote includes material breakdown)
+
+3. EXAMPLE TABLE VIEW:
+──────────────────────
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ MATERIAL REQUIREMENTS SUMMARY                                               │
+├──────────────┬──────────┬──────────┬──────────┬──────────┬──────────┬────────┤
+│ Product      │ R-Value  │ Area (m²)│ +Waste   │ Packs    │ Cost     │ Stock  │
+├──────────────┼──────────┼──────────┼──────────┼──────────┼──────────┼────────┤
+│ PIL-006      │ R2.4 90mm│ 100.00   │ 110.00   │ 10       │ $745.00  │ ⚠️ -6  │
+│ PIL-015      │ R2.7 120m│  80.00   │  88.00   │  8       │ $456.00  │ ✓  OK  │
+│ PIL-069      │ Acoustic │  20.00   │  22.00   │  2       │ $318.00  │ ✓  OK  │
+├──────────────┴──────────┴──────────┴──────────┴──────────┼──────────┼────────┤
+│                                          TOTAL COST    │ $1,519.00           │
+└─────────────────────────────────────────────────────────┴──────────┴────────┘
+
+STOCK ALERTS:
+  🔴 PIL-006: Stock shortage of 6 packs (60m²) - needs immediate order
+  🟡 PIL-015: Low stock - consider reordering
+  🟢 PIL-069: Adequate stock
+
+================================================================================
+PART 3: PROCUREMENT ORDER GENERATION
+================================================================================
+
+WHEN USER CLICKS "GENERATE PROCUREMENT ORDER":
+
+1. GATHER DATA:
+   - All products from material_requirements
+   - Packs required for each
+   - Stock shortfall amounts
+   - Existing purchase orders (to avoid duplicates)
+   - Supplier info (from product_id → supplier_id)
+
+2. CREATE PROCUREMENT ORDER:
+   - Generate order reference (e.g., PO-2025-1123-001)
+   - Group by supplier
+   - Mark as "PENDING" status
+   - Link to quote for traceability
+   - Set expected delivery date (+14 days default)
+
+3. SEND NOTIFICATION:
+   - Alert procurement team
+   - Email with order summary
+   - Link to GHL for follow-up
+
+4. TRACK IN SYSTEM:
+   - Monitor in Inventory module
+   - Update stock when received
+   - Auto-update quote status when stock available
+
+PROCUREMENT ORDER TABLE STRUCTURE:
+──────────────────────────────────
+
+purchase_orders:
+  - po_number (unique)
+  - supplier_id (link to suppliers table)
+  - quote_id (link to quote for reference)
+  - order_date
+  - expected_delivery_date
+  - actual_delivery_date
+  - status (PENDING, ORDERED, RECEIVED, DELAYED)
+  - subtotal
+  - gst_amount (15% for NZ)
+  - total_amount
+  - notes
+
+purchase_order_items:
+  - po_id
+  - product_id
+  - quantity (in packs)
+  - unit_price (pack_price)
+  - line_total
+
+================================================================================
+PART 4: STANDALONE CALCULATOR (InsulationCalculator.jsx)
+================================================================================
+
+FEATURES:
+──────────
+
+✓ Product search (by SKU, description, R-value, application)
+✓ Area input with waste factor (default 10%)
+✓ Real-time calculations
+✓ Pack requirements display
+✓ Buffer material visualization
+✓ Pricing breakdown
+✓ Procurement summary
+✓ Can be used offline (no quote needed)
+
+LOCATION IN APP:
+────────────────
+
+- Help Menu → "Insulation Calculator"
+- Or: Dashboard → Quick Tools → Insulation Calculator
+- Or: Embedded in quote creation wizard
+
+INTEGRATION:
+─────────────
+
+// In App.jsx or navigation
+import InsulationCalculator from '@/components/InsulationCalculator';
+
+<Route path="/help/calculator" element={<InsulationCalculator />} />
+
+// Or as modal
+<Modal title="Insulation Calculator" open={showCalc}>
+  <InsulationCalculator />
+</Modal>
+
+================================================================================
+PART 5: DATA FLOW DIAGRAM
+================================================================================
+
+VA Creates Quote
+       ↓
+VA Adds Quote Sections & Products
+       ↓
+System Calls: calculate_material_requirements(quote_id)
+       ↓
+Returns: Area, Waste, Packs, Cost, Stock Status
+       ↓
+Display in Quote: "Materials & Costs" Tab
+       ↓
+Stock Check:
+  - In Stock? ✓ Quote ready
+  - Stock Low? ⚠️ Alert
+  - Out of Stock? ❌ Block/Alert
+       ↓
+User Clicks: "Generate Procurement Order"
+       ↓
+System Creates PO:
+  - Groups products by supplier
+  - Calculates totals
+  - Links to quote
+       ↓
+Notifies Procurement Team
+       ↓
+PO Status Tracked
+       ↓
+When Stock Received → Auto-update inventory
+       ↓
+Quote Status Updates (if was blocked)
+
+================================================================================
+PART 6: API ENDPOINTS NEEDED (For Frontend)
+================================================================================
+
+1. GET MATERIAL REQUIREMENTS:
+   POST /api/quotes/{quoteId}/material-requirements
+   
+   Response:
+   {
+     success: true,
+     data: [
+       {
+         productSku: "PIL-006",
+         productDescription: "Premier Glasswool R2.4 90mm",
+         applicationType: "Wall, Mid-Floor",
+         rValue: "R2.4 90mm",
+         baseAreaSqm: 100.00,
+         wastePercent: 10.00,
+         totalAreaWithWaste: 110.00,
+         baleSize: 12.00,
+         packsRequired: 10,
+         totalSqmProvided: 120.00,
+         excessSqm: 10.00,
+         retailPricePerUnit: 6.21,
+         packPrice: 74.50,
+         totalPackCost: 745.00,
+         currentStockPacks: 4.17,
+         stockShortfallPacks: 6
+       }
+     ]
+   }
+
+2. GENERATE PROCUREMENT ORDER:
+   POST /api/procurement/generate-order
+   
+   Body:
+   {
+     quoteId: "uuid",
+     products: [
+       {
+         productId: "uuid",
+         packsRequired: 10,
+         supplierId: "uuid"
+       }
+     ]
+   }
+   
+   Response:
+   {
+     success: true,
+     poNumber: "PO-2025-1123-001",
+     purchaseOrderId: "uuid",
+     totalAmount: 1519.00,
+     items: 3,
+     status: "PENDING"
+   }
+
+================================================================================
+PART 7: USER WORKFLOWS
+================================================================================
+
+WORKFLOW 1: VA Creating Quote (with auto-calculations)
+────────────────────────────────────────────────────────
+
+1. VA selects client
+2. VA adds sections (Ceiling, Walls, etc)
+3. VA selects products and areas
+   → System auto-calculates material requirements
+   → Shows "Need 10 packs of PIL-006 ($745)"
+   → Shows stock status: "6 packs short"
+4. VA reviews quote
+5. VA can:
+   a) Approve quote as-is (note: needs stock)
+   b) Adjust areas (recalculates)
+   c) Generate procurement order (auto-orders shortage)
+6. System notifies procurement team
+
+WORKFLOW 2: Using Calculator for Quick Estimates
+──────────────────────────────────────────────────
+
+1. User clicks "Help" → "Insulation Calculator"
+2. Searches product (e.g., "R2.4 ceiling")
+3. Enters area (e.g., 150 m²)
+4. Adjusts waste % if needed
+5. Clicks "Calculate"
+6. Sees: "Need 13 packs ($975), Buffer: 6 m²"
+7. Can copy results to email/document
+8. OR: "Add to Quote" button (if logged in)
+
+WORKFLOW 3: Procurement Order Placement
+────────────────────────────────────────
+
+1. Quote shows material requirements
+2. Procurement check: "Stock shortfall: 6 packs PIL-006"
+3. Click "Generate Order" button
+4. System groups by supplier
+5. Shows preview: "Order 6 packs from Supplier A"
+6. Click "Confirm Order"
+7. System creates PO, sends to supplier email
+8. Tracks delivery
+9. When stock received → auto-update inventory
+
+================================================================================

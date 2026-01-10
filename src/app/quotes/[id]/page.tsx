@@ -955,6 +955,34 @@ export default function QuoteDetailPage() {
         setAccepting(false);
     };
 
+    const handleDeleteQuote = async () => {
+        if (!confirm(`Are you sure you want to delete quote ${quoteNumber}? This action cannot be undone.`)) {
+            return;
+        }
+
+        try {
+            // Delete line items
+            await supabase.from('quote_line_items').delete().eq('quote_id', quoteId);
+
+            // Delete sections
+            await supabase.from('quote_sections').delete().eq('quote_id', quoteId);
+
+            // Delete quote
+            const { error } = await supabase.from('quotes').delete().eq('id', quoteId);
+
+            if (error) {
+                alert(`Failed to delete quote: ${error.message}`);
+                return;
+            }
+
+            alert(`Quote ${quoteNumber} deleted successfully`);
+            router.push('/quotes');
+        } catch (error) {
+            console.error('Error deleting quote:', error);
+            alert('Failed to delete quote');
+        }
+    };
+
     if (loading) {
         return (
             <div className="min-h-screen bg-gray-100 flex items-center justify-center">
@@ -1020,13 +1048,24 @@ export default function QuoteDetailPage() {
                                 >
                                     Edit Quote
                                 </button>
-                                <button className="p-2 hover:bg-gray-100 rounded transition-colors">
+                                <button
+                                    onClick={() => window.open(`/api/quotes/${quoteId}/pdf`, '_blank')}
+                                    className="p-2 hover:bg-gray-100 rounded transition-colors"
+                                    title="Print Quote"
+                                >
                                     <Printer className="w-5 h-5 text-gray-600" />
                                 </button>
                                 <button className="p-2 hover:bg-gray-100 rounded transition-colors">
                                     <Mail className="w-5 h-5 text-gray-600" />
                                 </button>
-                                {quoteStatus === 'Draft' && getTotals().totalSell > 0 && (
+                                <button
+                                    onClick={handleDeleteQuote}
+                                    className="p-2 hover:bg-red-50 rounded transition-colors"
+                                    title="Delete Quote"
+                                >
+                                    <Trash2 className="w-5 h-5 text-red-600" />
+                                </button>
+                                {quoteStatus === 'Draft' && parseFloat(calculateQuoteTotals().totalSellExGST) > 0 && (
                                     <button
                                         onClick={handleSendToCustomer}
                                         disabled={sending}
