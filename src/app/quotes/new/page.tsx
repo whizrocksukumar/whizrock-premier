@@ -718,18 +718,26 @@ export default function AddNewQuotePage() {
             }
 
             // Generate quote number
-            const { data: lastQuote } = await supabase
+            // Get all quotes with Q-YYYY-NNNN format (excluding cloned quotes starting with "Copy - ")
+            const { data: allQuotes } = await supabase
                 .from('quotes')
                 .select('quote_number')
-                .order('created_at', { ascending: false })
-                .limit(1)
-                .single();
+                .like('quote_number', 'Q-%')
+                .not('quote_number', 'like', 'Copy -%');
 
             let quoteNumber = 'Q-2025-0001';
-            if (lastQuote?.quote_number) {
-                const match = lastQuote.quote_number.match(/Q-\d{4}-(\d+)/);
-                if (match) {
-                    const nextNum = parseInt(match[1]) + 1;
+            if (allQuotes && allQuotes.length > 0) {
+                // Extract all numbers and find the highest
+                const numbers = allQuotes
+                    .map(q => {
+                        const match = q.quote_number?.match(/Q-\d{4}-(\d+)/);
+                        return match ? parseInt(match[1]) : 0;
+                    })
+                    .filter(n => n > 0);
+
+                if (numbers.length > 0) {
+                    const maxNum = Math.max(...numbers);
+                    const nextNum = maxNum + 1;
                     quoteNumber = `Q-2025-${nextNum.toString().padStart(4, '0')}`;
                 }
             }
