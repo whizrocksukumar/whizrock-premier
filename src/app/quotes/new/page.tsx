@@ -1523,7 +1523,7 @@ export default function AddNewQuotePage() {
                                 <span className="font-medium text-gray-900">${totals.gstAmount.toFixed(2)}</span>
                             </div>
                             <div className="flex items-center justify-between text-lg font-bold border-t pt-2 mt-2">
-                                <span className="text-gray-900">Total (inc GST):</span>
+                                <span className="text-gray-900">Total (Excl GST):</span>
                                 <span className="text-[#0066CC]">${totals.totalIncGst.toFixed(2)}</span>
                             </div>
                         </div>
