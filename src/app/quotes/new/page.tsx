@@ -109,6 +109,28 @@ const LABOUR_COST_PER_SQM = 2.00;
 const DEFAULT_LABOUR_SELL_PER_SQM = 0;
 const DEFAULT_WASTE_PERCENT = 0;
 
+// Quote Details Defaults
+const DEFAULT_DESCRIPTION_PLACEHOLDER = `**Supply and Installation of:**
+
+- Ceiling Insulation
+- Wall Insulation  
+- Underfloor Insulation
+
+**Work Includes:**
+- Site preparation and cleanup
+- Professional installation to NZ Building Code standards
+- Completion certificate provided upon job completion`;
+
+const DEFAULT_SPECIFICATIONS_NOTE = `**Did you know?**
+
+✓ Premier Insulation is **Site Safe** certified  
+✓ We are **Sitewise** accredited  
+✓ All our installers are **Police Vetted**  
+✓ We carry **Public Liability Insurance** up to $10 million  
+✓ All work comes with a **50-year product warranty**
+
+Your home is in safe, professional hands.`;
+
 // ============================================
 // HELPER FUNCTIONS
 // ============================================
@@ -154,6 +176,12 @@ export default function AddNewQuotePage() {
     // Property Types
     const propertyTypes = ['Residential', 'Commercial', 'Industrial', 'Retail', 'Mixed Use', 'Other'];
 
+    // Quote Details State
+    const [subject, setSubject] = useState('');
+    const [descriptionOfWork, setDescriptionOfWork] = useState('');
+    const [specificationsNote, setSpecificationsNote] = useState('');
+    const [includeImportantNotes, setIncludeImportantNotes] = useState(true);
+
     // Pricing Controls
     const [pricingTier, setPricingTier] = useState<PricingTier>('Retail');
     const [targetGP, setTargetGP] = useState(PRICING_TIER_GP['Retail']);
@@ -186,6 +214,23 @@ export default function AddNewQuotePage() {
     // ============================================
     useEffect(() => {
         loadLookupData();
+    }, []);
+
+    // ============================================
+    // AUTO-POPULATE QUOTE DETAILS
+    // ============================================
+    useEffect(() => {
+        // Auto-populate subject when site address changes
+        if (siteAddress && !subject) {
+            setSubject(`Quote for ${siteAddress}`);
+        }
+    }, [siteAddress]);
+
+    useEffect(() => {
+        // Pre-populate specifications note on first load
+        if (!specificationsNote) {
+            setSpecificationsNote(DEFAULT_SPECIFICATIONS_NOTE);
+        }
     }, []);
 
     const loadLookupData = async () => {
@@ -250,116 +295,144 @@ export default function AddNewQuotePage() {
                 ...section,
                 line_items: section.line_items.map(item => {
                     if (item.is_labour) {
-                        // Labour row - recalculate based on labour rate
-                        const labourCost = item.area_sqm * LABOUR_COST_PER_SQM;
-                        const labourSell = item.area_sqm * labourRate;
-                        const labourMargin = labourSell > 0 ? ((labourSell - labourCost) / labourSell) * 100 : 0;
+                        // Labour uses fixed rate
                         return {
                             ...item,
                             cost_price: LABOUR_COST_PER_SQM,
                             sell_price: labourRate,
-                            line_cost: labourCost,
-                            line_sell: labourSell,
-                            margin_percent: labourMargin
-                        };
-                    } else if (item.product_id && item.product) {
-                        // Product row
-                        const areaWithWaste = item.area_sqm * (1 + wastePercent / 100);
-                        const packs = Math.ceil(areaWithWaste / (item.product.bale_size_sqm || 1));
-                        const lineCost = packs * item.product.pack_price;
-                        
-                        // Check for custom margin
-                        const customMargin = customProductMargins[item.product_id];
-                        let sellPrice: number;
-                        let marginPercent: number;
-                        
-                        if (customMargin) {
-                            sellPrice = customMargin.sell_price;
-                            marginPercent = customMargin.margin_percent;
-                        } else {
-                            // GP% formula: Sell = Cost / (1 - GP%/100)
-                            sellPrice = targetGP < 100 ? item.product.pack_price / (1 - targetGP / 100) : item.product.pack_price;
-                            marginPercent = targetGP;
-                        }
-                        
-                        const lineSell = packs * sellPrice;
-                        const actualMargin = lineSell > 0 ? ((lineSell - lineCost) / lineSell) * 100 : 0;
-
-                        // Stock warning
-                        let stockWarning = '';
-                        if (item.product.stock_level !== undefined && packs > item.product.stock_level) {
-                            stockWarning = `Need ${packs} packs, only ${item.product.stock_level} available`;
-                        }
-
-                        return {
-                            ...item,
-                            packs_required: packs,
-                            cost_price: item.product.pack_price,
-                            sell_price: sellPrice,
-                            line_cost: lineCost,
-                            line_sell: lineSell,
-                            margin_percent: actualMargin,
-                            stock_warning: stockWarning
+                            line_cost: item.area_sqm * LABOUR_COST_PER_SQM,
+                            line_sell: item.area_sqm * labourRate,
+                            margin_percent: labourRate > 0 
+                                ? ((labourRate - LABOUR_COST_PER_SQM) / labourRate) * 100 
+                                : 0
                         };
                     }
-                    return item;
+
+                    if (!item.product_id || !item.product) return item;
+
+                    const product = products.find(p => p.id === item.product_id);
+                    if (!product) return item;
+
+                    // Check for custom margin
+                    const customMargin = customProductMargins[item.product_id];
+                    
+                    let sellPrice: number;
+                    let marginPercent: number;
+
+                    if (customMargin) {
+                        sellPrice = customMargin.sell_price;
+                        marginPercent = customMargin.margin_percent;
+                    } else {
+                        // Calculate from GP%
+                        const costPrice = product.cost_price || 0;
+                        marginPercent = targetGP;
+                        sellPrice = costPrice / (1 - (marginPercent / 100));
+                    }
+
+                    const packsRequired = Math.ceil(
+                        (item.area_sqm * (1 + (wastePercent / 100))) / product.bale_size_sqm
+                    );
+
+                    return {
+                        ...item,
+                        cost_price: product.cost_price,
+                        sell_price: sellPrice,
+                        packs_required: packsRequired,
+                        line_cost: packsRequired * product.cost_price,
+                        line_sell: packsRequired * sellPrice,
+                        margin_percent: marginPercent
+                    };
                 })
             }));
         });
-    }, [labourRate, wastePercent, targetGP, customProductMargins]);
+    }, [products, targetGP, labourRate, wastePercent, customProductMargins]);
 
-    // Recalculate when pricing controls change
     useEffect(() => {
         recalculateAllPrices();
     }, [recalculateAllPrices]);
 
     // ============================================
+    // CUSTOM MARGIN UPDATE (syncs across sections)
+    // ============================================
+    const handleCustomMarginChange = (productId: string, newMarginPercent: number, costPrice: number) => {
+        const newSellPrice = costPrice / (1 - (newMarginPercent / 100));
+        
+        setCustomProductMargins(prev => ({
+            ...prev,
+            [productId]: {
+                margin_percent: newMarginPercent,
+                sell_price: newSellPrice
+            }
+        }));
+    };
+
+    const handleCustomSellPriceChange = (productId: string, newSellPrice: number, costPrice: number) => {
+        const newMarginPercent = costPrice > 0 && newSellPrice > 0
+            ? ((newSellPrice - costPrice) / newSellPrice) * 100
+            : 0;
+
+        setCustomProductMargins(prev => ({
+            ...prev,
+            [productId]: {
+                margin_percent: newMarginPercent,
+                sell_price: newSellPrice
+            }
+        }));
+    };
+
+    // ============================================
     // SECTION MANAGEMENT
     // ============================================
-    const addSection = () => {
+    const handleAddSection = () => {
         const newSection: Section = {
             id: generateId(),
             app_type_id: null,
             custom_name: '',
-            section_color: '#ffffff',
+            section_color: '#6B7280',
             line_items: []
         };
         setSections([...sections, newSection]);
     };
 
-    const removeSection = (sectionId: string) => {
+    const handleRemoveSection = (sectionId: string) => {
         setSections(sections.filter(s => s.id !== sectionId));
     };
 
-    const updateSection = (sectionId: string, field: keyof Section, value: any) => {
-        setSections(sections.map(section => {
-            if (section.id === sectionId) {
-                const updated = { ...section, [field]: value };
-                
-                // If app_type_id changed, update color
-                if (field === 'app_type_id' && value) {
-                    const appType = appTypes.find(at => at.id === value);
-                    if (appType) {
-                        updated.section_color = appType.color_hex;
-                        updated.custom_name = '';
-                    }
-                } else if (field === 'app_type_id' && !value) {
-                    updated.section_color = '#ffffff';
-                }
-                
-                return updated;
+    const handleSectionAppTypeChange = (sectionId: string, appTypeId: string) => {
+        setSections(sections.map(s => {
+            if (s.id === sectionId) {
+                const appType = appTypes.find(a => a.id === appTypeId);
+                return {
+                    ...s,
+                    app_type_id: appTypeId,
+                    app_type: appType,
+                    section_color: appType?.color_hex || '#6B7280',
+                    custom_name: '' // Clear custom name when app type selected
+                };
             }
-            return section;
+            return s;
+        }));
+    };
+
+    const handleSectionCustomNameChange = (sectionId: string, customName: string) => {
+        setSections(sections.map(s => {
+            if (s.id === sectionId) {
+                return {
+                    ...s,
+                    custom_name: customName,
+                    app_type_id: customName ? null : s.app_type_id // Clear app type if custom name entered
+                };
+            }
+            return s;
         }));
     };
 
     // ============================================
     // LINE ITEM MANAGEMENT
     // ============================================
-    const addLineItem = (sectionId: string) => {
+    const handleAddProduct = (sectionId: string) => {
         const newItem: LineItem = {
             id: generateId(),
-            marker: '',
             product_id: null,
             area_sqm: 0,
             is_labour: false,
@@ -370,376 +443,227 @@ export default function AddNewQuotePage() {
             margin_percent: 0
         };
 
-        setSections(sections.map(section => {
-            if (section.id === sectionId) {
-                return { ...section, line_items: [...section.line_items, newItem] };
+        setSections(sections.map(s => {
+            if (s.id === sectionId) {
+                return { ...s, line_items: [...s.line_items, newItem] };
             }
-            return section;
+            return s;
         }));
     };
 
-    const removeLineItem = (sectionId: string, itemId: string) => {
-        setSections(sections.map(section => {
-            if (section.id === sectionId) {
-                // Also remove associated labour row
-                const updatedItems = section.line_items.filter(item => 
-                    item.id !== itemId && item.parent_line_item_id !== itemId
-                );
-                return { ...section, line_items: updatedItems };
+    const handleAddLabour = (sectionId: string) => {
+        // Get total area for this section (excluding existing labour)
+        const section = sections.find(s => s.id === sectionId);
+        const totalArea = section?.line_items
+            .filter(item => !item.is_labour)
+            .reduce((sum, item) => sum + (item.area_sqm || 0), 0) || 0;
+
+        const labourItem: LineItem = {
+            id: generateId(),
+            product_id: null,
+            area_sqm: totalArea,
+            is_labour: true,
+            cost_price: LABOUR_COST_PER_SQM,
+            sell_price: labourRate,
+            line_cost: totalArea * LABOUR_COST_PER_SQM,
+            line_sell: totalArea * labourRate,
+            margin_percent: labourRate > 0 
+                ? ((labourRate - LABOUR_COST_PER_SQM) / labourRate) * 100 
+                : 0
+        };
+
+        setSections(sections.map(s => {
+            if (s.id === sectionId) {
+                return { ...s, line_items: [...s.line_items, labourItem] };
             }
-            return section;
+            return s;
         }));
     };
 
-    const updateLineItem = (sectionId: string, itemId: string, field: string, value: any) => {
-        setSections(sections.map(section => {
-            if (section.id === sectionId) {
+    const handleRemoveLineItem = (sectionId: string, itemId: string) => {
+        setSections(sections.map(s => {
+            if (s.id === sectionId) {
                 return {
-                    ...section,
-                    line_items: section.line_items.map(item => {
+                    ...s,
+                    line_items: s.line_items.filter(item => item.id !== itemId)
+                };
+            }
+            return s;
+        }));
+    };
+
+    const handleProductSelect = (sectionId: string, itemId: string, productId: string) => {
+        const product = products.find(p => p.id === productId);
+        if (!product) return;
+
+        setSections(sections.map(s => {
+            if (s.id === sectionId) {
+                return {
+                    ...s,
+                    line_items: s.line_items.map(item => {
                         if (item.id === itemId) {
-                            const updated = { ...item, [field]: value };
-                            return updated;
-                        }
-                        // Update labour row if parent's area changed
-                        if (item.parent_line_item_id === itemId && field === 'area_sqm') {
-                            return { ...item, area_sqm: value };
+                            // Check for custom margin
+                            const customMargin = customProductMargins[productId];
+                            let sellPrice: number;
+                            let marginPercent: number;
+
+                            if (customMargin) {
+                                sellPrice = customMargin.sell_price;
+                                marginPercent = customMargin.margin_percent;
+                            } else {
+                                marginPercent = targetGP;
+                                sellPrice = product.cost_price / (1 - (marginPercent / 100));
+                            }
+
+                            const packsRequired = item.area_sqm > 0 
+                                ? Math.ceil((item.area_sqm * (1 + (wastePercent / 100))) / product.bale_size_sqm)
+                                : 0;
+
+                            return {
+                                ...item,
+                                product_id: productId,
+                                product: product,
+                                cost_price: product.cost_price,
+                                sell_price: sellPrice,
+                                packs_required: packsRequired,
+                                line_cost: packsRequired * product.cost_price,
+                                line_sell: packsRequired * sellPrice,
+                                margin_percent: marginPercent,
+                                stock_warning: product.stock_status === 'OUT_OF_STOCK' ? 'Out of stock' :
+                                               product.stock_status === 'LOW_STOCK' ? 'Low stock' : undefined
+                            };
                         }
                         return item;
                     })
                 };
             }
-            return section;
+            return s;
         }));
-    };
 
-    const selectProduct = (sectionId: string, itemId: string, product: Product) => {
-        if (product.stock_status === 'OUT_OF_STOCK') {
-            alert('This product is out of stock. Please select a different product.');
-            return;
-        }
-
-        setSections(prevSections => {
-            return prevSections.map(section => {
-                if (section.id === sectionId) {
-                    let updatedItems = section.line_items.map(item => {
-                        if (item.id === itemId) {
-                            // Calculate sell price based on target GP%
-                            const customMargin = customProductMargins[product.id];
-                            let sellPrice: number;
-                            
-                            if (customMargin) {
-                                sellPrice = customMargin.sell_price;
-                            } else {
-                                // GP% formula: Sell = Cost / (1 - GP%/100)
-                                sellPrice = targetGP < 100 ? product.pack_price / (1 - targetGP / 100) : product.pack_price;
-                            }
-
-                            // Calculate packs and line totals
-                            const areaWithWaste = item.area_sqm * (1 + wastePercent / 100);
-                            const packs = item.area_sqm > 0 ? Math.ceil(areaWithWaste / (product.bale_size_sqm || 1)) : 0;
-                            const lineCost = packs * product.pack_price;
-                            const lineSell = packs * sellPrice;
-                            
-                            // GP% only calculated when there are actual values
-                            const actualMargin = lineSell > 0 ? ((lineSell - lineCost) / lineSell) * 100 : 0;
-
-                            // Stock warning
-                            let stockWarning = '';
-                            if (product.stock_level !== undefined && packs > 0 && packs > product.stock_level) {
-                                stockWarning = `Need ${packs} packs, only ${product.stock_level} available`;
-                            }
-
-                            return {
-                                ...item,
-                                product_id: product.id,
-                                product: product,
-                                cost_price: product.pack_price,
-                                sell_price: sellPrice,
-                                margin_percent: actualMargin,
-                                packs_required: packs,
-                                line_cost: lineCost,
-                                line_sell: lineSell,
-                                stock_warning: stockWarning
-                            };
-                        }
-                        return item;
-                    });
-
-                    // Add labour row if it doesn't exist for this product
-                    const currentItem = updatedItems.find(i => i.id === itemId);
-                    const hasLabourRow = updatedItems.some(i => i.parent_line_item_id === itemId);
-                    
-                    if (currentItem && !hasLabourRow && currentItem.area_sqm > 0) {
-                        const labourCost = currentItem.area_sqm * LABOUR_COST_PER_SQM;
-                        const labourSell = currentItem.area_sqm * labourRate;
-                        const labourMargin = labourSell > 0 ? ((labourSell - labourCost) / labourSell) * 100 : 0;
-
-                        const labourRow: LineItem = {
-                            id: generateId(),
-                            marker: '',
-                            product_id: null,
-                            area_sqm: currentItem.area_sqm,
-                            is_labour: true,
-                            parent_line_item_id: itemId,
-                            cost_price: LABOUR_COST_PER_SQM,
-                            sell_price: labourRate,
-                            line_cost: labourCost,
-                            line_sell: labourSell,
-                            margin_percent: labourMargin
-                        };
-
-                        // Insert labour row right after the product row
-                        const itemIndex = updatedItems.findIndex(i => i.id === itemId);
-                        updatedItems.splice(itemIndex + 1, 0, labourRow);
-                    }
-
-                    return { ...section, line_items: updatedItems };
-                }
-                return section;
-            });
-        });
-
-        // Clear search
-        setProductSearch({ ...productSearch, [`${sectionId}-${itemId}`]: '' });
+        // Close suggestions
         setShowProductSuggestions({ ...showProductSuggestions, [`${sectionId}-${itemId}`]: false });
     };
 
-    // Add labour row when area is entered (if product already selected)
     const handleAreaChange = (sectionId: string, itemId: string, newArea: number) => {
-        setSections(prevSections => {
-            return prevSections.map(section => {
-                if (section.id === sectionId) {
-                    let updatedItems = [...section.line_items];
-                    const itemIndex = updatedItems.findIndex(i => i.id === itemId);
-                    const currentItem = updatedItems[itemIndex];
-                    
-                    if (currentItem && !currentItem.is_labour) {
-                        // Calculate product line totals
-                        let packs = 0;
-                        let lineCost = 0;
-                        let lineSell = 0;
-                        let marginPercent = 0;
-                        let stockWarning = '';
-                        
-                        if (currentItem.product && newArea > 0) {
-                            const areaWithWaste = newArea * (1 + wastePercent / 100);
-                            packs = Math.ceil(areaWithWaste / (currentItem.product.bale_size_sqm || 1));
-                            lineCost = packs * currentItem.cost_price;
-                            lineSell = packs * currentItem.sell_price;
-                            
-                            // Calculate GP%
-                            marginPercent = lineSell > 0 ? ((lineSell - lineCost) / lineSell) * 100 : 0;
-                            
-                            if (currentItem.product.stock_level !== undefined && packs > currentItem.product.stock_level) {
-                                stockWarning = `Need ${packs} packs, only ${currentItem.product.stock_level} available`;
+        setSections(sections.map(s => {
+            if (s.id === sectionId) {
+                return {
+                    ...s,
+                    line_items: s.line_items.map(item => {
+                        if (item.id === itemId) {
+                            if (item.is_labour) {
+                                return {
+                                    ...item,
+                                    area_sqm: newArea,
+                                    line_cost: newArea * LABOUR_COST_PER_SQM,
+                                    line_sell: newArea * labourRate
+                                };
                             }
-                        }
-                        
-                        // Update the product row
-                        updatedItems[itemIndex] = { 
-                            ...currentItem, 
-                            area_sqm: newArea,
-                            packs_required: packs,
-                            line_cost: lineCost,
-                            line_sell: lineSell,
-                            margin_percent: marginPercent,
-                            stock_warning: stockWarning
-                        };
-                        
-                        // Check if labour row exists
-                        const labourIndex = updatedItems.findIndex(i => i.parent_line_item_id === itemId);
-                        
-                        if (labourIndex >= 0) {
-                            // Update existing labour row
-                            const labourCost = newArea * LABOUR_COST_PER_SQM;
-                            const labourSell = newArea * labourRate;
-                            const labourMargin = labourSell > 0 ? ((labourSell - labourCost) / labourSell) * 100 : 0;
-                            
-                            updatedItems[labourIndex] = {
-                                ...updatedItems[labourIndex],
+
+                            if (!item.product) return { ...item, area_sqm: newArea };
+
+                            const packsRequired = Math.ceil(
+                                (newArea * (1 + (wastePercent / 100))) / item.product.bale_size_sqm
+                            );
+
+                            return {
+                                ...item,
                                 area_sqm: newArea,
-                                line_cost: labourCost,
-                                line_sell: labourSell,
-                                margin_percent: labourMargin
+                                packs_required: packsRequired,
+                                line_cost: packsRequired * item.cost_price,
+                                line_sell: packsRequired * item.sell_price
                             };
-                        } else if (currentItem.product_id && newArea > 0) {
-                            // Create new labour row
-                            const labourCost = newArea * LABOUR_COST_PER_SQM;
-                            const labourSell = newArea * labourRate;
-                            const labourMargin = labourSell > 0 ? ((labourSell - labourCost) / labourSell) * 100 : 0;
-
-                            const labourRow: LineItem = {
-                                id: generateId(),
-                                marker: '',
-                                product_id: null,
-                                area_sqm: newArea,
-                                is_labour: true,
-                                parent_line_item_id: itemId,
-                                cost_price: LABOUR_COST_PER_SQM,
-                                sell_price: labourRate,
-                                line_cost: labourCost,
-                                line_sell: labourSell,
-                                margin_percent: labourMargin
-                            };
-
-                            updatedItems.splice(itemIndex + 1, 0, labourRow);
                         }
-                    }
-
-                    return { ...section, line_items: updatedItems };
-                }
-                return section;
-            });
-        });
+                        return item;
+                    })
+                };
+            }
+            return s;
+        }));
     };
 
-    // ============================================
-    // MARGIN EDITING (Syncs across all sections)
-    // ============================================
-    const handleMarginChange = (sectionId: string, itemId: string, newMargin: number, productId: string) => {
-        if (newMargin >= 100 || newMargin < 0) return;
-
-        // Calculate new sell price from margin
-        const product = products.find(p => p.id === productId);
-        if (!product) return;
-
-        const newSellPrice = product.pack_price / (1 - newMargin / 100);
-
-        // Update custom margins (this syncs across all sections)
-        setCustomProductMargins(prev => ({
-            ...prev,
-            [productId]: {
-                margin_percent: newMargin,
-                sell_price: newSellPrice
+    const handleMarkerChange = (sectionId: string, itemId: string, marker: string) => {
+        setSections(sections.map(s => {
+            if (s.id === sectionId) {
+                return {
+                    ...s,
+                    line_items: s.line_items.map(item => 
+                        item.id === itemId ? { ...item, marker } : item
+                    )
+                };
             }
+            return s;
         }));
     };
 
     // ============================================
-    // DRAG AND DROP BETWEEN SECTIONS
+    // DRAG & DROP (Optional - for reordering items)
     // ============================================
-    const handleDragStart = (e: React.DragEvent, sectionId: string, itemId: string) => {
+    const handleDragStart = (sectionId: string, itemId: string) => {
         setDraggedItem({ sectionId, itemId });
-        e.dataTransfer.effectAllowed = 'move';
     };
 
     const handleDragOver = (e: React.DragEvent, sectionId: string) => {
         e.preventDefault();
-        e.dataTransfer.dropEffect = 'move';
         setDragOverSection(sectionId);
-    };
-
-    const handleDragLeave = () => {
-        setDragOverSection(null);
     };
 
     const handleDrop = (e: React.DragEvent, targetSectionId: string) => {
         e.preventDefault();
-        setDragOverSection(null);
+        if (!draggedItem) return;
 
-        if (!draggedItem || draggedItem.sectionId === targetSectionId) {
-            setDraggedItem(null);
-            return;
-        }
+        // Move item between sections
+        const sourceSection = sections.find(s => s.id === draggedItem.sectionId);
+        const item = sourceSection?.line_items.find(i => i.id === draggedItem.itemId);
+        
+        if (!item) return;
 
-        setSections(prevSections => {
-            const newSections = JSON.parse(JSON.stringify(prevSections));
-            const sourceSection = newSections.find((s: Section) => s.id === draggedItem.sectionId);
-            const targetSection = newSections.find((s: Section) => s.id === targetSectionId);
-            
-            if (!sourceSection || !targetSection) return prevSections;
-
-            const itemIndex = sourceSection.line_items.findIndex((i: LineItem) => i.id === draggedItem.itemId);
-            if (itemIndex === -1) return prevSections;
-            
-            const item = sourceSection.line_items[itemIndex];
-            if (item.is_labour) return prevSections;
-
-            // Find associated labour row
-            const labourIndex = sourceSection.line_items.findIndex((i: LineItem) => i.parent_line_item_id === draggedItem.itemId);
-            
-            // Remove labour first if exists
-            if (labourIndex > -1) {
-                sourceSection.line_items.splice(labourIndex > itemIndex ? labourIndex : labourIndex, 1);
+        setSections(sections.map(s => {
+            if (s.id === draggedItem.sectionId) {
+                return {
+                    ...s,
+                    line_items: s.line_items.filter(i => i.id !== draggedItem.itemId)
+                };
             }
-            // Remove item (adjust index if labour was before)
-            const adjustedIndex = labourIndex > -1 && labourIndex < itemIndex ? itemIndex - 1 : itemIndex;
-            const [movedItem] = sourceSection.line_items.splice(adjustedIndex, 1);
-            
-            // Add to target
-            targetSection.line_items.push(movedItem);
-            
-            // Re-add labour row
-            if (labourIndex > -1 && movedItem.area_sqm > 0) {
-                const labourCost = movedItem.area_sqm * LABOUR_COST_PER_SQM;
-                const labourSell = movedItem.area_sqm * labourRate;
-                const labourMargin = labourSell > 0 ? ((labourSell - labourCost) / labourSell) * 100 : 0;
-                
-                targetSection.line_items.push({
-                    id: generateId(),
-                    marker: '',
-                    product_id: null,
-                    area_sqm: movedItem.area_sqm,
-                    is_labour: true,
-                    parent_line_item_id: movedItem.id,
-                    cost_price: LABOUR_COST_PER_SQM,
-                    sell_price: labourRate,
-                    line_cost: labourCost,
-                    line_sell: labourSell,
-                    margin_percent: labourMargin
-                });
+            if (s.id === targetSectionId) {
+                return {
+                    ...s,
+                    line_items: [...s.line_items, item]
+                };
             }
+            return s;
+        }));
 
-            return newSections;
-        });
-
-        setDraggedItem(null);
-    };
-
-    const handleDragEnd = () => {
         setDraggedItem(null);
         setDragOverSection(null);
     };
 
     // ============================================
-    // CALCULATE SECTION TOTALS
+    // TOTALS CALCULATION
     // ============================================
     const calculateSectionTotals = (section: Section) => {
-        let totalCost = 0;
-        let totalSell = 0;
-
-        section.line_items.forEach(item => {
-            totalCost += item.line_cost || 0;
-            totalSell += item.line_sell || 0;
-        });
-
-        const grossProfit = totalSell - totalCost;
-        const marginPercent = totalSell > 0 ? (grossProfit / totalSell) * 100 : 0;
-
-        return { totalCost, totalSell, grossProfit, marginPercent };
+        const totalCost = section.line_items.reduce((sum, item) => sum + (item.line_cost || 0), 0);
+        const totalSell = section.line_items.reduce((sum, item) => sum + (item.line_sell || 0), 0);
+        const margin = totalSell > 0 ? ((totalSell - totalCost) / totalSell) * 100 : 0;
+        return { totalCost, totalSell, margin };
     };
 
-    // ============================================
-    // CALCULATE QUOTE TOTALS
-    // ============================================
     const calculateQuoteTotals = () => {
-        let totalCost = 0;
-        let totalSell = 0;
+        const totalCost = sections.reduce((sum, section) => {
+            const sectionTotal = section.line_items.reduce((s, item) => s + (item.line_cost || 0), 0);
+            return sum + sectionTotal;
+        }, 0);
 
-        sections.forEach(section => {
-            section.line_items.forEach(item => {
-                totalCost += item.line_cost || 0;
-                totalSell += item.line_sell || 0;
-            });
-        });
+        const totalSell = sections.reduce((sum, section) => {
+            const sectionTotal = section.line_items.reduce((s, item) => s + (item.line_sell || 0), 0);
+            return sum + sectionTotal;
+        }, 0);
 
-        const grossProfit = totalSell - totalCost;
-        const marginPercent = totalSell > 0 ? (grossProfit / totalSell) * 100 : 0;
         const gstAmount = totalSell * 0.15;
         const totalIncGst = totalSell + gstAmount;
+        const overallMargin = totalSell > 0 ? ((totalSell - totalCost) / totalSell) * 100 : 0;
 
-        return { totalCost, totalSell, grossProfit, marginPercent, gstAmount, totalIncGst };
+        return { totalCost, totalSell, gstAmount, totalIncGst, overallMargin };
     };
 
     // ============================================
@@ -810,7 +734,7 @@ export default function AddNewQuotePage() {
                 }
             }
 
-            // Insert quote
+            // Insert quote with Quote Details fields
             const { data: quote, error: quoteError } = await supabase
                 .from('quotes')
                 .insert({
@@ -835,7 +759,12 @@ export default function AddNewQuotePage() {
                     gst_amount: totals.gstAmount,
                     total_inc_gst: totals.totalIncGst,
                     custom_product_margins: customProductMargins,
-                    version: 1
+                    version: 1,
+                    // NEW: Quote Details fields
+                    subject: subject || null,
+                    description_of_work: descriptionOfWork || null,
+                    specifications_note: specificationsNote || null,
+                    include_important_notes: includeImportantNotes
                 })
                 .select()
                 .single();
@@ -903,67 +832,64 @@ export default function AddNewQuotePage() {
     };
 
     // ============================================
-    // FILTER PRODUCTS FOR SEARCH
+    // PRODUCT SEARCH
     // ============================================
     const getFilteredProducts = (searchKey: string) => {
-        const search = productSearch[searchKey]?.toLowerCase() || '';
-        if (!search) return products.slice(0, 20);
+        const searchTerm = productSearch[searchKey]?.toLowerCase() || '';
+        if (!searchTerm) return products;
 
         return products.filter(p => 
-            p.product_description?.toLowerCase().includes(search) ||
-            p.sku?.toLowerCase().includes(search) ||
-            p.r_value?.toLowerCase().includes(search) ||
-            p.category?.toLowerCase().includes(search)
-        ).slice(0, 20);
+            p.sku.toLowerCase().includes(searchTerm) ||
+            p.product_description.toLowerCase().includes(searchTerm) ||
+            p.r_value.toLowerCase().includes(searchTerm) ||
+            p.category.toLowerCase().includes(searchTerm)
+        );
     };
 
     // ============================================
     // RENDER
     // ============================================
+    const totals = calculateQuoteTotals();
+
     if (loading) {
         return (
-            <div className="flex items-center justify-center min-h-screen">
+            <div className="min-h-screen flex items-center justify-center bg-gray-50">
                 <div className="text-center">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#0066CC] mx-auto"></div>
-                    <p className="mt-4 text-gray-600">Loading...</p>
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#0066CC] mx-auto mb-4"></div>
+                    <p className="text-gray-600">Loading...</p>
                 </div>
             </div>
         );
     }
 
-    const quoteTotals = calculateQuoteTotals();
-
     return (
-        <div className="min-h-screen bg-gray-50">
+        <div className="min-h-screen bg-gray-50 pb-20">
             {/* Header */}
-            <div className="bg-white border-b border-gray-200 sticky top-0 z-40">
-                <div className="max-w-[1400px] mx-auto px-6 py-4">
+            <div className="bg-white border-b border-gray-200 sticky top-0 z-50">
+                <div className="max-w-7xl mx-auto px-6 py-4">
                     <div className="flex items-center justify-between">
                         <div>
-                            <h1 className="text-2xl font-bold text-gray-900">Add New Quote</h1>
-                            <p className="text-sm text-gray-500 mt-1">Create a new quote for a client</p>
+                            <h1 className="text-2xl font-bold text-gray-900">Create New Quote</h1>
+                            <p className="text-sm text-gray-600 mt-1">Build a professional quote for your customer</p>
                         </div>
                         <div className="flex items-center gap-3">
                             <button
-                                onClick={() => router.push('/quotes')}
-                                className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+                                onClick={() => router.back()}
+                                className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition"
                             >
                                 Cancel
                             </button>
                             <button
                                 onClick={() => handleSaveQuote('Draft')}
                                 disabled={saving}
-                                className="px-4 py-2 bg-white border border-[#0066CC] rounded-lg disabled:opacity-50 transition-colors"
-                                style={{ color: '#0066CC' }}
-                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#e0f2fe'}
-                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}
+                                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition disabled:opacity-50"
                             >
                                 {saving ? 'Saving...' : 'Save Draft'}
                             </button>
                             <button
                                 onClick={() => handleSaveQuote('Sent')}
                                 disabled={saving}
-                                className="px-4 py-2 text-white bg-[#0066CC] rounded-lg hover:bg-[#0052a3] disabled:opacity-50"
+                                className="px-4 py-2 bg-[#0066CC] text-white rounded-lg hover:bg-[#0052A3] transition disabled:opacity-50"
                             >
                                 {saving ? 'Saving...' : 'Save & Send'}
                             </button>
@@ -972,88 +898,76 @@ export default function AddNewQuotePage() {
                 </div>
             </div>
 
-            <div className="max-w-[1400px] mx-auto px-6 py-6 space-y-6">
-                {/* Pricing Controls - Single Row */}
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-                    <div className="flex flex-wrap items-center gap-4">
-                        {/* Pricing Tier Label */}
-                        <span className="text-sm font-medium text-gray-700">Pricing Tier:</span>
-                        
-                        {/* Tier Buttons */}
-                        {(['Retail', 'Trade', 'VIP', 'Custom'] as PricingTier[]).map(tier => (
-                            <button
-                                key={tier}
-                                onClick={() => handlePricingTierChange(tier)}
-                                className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
-                                    pricingTier === tier
-                                        ? 'bg-[#0066CC] text-white'
-                                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                                }`}
+            <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
+                {/* Pricing Tier & Controls */}
+                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                    <h2 className="text-lg font-semibold text-gray-900 mb-4">Pricing Controls</h2>
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Pricing Tier</label>
+                            <select
+                                value={pricingTier}
+                                onChange={(e) => handlePricingTierChange(e.target.value as PricingTier)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
                             >
-                                {tier} {tier !== 'Custom' && `(${PRICING_TIER_GP[tier]}%)`}
-                            </button>
-                        ))}
-
-                        {/* Divider */}
-                        <div className="h-8 w-px bg-gray-300"></div>
-
-                        {/* Custom GP % */}
-                        <div className="flex items-center gap-2">
-                            <label className="text-sm font-medium text-gray-700 whitespace-nowrap">Custom GP %</label>
+                                <option value="Retail">Retail (37.5% GP)</option>
+                                <option value="Trade">Trade (28.5% GP)</option>
+                                <option value="VIP">VIP (20% GP)</option>
+                                <option value="Custom">Custom GP%</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Target GP%</label>
                             <input
                                 type="number"
                                 step="0.1"
-                                min="0"
-                                max="99"
                                 value={targetGP}
-                                onChange={(e) => {
-                                    setTargetGP(parseFloat(e.target.value) || 0);
-                                    if (pricingTier !== 'Custom') setPricingTier('Custom');
-                                }}
-                                className="w-20 px-2 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
+                                onChange={(e) => setTargetGP(parseFloat(e.target.value) || 0)}
+                                disabled={pricingTier !== 'Custom'}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0066CC] focus:border-transparent disabled:bg-gray-100"
                             />
                         </div>
-
-                        {/* Labour Rate */}
-                        <div className="flex items-center gap-2">
-                            <label className="text-sm font-medium text-gray-700 whitespace-nowrap">Labour $/m²</label>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Labour Rate ($/m²)</label>
                             <input
                                 type="number"
                                 step="0.01"
                                 value={labourRate}
                                 onChange={(e) => setLabourRate(parseFloat(e.target.value) || 0)}
-                                className="w-20 px-2 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
                             />
                         </div>
-
-                        {/* Waste % */}
-                        <div className="flex items-center gap-2">
-                            <label className="text-sm font-medium text-gray-700 whitespace-nowrap">Waste %</label>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Waste %</label>
                             <input
                                 type="number"
+                                step="0.1"
                                 value={wastePercent}
                                 onChange={(e) => setWastePercent(parseFloat(e.target.value) || 0)}
-                                className="w-20 px-2 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
                             />
                         </div>
+                    </div>
 
-                        {/* Divider */}
-                        <div className="h-8 w-px bg-gray-300"></div>
+                    <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                        <p className="text-sm text-blue-800">
+                            <strong>Note:</strong> Target GP% applies to all products. Use "Custom" tier to set individual product margins below.
+                        </p>
+                    </div>
 
-                        {/* Job Type */}
-                        <div className="flex items-center gap-2">
-                            <label className="text-sm font-medium text-gray-700 whitespace-nowrap">Job Type</label>
-                            <select
-                                value={jobTypeId}
-                                onChange={(e) => setJobTypeId(e.target.value)}
-                                className="w-40 px-2 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
-                            >
-                                <option value="">Select...</option>
-                                {jobTypes.map(jt => (
-                                    <option key={jt.id} value={jt.id}>{jt.name}</option>
-                                ))}
-                            </select>
-                        </div>
+                    {/* Job Type */}
+                    <div className="mt-4">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Job Type</label>
+                        <select
+                            value={jobTypeId}
+                            onChange={(e) => setJobTypeId(e.target.value)}
+                            className="w-full max-w-md px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
+                        >
+                            <option value="">Select job type...</option>
+                            {jobTypes.map(jt => (
+                                <option key={jt.id} value={jt.id}>{jt.name}</option>
+                            ))}
+                        </select>
                     </div>
                 </div>
 
@@ -1181,7 +1095,9 @@ export default function AddNewQuotePage() {
                                     >
                                         <option value="">Select sales rep...</option>
                                         {salesReps.map(sr => (
-                                            <option key={sr.id} value={sr.id}>{sr.first_name} {sr.last_name}</option>
+                                            <option key={sr.id} value={sr.id}>
+                                                {sr.first_name} {sr.last_name}
+                                            </option>
                                         ))}
                                     </select>
                                 </div>
@@ -1192,7 +1108,7 @@ export default function AddNewQuotePage() {
                                         onChange={(e) => setPropertyType(e.target.value)}
                                         className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
                                     >
-                                        <option value="">Select property type...</option>
+                                        <option value="">Select type...</option>
                                         {propertyTypes.map(pt => (
                                             <option key={pt} value={pt}>{pt}</option>
                                         ))}
@@ -1203,316 +1119,375 @@ export default function AddNewQuotePage() {
                     </div>
                 </div>
 
-                {/* Sections */}
+                {/* ============================================ */}
+                {/* NEW: QUOTE DETAILS SECTION */}
+                {/* ============================================ */}
+                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                    <h2 className="text-lg font-semibold text-gray-900 mb-4">Quote Details</h2>
+                    
+                    {/* Subject Line */}
+                    <div className="mb-4">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Subject Line
+                        </label>
+                        <input
+                            type="text"
+                            value={subject}
+                            onChange={(e) => setSubject(e.target.value)}
+                            placeholder="Quote for [Site Address]"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">
+                            This will appear as the quote title in the PDF
+                        </p>
+                    </div>
+
+                    {/* Description of Work */}
+                    <div className="mb-4">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Description of Work
+                        </label>
+                        <textarea
+                            value={descriptionOfWork}
+                            onChange={(e) => setDescriptionOfWork(e.target.value)}
+                            placeholder={DEFAULT_DESCRIPTION_PLACEHOLDER}
+                            rows={8}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">
+                            Use markdown: **bold**, - bullets. Leave blank to use default template.
+                        </p>
+                    </div>
+
+                    {/* Specifications Note */}
+                    <div className="mb-4">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Specifications & Important Notes
+                        </label>
+                        <textarea
+                            value={specificationsNote}
+                            onChange={(e) => setSpecificationsNote(e.target.value)}
+                            placeholder="Enter specifications and important notes..."
+                            rows={10}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">
+                            Use markdown: **bold**, - bullets. This appears in the "Important Notes" section.
+                        </p>
+                    </div>
+
+                    {/* Include Important Notes Toggle */}
+                    <div className="flex items-center gap-2">
+                        <input
+                            type="checkbox"
+                            id="includeImportantNotes"
+                            checked={includeImportantNotes}
+                            onChange={(e) => setIncludeImportantNotes(e.target.checked)}
+                            className="w-4 h-4 text-[#0066CC] border-gray-300 rounded focus:ring-[#0066CC]"
+                        />
+                        <label htmlFor="includeImportantNotes" className="text-sm text-gray-700">
+                            Include "Important Notes" section in PDF (Site Safe, Police Vetted, etc.)
+                        </label>
+                    </div>
+                </div>
+                {/* ============================================ */}
+                {/* END: QUOTE DETAILS SECTION */}
+                {/* ============================================ */}
+
+                {/* Quote Sections */}
                 <div className="space-y-4">
                     <div className="flex items-center justify-between">
                         <h2 className="text-lg font-semibold text-gray-900">Quote Sections</h2>
+                        <button
+                            onClick={handleAddSection}
+                            className="px-4 py-2 bg-[#0066CC] text-white rounded-lg hover:bg-[#0052A3] transition flex items-center gap-2"
+                        >
+                            <Plus className="w-4 h-4" />
+                            Add Section
+                        </button>
                     </div>
 
+                    {sections.length === 0 && (
+                        <div className="bg-white border-2 border-dashed border-gray-300 rounded-lg p-12 text-center">
+                            <p className="text-gray-500 mb-4">No sections added yet</p>
+                            <button
+                                onClick={handleAddSection}
+                                className="px-4 py-2 bg-[#0066CC] text-white rounded-lg hover:bg-[#0052A3] transition"
+                            >
+                                Add First Section
+                            </button>
+                        </div>
+                    )}
+
                     {sections.map((section, sectionIndex) => {
-                        const appType = appTypes.find(at => at.id === section.app_type_id);
                         const sectionTotals = calculateSectionTotals(section);
 
                         return (
-                            <div 
-                                key={section.id} 
-                                className={`bg-white rounded-lg shadow-sm border-2 overflow-hidden transition-colors ${
-                                    dragOverSection === section.id 
-                                        ? 'border-[#0066CC] bg-blue-50' 
-                                        : 'border-gray-200'
+                            <div
+                                key={section.id}
+                                className={`bg-white rounded-lg shadow-sm border-2 transition ${
+                                    dragOverSection === section.id ? 'border-[#0066CC]' : 'border-gray-200'
                                 }`}
                                 onDragOver={(e) => handleDragOver(e, section.id)}
-                                onDragLeave={handleDragLeave}
                                 onDrop={(e) => handleDrop(e, section.id)}
                             >
                                 {/* Section Header */}
                                 <div 
-                                    className="px-6 py-4 border-b border-gray-200"
-                                    style={{ backgroundColor: section.section_color || '#f9fafb' }}
+                                    className="p-4 border-b border-gray-200"
+                                    style={{ backgroundColor: `${section.section_color}15` }}
                                 >
-                                    <div className="flex items-center gap-4">
-                                        <span className="text-sm font-medium text-gray-500">Section {sectionIndex + 1}</span>
-                                        
-                                        {/* Application Type Dropdown */}
-                                        <select
-                                            value={section.app_type_id || ''}
-                                            onChange={(e) => updateSection(section.id, 'app_type_id', e.target.value || null)}
-                                            className="flex-1 max-w-xs px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white"
+                                    <div className="flex items-center justify-between mb-3">
+                                        <h3 className="text-md font-semibold text-gray-900">
+                                            Section {sectionIndex + 1}
+                                        </h3>
+                                        <button
+                                            onClick={() => handleRemoveSection(section.id)}
+                                            className="p-1 text-red-500 hover:bg-red-50 rounded transition"
+                                            title="Remove section"
                                         >
-                                            <option value="">Select application type...</option>
-                                            {appTypes.map(at => (
-                                                <option key={at.id} value={at.id}>{at.name}</option>
-                                            ))}
-                                        </select>
+                                            <Trash2 className="w-4 h-4" />
+                                        </button>
+                                    </div>
 
-                                        <span className="text-gray-400">or</span>
-
-                                        {/* Custom Name */}
-                                        <input
-                                            type="text"
-                                            value={section.custom_name}
-                                            onChange={(e) => updateSection(section.id, 'custom_name', e.target.value)}
-                                            placeholder="Custom section name..."
-                                            className="flex-1 max-w-xs px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                                        />
-
-                                        {/* Color Picker */}
-                                        <div className="flex items-center gap-2 border border-gray-300 rounded-lg px-2 py-1 bg-white">
-                                            <label className="text-xs text-gray-500">Color:</label>
-                                            <input
-                                                type="color"
-                                                value={section.section_color || '#ffffff'}
-                                                onChange={(e) => updateSection(section.id, 'section_color', e.target.value)}
-                                                className="w-6 h-6 p-0 border-0 rounded cursor-pointer"
-                                            />
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="block text-xs font-medium text-gray-700 mb-1">
+                                                Application Type
+                                            </label>
+                                            <select
+                                                value={section.app_type_id || ''}
+                                                onChange={(e) => handleSectionAppTypeChange(section.id, e.target.value)}
+                                                disabled={!!section.custom_name}
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0066CC] focus:border-transparent disabled:bg-gray-100"
+                                            >
+                                                <option value="">Select type...</option>
+                                                {appTypes.map(at => (
+                                                    <option key={at.id} value={at.id}>
+                                                        {at.name}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-medium text-gray-700 mb-1">
+                                                OR Custom Name
+                                            </label>
                                             <input
                                                 type="text"
-                                                value={section.section_color || '#ffffff'}
-                                                onChange={(e) => {
-                                                    const hex = e.target.value;
-                                                    if (/^#[0-9A-Fa-f]{0,6}$/.test(hex)) {
-                                                        updateSection(section.id, 'section_color', hex);
-                                                    }
-                                                }}
-                                                className="w-20 px-1 py-0.5 text-xs border border-gray-200 rounded"
-                                                maxLength={7}
+                                                value={section.custom_name}
+                                                onChange={(e) => handleSectionCustomNameChange(section.id, e.target.value)}
+                                                placeholder="e.g., Ceiling Insulation"
+                                                disabled={!!section.app_type_id}
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0066CC] focus:border-transparent disabled:bg-gray-100"
                                             />
                                         </div>
-
-                                        {/* Delete Section */}
-                                        <button
-                                            onClick={() => removeSection(section.id)}
-                                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                        >
-                                            <Trash2 className="w-5 h-5" />
-                                        </button>
                                     </div>
                                 </div>
 
-                                {/* Line Items Table */}
-                                <div className="p-6">
-                                    <table className="w-full text-sm">
-                                        <thead>
-                                            <tr className="border-b border-gray-200">
-                                                <th className="w-8"></th>
-                                                <th className="text-left py-2 px-2 text-gray-700 font-semibold w-20">Marker</th>
-                                                <th className="text-left py-2 px-2 text-gray-700 font-semibold">Product</th>
-                                                <th className="text-left py-2 px-2 text-gray-700 font-semibold w-24">Area m²</th>
-                                                <th className="text-center py-2 px-2 text-gray-700 font-semibold w-16">Packs</th>
-                                                <th className="text-right py-2 px-2 text-gray-700 font-semibold w-24">Cost ex</th>
-                                                <th className="text-right py-2 px-2 text-gray-700 font-semibold w-24">Sell ex</th>
-                                                <th className="text-right py-2 px-2 text-gray-700 font-semibold w-24">GP%</th>
-                                                <th className="w-10"></th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {section.line_items.map((item) => (
-                                                <tr 
-                                                    key={item.id} 
-                                                    className={`border-b border-gray-100 ${item.is_labour ? 'bg-blue-50' : 'cursor-grab hover:bg-gray-50'} ${draggedItem?.itemId === item.id ? 'opacity-50' : ''}`}
-                                                    draggable={!item.is_labour}
-                                                    onDragStart={(e) => !item.is_labour && handleDragStart(e, section.id, item.id)}
-                                                    onDragEnd={handleDragEnd}
+                                {/* Line Items */}
+                                <div className="p-4">
+                                    {section.line_items.length === 0 && (
+                                        <div className="text-center py-8 border-2 border-dashed border-gray-300 rounded-lg">
+                                            <p className="text-gray-500 mb-3">No products added</p>
+                                            <div className="flex items-center justify-center gap-2">
+                                                <button
+                                                    onClick={() => handleAddProduct(section.id)}
+                                                    className="px-3 py-1.5 bg-[#0066CC] text-white text-sm rounded-lg hover:bg-[#0052A3] transition"
                                                 >
-                                                    {/* Drag Handle */}
-                                                    <td className="py-2 px-1 text-center">
-                                                        {!item.is_labour && (
-                                                            <GripVertical className="w-4 h-4 text-gray-400 cursor-grab" />
-                                                        )}
-                                                    </td>
-                                                    {/* Marker */}
-                                                    <td className="py-2 px-2">
-                                                        {!item.is_labour && (
+                                                    Add Product
+                                                </button>
+                                                <button
+                                                    onClick={() => handleAddLabour(section.id)}
+                                                    className="px-3 py-1.5 bg-gray-200 text-gray-700 text-sm rounded-lg hover:bg-gray-300 transition"
+                                                >
+                                                    Add Labour
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {section.line_items.map((item, itemIndex) => {
+                                        const searchKey = `${section.id}-${item.id}`;
+                                        const filteredProducts = getFilteredProducts(searchKey);
+                                        const showSuggestions = showProductSuggestions[searchKey] && filteredProducts.length > 0;
+
+                                        return (
+                                            <div
+                                                key={item.id}
+                                                draggable
+                                                onDragStart={() => handleDragStart(section.id, item.id)}
+                                                className="border border-gray-200 rounded-lg p-3 mb-3 hover:bg-gray-50 transition"
+                                            >
+                                                <div className="flex items-start gap-2 mb-2">
+                                                    <GripVertical className="w-5 h-5 text-gray-400 cursor-move mt-1" />
+                                                    <div className="flex-1 grid grid-cols-12 gap-2 items-start">
+                                                        {/* Marker */}
+                                                        <div className="col-span-1">
                                                             <input
                                                                 type="text"
                                                                 value={item.marker || ''}
-                                                                onChange={(e) => updateLineItem(section.id, item.id, 'marker', e.target.value)}
-                                                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm text-gray-900"
-                                                                placeholder="A1"
+                                                                onChange={(e) => handleMarkerChange(section.id, item.id, e.target.value)}
+                                                                placeholder="A"
+                                                                className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm text-center font-semibold focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
+                                                                maxLength={2}
                                                             />
-                                                        )}
-                                                    </td>
+                                                        </div>
 
-                                                    {/* Product / Labour */}
-                                                    <td className="py-2 px-2">
+                                                        {/* Product Search / Labour Label */}
                                                         {item.is_labour ? (
-                                                            <span className="text-blue-700 font-medium">↳ Labour</span>
+                                                            <div className="col-span-5 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg flex items-center">
+                                                                <span className="text-sm font-medium text-blue-800">Labour</span>
+                                                            </div>
                                                         ) : (
-                                                            <div className="relative">
+                                                            <div className="col-span-5 relative">
                                                                 <input
                                                                     type="text"
-                                                                    value={
-                                                                        showProductSuggestions[`${section.id}-${item.id}`]
-                                                                            ? (productSearch[`${section.id}-${item.id}`] || '')
-                                                                            : (item.product?.product_description || '')
-                                                                    }
+                                                                    value={productSearch[searchKey] || (item.product?.sku || '')}
                                                                     onChange={(e) => {
-                                                                        setProductSearch({ ...productSearch, [`${section.id}-${item.id}`]: e.target.value });
-                                                                        setShowProductSuggestions({ ...showProductSuggestions, [`${section.id}-${item.id}`]: true });
+                                                                        setProductSearch({ ...productSearch, [searchKey]: e.target.value });
+                                                                        setShowProductSuggestions({ ...showProductSuggestions, [searchKey]: true });
                                                                     }}
-                                                                    onFocus={() => {
-                                                                        setShowProductSuggestions({ ...showProductSuggestions, [`${section.id}-${item.id}`]: true });
-                                                                        if (item.product) {
-                                                                            setProductSearch({ ...productSearch, [`${section.id}-${item.id}`]: '' });
-                                                                        }
-                                                                    }}
-                                                                    onBlur={() => {
-                                                                        setTimeout(() => {
-                                                                            setShowProductSuggestions({ ...showProductSuggestions, [`${section.id}-${item.id}`]: false });
-                                                                        }, 200);
-                                                                    }}
-                                                                    placeholder="Search R-value, SKU, description..."
-                                                                    className="w-full px-3 py-1 border border-gray-300 rounded text-sm text-gray-900"
+                                                                    onFocus={() => setShowProductSuggestions({ ...showProductSuggestions, [searchKey]: true })}
+                                                                    placeholder="Search product..."
+                                                                    className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
                                                                 />
-                                                                
-                                                                {/* Product Dropdown */}
-                                                                {showProductSuggestions[`${section.id}-${item.id}`] && (
-                                                                    <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                                                                        {getFilteredProducts(`${section.id}-${item.id}`).map(product => {
-                                                                            const stockDisplay = getStockStatusDisplay(product.stock_status || 'IN_STOCK', product.stock_level);
+                                                                {showSuggestions && (
+                                                                    <div className="absolute z-10 mt-1 w-full max-h-60 overflow-auto bg-white border border-gray-300 rounded-lg shadow-lg">
+                                                                        {filteredProducts.slice(0, 10).map(p => {
+                                                                            const stockDisplay = getStockStatusDisplay(p.stock_status || 'LOW_STOCK', p.stock_level);
                                                                             return (
-                                                                                <button
-                                                                                    key={product.id}
-                                                                                    type="button"
-                                                                                    onClick={() => selectProduct(section.id, item.id, product)}
-                                                                                    disabled={product.stock_status === 'OUT_OF_STOCK'}
-                                                                                    className={`w-full text-left px-3 py-2 hover:bg-blue-50 border-b border-gray-100 last:border-b-0 ${
-                                                                                        product.stock_status === 'OUT_OF_STOCK' ? 'opacity-50 cursor-not-allowed' : ''
-                                                                                    }`}
+                                                                                <div
+                                                                                    key={p.id}
+                                                                                    onClick={() => {
+                                                                                        handleProductSelect(section.id, item.id, p.id);
+                                                                                        setProductSearch({ ...productSearch, [searchKey]: '' });
+                                                                                    }}
+                                                                                    className="px-3 py-2 hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-b-0"
                                                                                 >
-                                                                                    <div className="flex items-start justify-between gap-3">
-                                                                                        <div className="flex-1 min-w-0">
-                                                                                            <p className="text-sm font-medium text-gray-900">{product.product_description}</p>
-                                                                                            <p className="text-xs text-gray-500">{product.sku} | R{product.r_value} | Bale: {product.bale_size_sqm}m²</p>
+                                                                                    <div className="flex items-center justify-between">
+                                                                                        <div>
+                                                                                            <p className="text-sm font-medium text-gray-900">{p.sku}</p>
+                                                                                            <p className="text-xs text-gray-600">{p.product_description}</p>
+                                                                                            <p className="text-xs text-gray-500">R{p.r_value} | Bale: {p.bale_size_sqm}m²</p>
                                                                                         </div>
-                                                                                        <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                                                                                            <span className={`text-xs px-2 py-1 rounded whitespace-nowrap ${stockDisplay.bg} ${stockDisplay.color}`}>
-                                                                                                {stockDisplay.label}
-                                                                                            </span>
-                                                                                            {product.stock_level !== undefined && (
-                                                                                                <span className="text-xs text-gray-500 whitespace-nowrap">
-                                                                                                    Stock: {product.stock_level}
-                                                                                                </span>
-                                                                                            )}
-                                                                                        </div>
+                                                                                        <span className={`text-xs px-2 py-1 rounded-full ${stockDisplay.bg} ${stockDisplay.color}`}>
+                                                                                            {stockDisplay.label}
+                                                                                        </span>
                                                                                     </div>
-                                                                                </button>
+                                                                                </div>
                                                                             );
                                                                         })}
                                                                     </div>
                                                                 )}
-
-                                                                {/* Stock Warning */}
-                                                                {item.stock_warning && (
-                                                                    <div className="mt-1 flex items-center gap-1 text-xs text-orange-600">
-                                                                        <AlertTriangle className="w-3 h-3" />
-                                                                        {item.stock_warning}
-                                                                    </div>
+                                                                {item.product && (
+                                                                    <p className="text-xs text-gray-600 mt-1">
+                                                                        {item.product.product_description} | Bale: {item.product.bale_size_sqm}m²
+                                                                    </p>
                                                                 )}
                                                             </div>
                                                         )}
-                                                    </td>
 
-                                                    {/* Area */}
-                                                    <td className="py-2 px-2">
-                                                        {!item.is_labour ? (
+                                                        {/* Area */}
+                                                        <div className="col-span-2">
                                                             <input
                                                                 type="number"
+                                                                step="0.01"
                                                                 value={item.area_sqm || ''}
                                                                 onChange={(e) => handleAreaChange(section.id, item.id, parseFloat(e.target.value) || 0)}
-                                                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm text-right text-gray-900"
-                                                                placeholder="0"
+                                                                placeholder="Area m²"
+                                                                className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-right focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
                                                             />
+                                                        </div>
+
+                                                        {/* Packs */}
+                                                        <div className="col-span-1 flex items-center justify-center">
+                                                            <span className="text-sm font-semibold text-gray-900">
+                                                                {item.is_labour ? '-' : (item.packs_required || 0)}
+                                                            </span>
+                                                        </div>
+
+                                                        {/* GP% or Custom Margin */}
+                                                        {pricingTier === 'Custom' && !item.is_labour && item.product_id ? (
+                                                            <div className="col-span-2">
+                                                                <input
+                                                                    type="number"
+                                                                    step="0.1"
+                                                                    value={customProductMargins[item.product_id]?.margin_percent ?? item.margin_percent}
+                                                                    onChange={(e) => {
+                                                                        const newMargin = parseFloat(e.target.value) || 0;
+                                                                        handleCustomMarginChange(item.product_id!, newMargin, item.cost_price);
+                                                                    }}
+                                                                    className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm text-right focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
+                                                                />
+                                                            </div>
                                                         ) : (
-                                                            <span className="text-sm text-gray-700 text-right block">{item.area_sqm.toFixed(2)}</span>
+                                                            <div className="col-span-2 flex items-center justify-end">
+                                                                <span className="text-sm text-gray-600">
+                                                                    {item.margin_percent.toFixed(1)}%
+                                                                </span>
+                                                            </div>
                                                         )}
-                                                    </td>
 
-                                                    {/* Packs */}
-                                                    <td className="py-2 px-2 text-center">
-                                                        {!item.is_labour && item.packs_required ? (
-                                                            <span className="text-sm font-medium text-gray-900">{item.packs_required}</span>
-                                                        ) : null}
-                                                    </td>
+                                                        {/* Total */}
+                                                        <div className="col-span-2 flex items-center justify-end">
+                                                            <span className="text-sm font-semibold text-gray-900">
+                                                                ${item.line_sell.toFixed(2)}
+                                                            </span>
+                                                        </div>
 
-                                                    {/* Cost */}
-                                                    <td className="py-2 px-2 text-right">
-                                                        <span className="text-sm text-gray-900">${item.line_cost.toFixed(2)}</span>
-                                                    </td>
-
-                                                    {/* Sell */}
-                                                    <td className="py-2 px-2 text-right">
-                                                        <span className="text-sm text-gray-900">${item.line_sell.toFixed(2)}</span>
-                                                    </td>
-
-                                                    {/* GP% (Editable for products, display only for labour) */}
-                                                    <td className="py-2 px-2 text-right">
-                                                        {!item.is_labour && item.product_id ? (
-                                                            <input
-                                                                type="number"
-                                                                step="0.1"
-                                                                min="0"
-                                                                max="99.9"
-                                                                value={item.margin_percent !== undefined ? item.margin_percent.toFixed(1) : ''}
-                                                                onChange={(e) => {
-                                                                    const val = parseFloat(e.target.value);
-                                                                    if (!isNaN(val) && val >= 0 && val < 100) {
-                                                                        handleMarginChange(section.id, item.id, val, item.product_id!);
-                                                                    }
-                                                                }}
-                                                                className="w-20 px-2 py-1 border border-gray-300 rounded text-sm text-right text-gray-900"
-                                                            />
-                                                        ) : item.is_labour ? (
-                                                            <span className="text-sm text-gray-900">{item.margin_percent.toFixed(1)}%</span>
-                                                        ) : null}
-                                                    </td>
-
-                                                    {/* Delete */}
-                                                    <td className="py-2 px-2">
-                                                        {!item.is_labour && (
+                                                        {/* Delete */}
+                                                        <div className="col-span-1 flex items-center justify-center">
                                                             <button
-                                                                onClick={() => removeLineItem(section.id, item.id)}
-                                                                className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
+                                                                onClick={() => handleRemoveLineItem(section.id, item.id)}
+                                                                className="p-1 text-red-500 hover:bg-red-50 rounded transition"
                                                             >
                                                                 <Trash2 className="w-4 h-4" />
                                                             </button>
-                                                        )}
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                {item.stock_warning && (
+                                                    <div className="ml-7 mt-2 p-2 bg-orange-50 border border-orange-200 rounded flex items-center gap-2">
+                                                        <AlertTriangle className="w-4 h-4 text-orange-600" />
+                                                        <span className="text-xs text-orange-700">{item.stock_warning}</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+
+                                    {/* Add Product/Labour Buttons */}
+                                    {section.line_items.length > 0 && (
+                                        <div className="flex items-center gap-2 mt-3">
+                                            <button
+                                                onClick={() => handleAddProduct(section.id)}
+                                                className="px-3 py-1.5 bg-[#0066CC] text-white text-sm rounded-lg hover:bg-[#0052A3] transition flex items-center gap-1"
+                                            >
+                                                <Plus className="w-3 h-3" />
+                                                Product
+                                            </button>
+                                            <button
+                                                onClick={() => handleAddLabour(section.id)}
+                                                className="px-3 py-1.5 bg-gray-200 text-gray-700 text-sm rounded-lg hover:bg-gray-300 transition flex items-center gap-1"
+                                            >
+                                                <Plus className="w-3 h-3" />
+                                                Labour
+                                            </button>
+                                        </div>
+                                    )}
 
                                     {/* Section Totals */}
                                     <div className="mt-4 pt-4 border-t border-gray-200">
-                                        <div className="flex items-center justify-between">
-                                            <button
-                                                onClick={() => addLineItem(section.id)}
-                                                className="flex items-center gap-2 px-4 py-2 bg-blue-50 rounded-lg transition-colors text-[#0066CC]"
-                                                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#dbeafe'; }}
-                                                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#eff6ff'; }}
-                                            >
-                                                <Plus className="w-4 h-4 text-[#0066CC]" />
-                                                <span className="text-[#0066CC]">Add Product</span>
-                                            </button>
-
-                                            <div className="flex items-center gap-6 text-sm">
-                                                <div>
-                                                    <span className="text-gray-500">Cost ex GST:</span>
-                                                    <span className="ml-2 font-semibold">${sectionTotals.totalCost.toFixed(2)}</span>
-                                                </div>
-                                                <div>
-                                                    <span className="text-gray-500">Sell ex GST:</span>
-                                                    <span className="ml-2 font-semibold">${sectionTotals.totalSell.toFixed(2)}</span>
-                                                </div>
-                                                <div>
-                                                    <span className="text-gray-500">GP:</span>
-                                                    <span className="ml-2 font-semibold text-green-600">${sectionTotals.grossProfit.toFixed(2)}</span>
-                                                </div>
-                                                <div>
-                                                    <span className="text-gray-500">GP%:</span>
-                                                    <span className="ml-2 font-semibold text-green-600">{sectionTotals.marginPercent.toFixed(1)}%</span>
-                                                </div>
+                                        <div className="flex items-center justify-between text-sm">
+                                            <span className="text-gray-600">Section Total:</span>
+                                            <div className="flex items-center gap-4">
+                                                <span className="text-gray-600">
+                                                    GP: {sectionTotals.margin.toFixed(1)}%
+                                                </span>
+                                                <span className="font-semibold text-gray-900">
+                                                    ${sectionTotals.totalSell.toFixed(2)}
+                                                </span>
                                             </div>
                                         </div>
                                     </div>
@@ -1520,49 +1495,40 @@ export default function AddNewQuotePage() {
                             </div>
                         );
                     })}
-
-                    {/* Add Section Button */}
-                    <button
-                        onClick={addSection}
-                        className="w-full flex items-center justify-center gap-2 p-4 bg-white border-2 border-dashed border-gray-300 rounded-lg font-medium transition-colors"
-                        style={{ color: '#0066CC' }}
-                        onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#dbeafe'; e.currentTarget.style.borderColor = '#0066CC'; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#d1d5db'; }}
-                    >
-                        <Plus className="w-5 h-5" />
-                        Add Section
-                    </button>
                 </div>
 
                 {/* Quote Totals */}
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-                    <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
-                        <div className="p-3 bg-gray-50 rounded-lg">
-                            <p className="text-xs text-gray-500 uppercase">Total Cost ex GST</p>
-                            <p className="text-base font-bold text-gray-900">${quoteTotals.totalCost.toFixed(2)}</p>
-                        </div>
-                        <div className="p-3 bg-gray-50 rounded-lg">
-                            <p className="text-xs text-gray-500 uppercase">Total Sell ex GST</p>
-                            <p className="text-base font-bold text-gray-900">${quoteTotals.totalSell.toFixed(2)}</p>
-                        </div>
-                        <div className="p-3 bg-green-50 rounded-lg">
-                            <p className="text-xs text-green-600 uppercase">Gross Profit</p>
-                            <p className="text-base font-bold text-green-700">${quoteTotals.grossProfit.toFixed(2)}</p>
-                        </div>
-                        <div className="p-3 bg-green-50 rounded-lg">
-                            <p className="text-xs text-green-600 uppercase">GP Margin</p>
-                            <p className="text-base font-bold text-green-700">{quoteTotals.marginPercent.toFixed(1)}%</p>
-                        </div>
-                        <div className="p-3 bg-blue-50 rounded-lg">
-                            <p className="text-xs text-blue-600 uppercase">GST (15%)</p>
-                            <p className="text-base font-bold text-blue-700">${quoteTotals.gstAmount.toFixed(2)}</p>
-                        </div>
-                        <div className="p-3 bg-[#0066CC] rounded-lg">
-                            <p className="text-xs text-blue-200 uppercase">Total Inc GST</p>
-                            <p className="text-base font-bold text-white">${quoteTotals.totalIncGst.toFixed(2)}</p>
+                {sections.length > 0 && (
+                    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                        <h2 className="text-lg font-semibold text-gray-900 mb-4">Quote Summary</h2>
+                        <div className="space-y-2">
+                            <div className="flex items-center justify-between text-sm">
+                                <span className="text-gray-600">Total Cost (ex GST):</span>
+                                <span className="font-medium text-gray-900">${totals.totalCost.toFixed(2)}</span>
+                            </div>
+                            <div className="flex items-center justify-between text-sm">
+                                <span className="text-gray-600">Total Sell (ex GST):</span>
+                                <span className="font-medium text-gray-900">${totals.totalSell.toFixed(2)}</span>
+                            </div>
+                            <div className="flex items-center justify-between text-sm">
+                                <span className="text-gray-600">Overall GP%:</span>
+                                <span className={`font-medium ${
+                                    totals.overallMargin >= targetGP ? 'text-green-600' : 'text-orange-600'
+                                }`}>
+                                    {totals.overallMargin.toFixed(1)}%
+                                </span>
+                            </div>
+                            <div className="flex items-center justify-between text-sm">
+                                <span className="text-gray-600">GST (15%):</span>
+                                <span className="font-medium text-gray-900">${totals.gstAmount.toFixed(2)}</span>
+                            </div>
+                            <div className="flex items-center justify-between text-lg font-bold border-t pt-2 mt-2">
+                                <span className="text-gray-900">Total (inc GST):</span>
+                                <span className="text-[#0066CC]">${totals.totalIncGst.toFixed(2)}</span>
+                            </div>
                         </div>
                     </div>
-                </div>
+                )}
             </div>
         </div>
     );
