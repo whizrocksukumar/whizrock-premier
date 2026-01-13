@@ -427,9 +427,75 @@ export default function AddNewQuotePage() {
         }));
     };
 
+    const handleSectionColorChange = (sectionId: string, color: string) => {
+        setSections(sections.map(s => {
+            if (s.id === sectionId) {
+                return { ...s, section_color: color };
+            }
+            return s;
+        }));
+    };
+
     // ============================================
     // LINE ITEM MANAGEMENT
     // ============================================
+
+    // Handler for direct sell price editing on line items
+    const handleLineItemSellPriceChange = (sectionId: string, itemId: string, newSellPrice: number) => {
+        setSections(sections.map(s => {
+            if (s.id === sectionId) {
+                return {
+                    ...s,
+                    line_items: s.line_items.map(item => {
+                        if (item.id === itemId) {
+                            const costPrice = item.cost_price || 0;
+                            const newMarginPercent = costPrice > 0 && newSellPrice > 0
+                                ? ((newSellPrice - costPrice) / newSellPrice) * 100
+                                : 0;
+
+                            const lineSell = (item.area_sqm || 0) * newSellPrice;
+
+                            return {
+                                ...item,
+                                sell_price: newSellPrice,
+                                margin_percent: newMarginPercent,
+                                line_sell: lineSell
+                            };
+                        }
+                        return item;
+                    })
+                };
+            }
+            return s;
+        }));
+    };
+
+    // Handler for direct GP% editing on line items
+    const handleLineItemMarginChange = (sectionId: string, itemId: string, newMarginPercent: number) => {
+        setSections(sections.map(s => {
+            if (s.id === sectionId) {
+                return {
+                    ...s,
+                    line_items: s.line_items.map(item => {
+                        if (item.id === itemId) {
+                            const costPrice = item.cost_price || 0;
+                            const newSellPrice = costPrice / (1 - (newMarginPercent / 100));
+                            const lineSell = (item.area_sqm || 0) * newSellPrice;
+
+                            return {
+                                ...item,
+                                sell_price: newSellPrice,
+                                margin_percent: newMarginPercent,
+                                line_sell: lineSell
+                            };
+                        }
+                        return item;
+                    })
+                };
+            }
+            return s;
+        }));
+    };
     const handleAddProduct = (sectionId: string) => {
         const newItem: LineItem = {
             id: generateId(),
@@ -874,7 +940,7 @@ export default function AddNewQuotePage() {
         <div className="min-h-screen bg-gray-50 pb-20">
             {/* Header */}
             <div className="bg-white border-b border-gray-200 sticky top-0 z-50">
-                <div className="max-w-7xl mx-auto px-6 py-4">
+                <div className="max-w-[1600px] mx-auto px-6 py-4">
                     <div className="flex items-center justify-between">
                         <div>
                             <h1 className="text-2xl font-bold text-gray-900">Create New Quote</h1>
@@ -906,7 +972,7 @@ export default function AddNewQuotePage() {
                 </div>
             </div>
 
-            <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
+            <div className="max-w-[1600px] mx-auto px-6 py-6 space-y-6">
                 {/* Pricing Tier & Controls */}
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
                     <h2 className="text-lg font-semibold text-gray-900 mb-4">Pricing Controls</h2>
@@ -1257,7 +1323,7 @@ export default function AddNewQuotePage() {
                                         </button>
                                     </div>
 
-                                    <div className="grid grid-cols-2 gap-3">
+                                    <div className="grid grid-cols-3 gap-3">
                                         <div>
                                             <label className="block text-xs font-medium text-gray-700 mb-1">
                                                 Application Type
@@ -1289,6 +1355,32 @@ export default function AddNewQuotePage() {
                                                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0066CC] focus:border-transparent disabled:bg-gray-100"
                                             />
                                         </div>
+                                        <div>
+                                            <label className="block text-xs font-medium text-gray-700 mb-1">
+                                                Section Color
+                                            </label>
+                                            <div className="flex items-center gap-2">
+                                                <input
+                                                    type="color"
+                                                    value={section.section_color}
+                                                    onChange={(e) => handleSectionColorChange(section.id, e.target.value)}
+                                                    className="w-10 h-9 border border-gray-300 rounded cursor-pointer"
+                                                />
+                                                <input
+                                                    type="text"
+                                                    value={section.section_color}
+                                                    onChange={(e) => {
+                                                        const val = e.target.value;
+                                                        if (/^#[0-9A-Fa-f]{0,6}$/.test(val)) {
+                                                            handleSectionColorChange(section.id, val);
+                                                        }
+                                                    }}
+                                                    placeholder="#6B7280"
+                                                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
+                                                    maxLength={7}
+                                                />
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
 
@@ -1314,6 +1406,38 @@ export default function AddNewQuotePage() {
                                         </div>
                                     )}
 
+                                    {/* Column Headers */}
+                                    {section.line_items.length > 0 && (
+                                        <div className="flex items-center gap-2 mb-2 px-3 py-2 bg-gray-100 border-b border-gray-300">
+                                            <div style={{ width: '25px' }} className="flex-shrink-0"></div>
+                                            <div style={{ width: '50px' }} className="flex-shrink-0">
+                                                <span className="text-xs font-semibold text-gray-700">Mark</span>
+                                            </div>
+                                            <div style={{ minWidth: '300px' }} className="flex-grow">
+                                                <span className="text-xs font-semibold text-gray-700">Product</span>
+                                            </div>
+                                            <div style={{ width: '100px' }} className="flex-shrink-0 text-right">
+                                                <span className="text-xs font-semibold text-gray-700">Area (m²)</span>
+                                            </div>
+                                            <div style={{ width: '60px' }} className="flex-shrink-0 text-center">
+                                                <span className="text-xs font-semibold text-gray-700">Packs</span>
+                                            </div>
+                                            <div style={{ width: '90px' }} className="flex-shrink-0 text-right">
+                                                <span className="text-xs font-semibold text-gray-700">Cost</span>
+                                            </div>
+                                            <div style={{ width: '90px' }} className="flex-shrink-0 text-right">
+                                                <span className="text-xs font-semibold text-gray-700">Sell Price</span>
+                                            </div>
+                                            <div style={{ width: '80px' }} className="flex-shrink-0 text-right">
+                                                <span className="text-xs font-semibold text-gray-700">GP%</span>
+                                            </div>
+                                            <div style={{ width: '100px' }} className="flex-shrink-0 text-right">
+                                                <span className="text-xs font-semibold text-gray-700">Total</span>
+                                            </div>
+                                            <div style={{ width: '40px' }} className="flex-shrink-0"></div>
+                                        </div>
+                                    )}
+
                                     {section.line_items.map((item, itemIndex) => {
                                         const searchKey = `${section.id}-${item.id}`;
                                         const filteredProducts = getFilteredProducts(searchKey);
@@ -1326,132 +1450,138 @@ export default function AddNewQuotePage() {
                                                 onDragStart={() => handleDragStart(section.id, item.id)}
                                                 className="border border-gray-200 rounded-lg p-3 mb-3 hover:bg-gray-50 transition"
                                             >
-                                                <div className="flex items-start gap-2 mb-2">
-                                                    <GripVertical className="w-5 h-5 text-gray-400 cursor-move mt-1" />
-                                                    <div className="flex-1 grid grid-cols-12 gap-2 items-start">
-                                                        {/* Marker */}
-                                                        <div className="col-span-1">
+                                                <div className="flex items-start gap-2">
+                                                    <GripVertical className="w-5 h-5 text-gray-400 cursor-move mt-1 flex-shrink-0" />
+
+                                                    {/* Marker */}
+                                                    <div style={{ width: '50px' }} className="flex-shrink-0">
+                                                        <input
+                                                            type="text"
+                                                            value={item.marker || ''}
+                                                            onChange={(e) => handleMarkerChange(section.id, item.id, e.target.value)}
+                                                            placeholder="A"
+                                                            className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm text-center font-semibold focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
+                                                            maxLength={2}
+                                                        />
+                                                    </div>
+
+                                                    {/* Product Search / Labour Label */}
+                                                    {item.is_labour ? (
+                                                        <div style={{ minWidth: '300px' }} className="flex-grow px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg flex items-center">
+                                                            <span className="text-sm font-medium text-blue-800">Labour</span>
+                                                        </div>
+                                                    ) : (
+                                                        <div style={{ minWidth: '300px' }} className="flex-grow relative">
                                                             <input
                                                                 type="text"
-                                                                value={item.marker || ''}
-                                                                onChange={(e) => handleMarkerChange(section.id, item.id, e.target.value)}
-                                                                placeholder="A"
-                                                                className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm text-center font-semibold focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
-                                                                maxLength={2}
+                                                                value={productSearch[searchKey] || (item.product?.sku || '')}
+                                                                onChange={(e) => {
+                                                                    setProductSearch({ ...productSearch, [searchKey]: e.target.value });
+                                                                    setShowProductSuggestions({ ...showProductSuggestions, [searchKey]: true });
+                                                                }}
+                                                                onFocus={() => setShowProductSuggestions({ ...showProductSuggestions, [searchKey]: true })}
+                                                                placeholder="Search product..."
+                                                                className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
                                                             />
-                                                        </div>
-
-                                                        {/* Product Search / Labour Label */}
-                                                        {item.is_labour ? (
-                                                            <div className="col-span-5 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg flex items-center">
-                                                                <span className="text-sm font-medium text-blue-800">Labour</span>
-                                                            </div>
-                                                        ) : (
-                                                            <div className="col-span-5 relative">
-                                                                <input
-                                                                    type="text"
-                                                                    value={productSearch[searchKey] || (item.product?.sku || '')}
-                                                                    onChange={(e) => {
-                                                                        setProductSearch({ ...productSearch, [searchKey]: e.target.value });
-                                                                        setShowProductSuggestions({ ...showProductSuggestions, [searchKey]: true });
-                                                                    }}
-                                                                    onFocus={() => setShowProductSuggestions({ ...showProductSuggestions, [searchKey]: true })}
-                                                                    placeholder="Search product..."
-                                                                    className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
-                                                                />
-                                                                {showSuggestions && (
-                                                                    <div className="absolute z-10 mt-1 w-full max-h-60 overflow-auto bg-white border border-gray-300 rounded-lg shadow-lg">
-                                                                        {filteredProducts.slice(0, 10).map(p => {
-                                                                            const stockDisplay = getStockStatusDisplay(p.stock_status || 'LOW_STOCK', p.stock_level);
-                                                                            return (
-                                                                                <div
-                                                                                    key={p.id}
-                                                                                    onClick={() => {
-                                                                                        handleProductSelect(section.id, item.id, p.id);
-                                                                                        setProductSearch({ ...productSearch, [searchKey]: '' });
-                                                                                    }}
-                                                                                    className="px-3 py-2 hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-b-0"
-                                                                                >
-                                                                                    <div className="flex items-center justify-between">
-                                                                                        <div>
-                                                                                            <p className="text-sm font-medium text-gray-900">{p.sku}</p>
-                                                                                            <p className="text-xs text-gray-600">{p.product_description}</p>
-                                                                                            <p className="text-xs text-gray-500">R{p.r_value} | Bale: {p.bale_size_sqm}m²</p>
-                                                                                        </div>
-                                                                                        <span className={`text-xs px-2 py-1 rounded-full ${stockDisplay.bg} ${stockDisplay.color}`}>
-                                                                                            {stockDisplay.label}
-                                                                                        </span>
+                                                            {showSuggestions && (
+                                                                <div className="absolute z-10 mt-1 w-full max-h-60 overflow-auto bg-white border border-gray-300 rounded-lg shadow-lg">
+                                                                    {filteredProducts.slice(0, 10).map(p => {
+                                                                        const stockDisplay = getStockStatusDisplay(p.stock_status || 'LOW_STOCK', p.stock_level);
+                                                                        return (
+                                                                            <div
+                                                                                key={p.id}
+                                                                                onClick={() => {
+                                                                                    handleProductSelect(section.id, item.id, p.id);
+                                                                                    setProductSearch({ ...productSearch, [searchKey]: '' });
+                                                                                }}
+                                                                                className="px-3 py-2 hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-b-0"
+                                                                            >
+                                                                                <div className="flex items-center justify-between">
+                                                                                    <div>
+                                                                                        <p className="text-sm font-medium text-gray-900">{p.sku}</p>
+                                                                                        <p className="text-xs text-gray-600">{p.product_description}</p>
+                                                                                        <p className="text-xs text-gray-500">R{p.r_value} | Bale: {p.bale_size_sqm}m²</p>
                                                                                     </div>
+                                                                                    <span className={`text-xs px-2 py-1 rounded-full ${stockDisplay.bg} ${stockDisplay.color}`}>
+                                                                                        {stockDisplay.label}
+                                                                                    </span>
                                                                                 </div>
-                                                                            );
-                                                                        })}
-                                                                    </div>
-                                                                )}
-                                                                {item.product && (
-                                                                    <p className="text-xs text-gray-600 mt-1">
-                                                                        {item.product.product_description} | Bale: {item.product.bale_size_sqm}m²
-                                                                    </p>
-                                                                )}
-                                                            </div>
-                                                        )}
-
-                                                        {/* Area */}
-                                                        <div className="col-span-2">
-                                                            <input
-                                                                type="number"
-                                                                step="0.01"
-                                                                value={item.area_sqm || ''}
-                                                                onChange={(e) => handleAreaChange(section.id, item.id, parseFloat(e.target.value) || 0)}
-                                                                placeholder="Area m²"
-                                                                className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-right focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
-                                                            />
+                                                                            </div>
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                            )}
+                                                            {item.product && (
+                                                                <p className="text-xs text-gray-600 mt-1">
+                                                                    {item.product.product_description} | Bale: {item.product.bale_size_sqm}m²
+                                                                </p>
+                                                            )}
                                                         </div>
+                                                    )}
 
-                                                        {/* Packs */}
-                                                        <div className="col-span-1 flex items-center justify-center">
-                                                            <span className="text-sm font-semibold text-gray-900">
-                                                                {item.is_labour ? '-' : (item.packs_required || 0)}
-                                                            </span>
-                                                        </div>
+                                                    {/* Area */}
+                                                    <div style={{ width: '100px' }} className="flex-shrink-0">
+                                                        <input
+                                                            type="number"
+                                                            step="0.01"
+                                                            value={item.area_sqm || ''}
+                                                            onChange={(e) => handleAreaChange(section.id, item.id, parseFloat(e.target.value) || 0)}
+                                                            placeholder="Area"
+                                                            className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm text-right focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
+                                                        />
+                                                    </div>
 
-                                                        {/* GP% or Custom Margin */}
-                                                        {pricingTier === 'Custom' && !item.is_labour && item.product_id ? (
-                                                            <div className="col-span-2">
-                                                                <input
-                                                                    type="number"
-                                                                    step="0.1"
-                                                                    value={customProductMargins[item.product_id]?.margin_percent ?? item.margin_percent}
-                                                                    onChange={(e) => {
-                                                                        const newMargin = parseFloat(e.target.value) || 0;
-                                                                        handleCustomMarginChange(item.product_id!, newMargin, item.cost_price);
-                                                                    }}
-                                                                    className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm text-right focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
-                                                                />
-                                                            </div>
-                                                        ) : (
-                                                            <div className="col-span-2 flex items-center justify-end">
-                                                                <span className="text-sm text-gray-600">
-                                                                    {item.margin_percent.toFixed(1)}%
-                                                                </span>
-                                                            </div>
-                                                        )}
+                                                    {/* Packs */}
+                                                    <div style={{ width: '60px' }} className="flex-shrink-0 flex items-center justify-center">
+                                                        <span className="text-sm font-semibold text-gray-900">
+                                                            {item.is_labour ? '-' : (item.packs_required || 0)}
+                                                        </span>
+                                                    </div>
 
-                                                        {/* Total */}
-                                                        <div className="col-span-2 flex items-center justify-end">
-                                                            <span className="text-sm font-semibold text-gray-900">
-                                                                ${item.line_sell.toFixed(2)}
-                                                            </span>
-                                                        </div>
+                                                    {/* Cost Price */}
+                                                    <div style={{ width: '90px' }} className="flex-shrink-0 flex items-center justify-end">
+                                                        <span className="text-sm text-gray-700">
+                                                            ${(item.cost_price || 0).toFixed(2)}
+                                                        </span>
+                                                    </div>
 
-                                                        {/* Delete */}
-                                                        <div className="col-span-1 flex items-center justify-center">
-                                                            <button
-                                                                onClick={() => handleRemoveLineItem(section.id, item.id)}
-                                                                className="p-1 text-red-500 hover:bg-red-50 rounded transition"
-                                                            >
-                                                                <Trash2 className="w-4 h-4" />
-                                                            </button>
-                                                        </div>
+                                                    {/* Sell Price (Editable) */}
+                                                    <div style={{ width: '90px' }} className="flex-shrink-0">
+                                                        <input
+                                                            type="number"
+                                                            step="0.01"
+                                                            value={item.sell_price?.toFixed(2) || '0.00'}
+                                                            onChange={(e) => handleLineItemSellPriceChange(section.id, item.id, parseFloat(e.target.value) || 0)}
+                                                            className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm text-right focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
+                                                        />
+                                                    </div>
+
+                                                    {/* GP% (Editable) */}
+                                                    <div style={{ width: '80px' }} className="flex-shrink-0">
+                                                        <input
+                                                            type="number"
+                                                            step="0.1"
+                                                            value={item.margin_percent?.toFixed(1) || '0.0'}
+                                                            onChange={(e) => handleLineItemMarginChange(section.id, item.id, parseFloat(e.target.value) || 0)}
+                                                            className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm text-right focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
+                                                        />
+                                                    </div>
+
+                                                    {/* Total */}
+                                                    <div style={{ width: '100px' }} className="flex-shrink-0 flex items-center justify-end">
+                                                        <span className="text-sm font-semibold text-gray-900">
+                                                            ${item.line_sell.toFixed(2)}
+                                                        </span>
+                                                    </div>
+
+                                                    {/* Delete */}
+                                                    <div style={{ width: '40px' }} className="flex-shrink-0 flex items-center justify-center">
+                                                        <button
+                                                            onClick={() => handleRemoveLineItem(section.id, item.id)}
+                                                            className="p-1 text-red-500 hover:bg-red-50 rounded transition"
+                                                        >
+                                                            <Trash2 className="w-4 h-4" />
+                                                        </button>
                                                     </div>
                                                 </div>
 
