@@ -724,7 +724,11 @@ export default function QuoteDetailPage() {
     };
 
     const filterProducts = (searchTerm: string) => {
-        if (!searchTerm || searchTerm.length < 2) return [];
+        // If no search term, show all products (up to 10)
+        if (!searchTerm || searchTerm.length === 0) return products.slice(0, 10);
+
+        // If search term is too short, don't filter yet
+        if (searchTerm.length < 2) return [];
 
         const term = searchTerm.toLowerCase();
         return products.filter(p =>
@@ -830,8 +834,6 @@ export default function QuoteDetailPage() {
                     total_sell_ex_gst: parseFloat(totals.totalSellExGST),
                     gst_amount: parseFloat(totals.gstAmount),
                     total_inc_gst: parseFloat(totals.totalIncGST),
-                    gross_profit: parseFloat(totals.grossProfit),
-                    gross_profit_percent: parseFloat(totals.grossProfitPercent),
                     subtotal: parseFloat(totals.totalSellExGST),
                     total_amount: parseFloat(totals.totalIncGST),
                     custom_product_margins: customProductMargins,
@@ -1436,9 +1438,9 @@ export default function QuoteDetailPage() {
                                                                 />
                                                                 <Search className="absolute right-2 top-1.5 w-4 h-4 text-gray-400" />
 
-                                                                {showProductSuggestions[`${section.id}-${item.id}`] && productSearch[`${section.id}-${item.id}`] && (
+                                                                {showProductSuggestions[`${section.id}-${item.id}`] && (
                                                                     <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                                                                        {filterProducts(productSearch[`${section.id}-${item.id}`]).map(p => (
+                                                                        {filterProducts(productSearch[`${section.id}-${item.id}`] || '').map(p => (
                                                                             <button
                                                                                 key={p.id}
                                                                                 onClick={() => selectProduct(section.id, item.id, p)}
@@ -1456,7 +1458,7 @@ export default function QuoteDetailPage() {
                                                                                 </div>
                                                                             </button>
                                                                         ))}
-                                                                        {filterProducts(productSearch[`${section.id}-${item.id}`]).length === 0 && (
+                                                                        {filterProducts(productSearch[`${section.id}-${item.id}`] || '').length === 0 && (
                                                                             <div className="px-3 py-2 text-sm text-gray-500">No products found</div>
                                                                         )}
                                                                     </div>
