@@ -9,29 +9,29 @@ export default function LayoutWrapper({
 }: {
   children: React.ReactNode
 }) {
-  const [isInIframe, setIsInIframe] = useState(false)
+  const [isEmbedded, setIsEmbedded] = useState(false)
 
   useEffect(() => {
-    // Check if the app is running inside an iframe
-    const checkIfInIframe = () => {
-      try {
-        return window.self !== window.top
-      } catch (e) {
-        return true
-      }
+    try {
+      const params = new URLSearchParams(window.location.search)
+      const embeddedParam = params.get('embedded') === 'true'
+      const iframeDetected = window.self !== window.top
+
+      setIsEmbedded(embeddedParam || iframeDetected)
+    } catch {
+      setIsEmbedded(false)
     }
-    setIsInIframe(checkIfInIframe())
   }, [])
 
   return (
-    <>
-      {/* Sidebar - Hidden when in iframe */}
-      {!isInIframe && <Sidebar />}
+    <div className="flex h-screen w-full">
+      {/* Sidebar */}
+      {!isEmbedded && <Sidebar />}
 
       {/* Main content area */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Header - Hidden when in iframe */}
-        {!isInIframe && (
+        {/* Header */}
+        {!isEmbedded && (
           <header className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-end shadow-sm">
             <HelpMenu />
           </header>
@@ -39,11 +39,17 @@ export default function LayoutWrapper({
 
         {/* Page content */}
         <main className="flex-1 overflow-y-auto">
-          <div className={`mx-auto w-full ${isInIframe ? 'max-w-full' : 'max-w-[90%]'} px-4 py-6`}>
+          <div
+            className={
+              isEmbedded
+                ? 'w-full px-2 py-4'
+                : 'mx-auto w-full max-w-[90%] px-4 py-6'
+            }
+          >
             {children}
           </div>
         </main>
       </div>
-    </>
+    </div>
   )
 }
