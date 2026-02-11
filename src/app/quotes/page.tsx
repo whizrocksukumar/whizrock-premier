@@ -124,7 +124,7 @@ export default function QuotesPage() {
             id,
             opportunity_id,
             opportunities!opportunity_id (
-              sales_rep_id,
+              team_member_id,
               follow_up_date,
               due_date
             )
@@ -231,9 +231,9 @@ export default function QuotesPage() {
             if (rep) {
               salesRepName = rep.name;
             }
-          } else if (quote.assessments?.opportunities?.sales_rep_id) {
+          } else if (quote.assessments?.opportunities?.team_member_id) {
             // Priority 2: Sales rep from opportunity (via assessment)
-            salesRepId = quote.assessments.opportunities.sales_rep_id;
+            salesRepId = quote.assessments.opportunities.team_member_id;
             const rep = salesReps.find(r => r.id === salesRepId);
             if (rep) {
               salesRepName = rep.name;
