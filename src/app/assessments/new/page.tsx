@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { Search, Plus, Trash2, X, Upload, Camera, AlertTriangle, Check, ChevronDown } from 'lucide-react';
+import { Search, Plus, Trash2, X, Upload, Camera, AlertTriangle, Check, ChevronDown, FileDown } from 'lucide-react';
 import ClientSelectorWithSites from '@/components/ClientSelectorWithSites';
 
 // ============================================
@@ -108,6 +108,9 @@ export default function CreateAssessmentPage() {
   const [selectedSite, setSelectedSite] = useState<Site | null>(null);
   const [salesRepId, setSalesRepId] = useState<string | null>(null);
   
+  // CRITICAL: Assessment Type
+  const [assessmentType, setAssessmentType] = useState<'retrofit' | 'eeca' | ''>('');
+  
   // Assessment Details
   const [assessmentNumber] = useState(generateAssessmentNumber());
   const [opportunity, setOpportunity] = useState('');
@@ -123,7 +126,114 @@ export default function CreateAssessmentPage() {
   const [removalRequired, setRemovalRequired] = useState(false);
   const [hazardsPresent, setHazardsPresent] = useState('');
   
-  // Assessment Areas
+  // EECA Eligibility (Section 3)
+  const [houseBuiltBefore2008, setHouseBuiltBefore2008] = useState<'yes' | 'no' | ''>('');
+  const [ownerOccupied, setOwnerOccupied] = useState<'yes' | 'no' | ''>('');
+  const [deprivationIndex57, setDeprivationIndex57] = useState<'yes' | 'no' | ''>('');
+  
+  // Homeowner Info (Section 4)
+  const [homeownerName, setHomeownerName] = useState('');
+  const [homeownerPhone, setHomeownerPhone] = useState('');
+  const [homeownerEmail, setHomeownerEmail] = useState('');
+  
+  // Homeowner Declaration (Section 5)
+  const [homeownerDeclaration1, setHomeownerDeclaration1] = useState(false);
+  const [homeownerDeclaration2, setHomeownerDeclaration2] = useState(false);
+  const [homeownerDeclarationDate, setHomeownerDeclarationDate] = useState('');
+  
+  // Property Checks (Section 6)
+  const [addressMatchesReferral, setAddressMatchesReferral] = useState<'yes' | 'no' | ''>('');
+  const [propertyHasCurtains, setPropertyHasCurtains] = useState<'yes' | 'no' | ''>('');
+  const [heatingSolution, setHeatingSolution] = useState('');
+  const [heatingInMainLiving, setHeatingInMainLiving] = useState<'yes' | 'no' | ''>('');
+  const [heatingWorkingAsked, setHeatingWorkingAsked] = useState<'yes' | 'no' | ''>('');
+  
+  // H&S Assessment (Section 7)
+  const [hsAssessmentCompleted, setHsAssessmentCompleted] = useState<'yes' | 'no' | ''>('');
+  const [hsRisksEliminated, setHsRisksEliminated] = useState<'yes' | 'no' | ''>('');
+  const [hsPersonnelReviewed, setHsPersonnelReviewed] = useState<'yes' | 'no' | ''>('');
+  const [hsSafetyConcerns, setHsSafetyConcerns] = useState('');
+  
+  // Ceiling - Current State (Section 8)
+  const [ceilingAccessible, setCeilingAccessible] = useState<'yes' | 'no' | ''>('');
+  const [ceilingExistingCoversThermal, setCeilingExistingCoversThermal] = useState<'yes' | 'no' | ''>('');
+  const [ceilingExistingAtLeast120mm, setCeilingExistingAtLeast120mm] = useState<'yes' | 'no' | ''>('');
+  const [ceilingDampDamaged, setCeilingDampDamaged] = useState<'yes' | 'no' | ''>('');
+  const [ceilingSignificantGaps, setCeilingSignificantGaps] = useState<'yes' | 'no' | ''>('');
+  const [ceilingClearancesMet, setCeilingClearancesMet] = useState<'yes' | 'no' | ''>('');
+  const [ceilingRequiresUpgrade, setCeilingRequiresUpgrade] = useState<'yes' | 'no' | ''>('');
+  
+  // Ceiling - Detailed (Section 9)
+  const [ceilingAccessSize, setCeilingAccessSize] = useState('');
+  const [ceilingNewAccessCanCreate, setCeilingNewAccessCanCreate] = useState<'yes' | 'no' | ''>('');
+  const [ceilingContractorCreateAccess, setCeilingContractorCreateAccess] = useState<'yes' | 'no' | ''>('');
+  const [ceilingAccessHeightMm, setCeilingAccessHeightMm] = useState('');
+  const [ceilingCavityApexHeightMm, setCeilingCavityApexHeightMm] = useState('');
+  const [ceilingLowAccessAreas, setCeilingLowAccessAreas] = useState<'yes' | 'no' | ''>('');
+  const [ceilingWaterIngress, setCeilingWaterIngress] = useState<'yes' | 'no' | ''>('');
+  const [ceilingDownlights, setCeilingDownlights] = useState<'yes' | 'no' | ''>('');
+  const [ceilingType, setCeilingType] = useState('');
+  const [ceilingSqm, setCeilingSqm] = useState('');
+  const [ceilingRemedialHours, setCeilingRemedialHours] = useState('');
+  const [ceilingComments, setCeilingComments] = useState('');
+  
+  // Ceiling Wall (Section 10)
+  const [ceilingWallPresent, setCeilingWallPresent] = useState<'yes' | 'no' | ''>('');
+  const [ceilingWallCavitiesAccessible, setCeilingWallCavitiesAccessible] = useState<'yes' | 'no' | ''>('');
+  const [ceilingWallExistingInsulation, setCeilingWallExistingInsulation] = useState<'yes' | 'no' | ''>('');
+  const [ceilingWallSqm, setCeilingWallSqm] = useState('');
+  const [pipeLaggingRequired, setPipeLaggingRequired] = useState('');
+  const [ceilingWallComments, setCeilingWallComments] = useState('');
+  
+  // Underfloor - Current State (Section 11)
+  const [underfloorAccessible, setUnderfloorAccessible] = useState<'yes' | 'no' | ''>('');
+  const [underfloorExistingCoversThermal, setUnderfloorExistingCoversThermal] = useState<'yes' | 'no' | ''>('');
+  const [underfloorExistingDamaged, setUnderfloorExistingDamaged] = useState<'yes' | 'no' | ''>('');
+  const [underfloorSignificantGaps, setUnderfloorSignificantGaps] = useState<'yes' | 'no' | ''>('');
+  const [underfloorClearancesMet, setUnderfloorClearancesMet] = useState<'yes' | 'no' | ''>('');
+  const [underfloorRequiresUpgrade, setUnderfloorRequiresUpgrade] = useState<'yes' | 'no' | ''>('');
+  
+  // Underfloor - Detailed (Section 12)
+  const [underfloorAccessSize, setUnderfloorAccessSize] = useState('');
+  const [underfloorNewAccessCanCreate, setUnderfloorNewAccessCanCreate] = useState<'yes' | 'no' | ''>('');
+  const [underfloorExistingInsulation, setUnderfloorExistingInsulation] = useState<'yes' | 'no' | ''>('');
+  const [underfloorPerimeterEnclosed, setUnderfloorPerimeterEnclosed] = useState<'yes' | 'no' | ''>('');
+  const [underfloorFoilUnderlay, setUnderfloorFoilUnderlay] = useState<'yes' | 'no' | ''>('');
+  const [underfloorLuminaires, setUnderfloorLuminaires] = useState<'yes' | 'no' | ''>('');
+  const [underfloorSqm, setUnderfloorSqm] = useState('');
+  const [underfloorComments, setUnderfloorComments] = useState('');
+  
+  // Subfloor Wall (Section 13)
+  const [subfloorWallPresent, setSubfloorWallPresent] = useState<'yes' | 'no' | ''>('');
+  const [subfloorWallCavitiesAccessible, setSubfloorWallCavitiesAccessible] = useState<'yes' | 'no' | ''>('');
+  const [subfloorWallSqm, setSubfloorWallSqm] = useState('');
+  const [subfloorWallComments, setSubfloorWallComments] = useState('');
+  
+  // GMB (Section 14 - EECA Only)
+  const [gmbPresent, setGmbPresent] = useState<'yes' | 'no' | ''>('');
+  const [gmbInstalledNzs4246, setGmbInstalledNzs4246] = useState<'yes' | 'no' | ''>('');
+  const [gmbUnderfloorPercentEnclosed, setGmbUnderfloorPercentEnclosed] = useState('');
+  const [gmbHomeownerOptOut, setGmbHomeownerOptOut] = useState<'yes' | 'no' | ''>('');
+  const [gmbSqm, setGmbSqm] = useState('');
+  
+  // Travel (Section 15 - EECA Only)
+  const [travelOver50km, setTravelOver50km] = useState<'yes' | 'no' | ''>('');
+  const [travelKmOver50, setTravelKmOver50] = useState('');
+  
+  // Homeowner Tasks (Section 16 - EECA Only)
+  const [homeownerRemoveObjects, setHomeownerRemoveObjects] = useState<'yes' | 'no' | ''>('');
+  const [homeownerFixLeaks, setHomeownerFixLeaks] = useState<'yes' | 'no' | ''>('');
+  
+  // Recommendations (Section 17)
+  const [enablingMeasuresComments, setEnablingMeasuresComments] = useState('');
+  const [additionalComments, setAdditionalComments] = useState('');
+  
+  // Assessor Declaration (Section 18)
+  const [assessorDeclaration, setAssessorDeclaration] = useState(false);
+  const [assessorName, setAssessorName] = useState('');
+  const [assessorDate, setAssessorDate] = useState('');
+  
+  // Assessment Areas (existing functionality)
   const [areas, setAreas] = useState<AssessmentArea[]>([createEmptyArea()]);
   
   // General Photos
@@ -147,11 +257,12 @@ export default function CreateAssessmentPage() {
   // ============================================
   useEffect(() => {
     loadReferenceData();
+    const today = new Date().toISOString().split('T')[0];
+    setAssessorDate(today);
   }, []);
 
   const loadReferenceData = async () => {
     try {
-      // Load app types
       const { data: appTypesData } = await supabase
         .from('app_types')
         .select('*')
@@ -159,36 +270,19 @@ export default function CreateAssessmentPage() {
         .order('sort_order');
       if (appTypesData) setAppTypes(appTypesData);
 
-      // Load installers from team_members
-      const { data: installersData, error: installersError } = await supabase
+      const { data: installersData } = await supabase
         .from('team_members')
         .select('id, first_name, last_name, email, role, status')
         .eq('role', 'Installer')
         .eq('status', 'active')
         .order('first_name');
+      if (installersData) setInstallers(installersData);
 
-      if (installersError) {
-        console.error('Error loading installers:', installersError);
-      }
-      if (installersData) {
-        console.log('Loaded installers:', installersData);
-        setInstallers(installersData);
-      }
-
-      // Load all wordings from assessment_wordings
-      const { data: wordingsData, error: wordingsError } = await supabase
+      const { data: wordingsData } = await supabase
         .from('assessment_wordings')
         .select('*')
         .order('wordings');
-
-      if (wordingsError) {
-        console.error('Error loading wordings:', wordingsError);
-      }
-      if (wordingsData) {
-        console.log('Loaded wordings count:', wordingsData.length);
-        console.log('First 3 wordings:', wordingsData.slice(0, 3));
-        setAllWordings(wordingsData);
-      }
+      if (wordingsData) setAllWordings(wordingsData);
     } catch (err) {
       console.error('Error loading reference data:', err);
     }
@@ -201,8 +295,6 @@ export default function CreateAssessmentPage() {
     setSelectedClient(client);
     setSelectedSite(site);
     setSalesRepId(repId);
-    
-    // Auto-populate property type from site if available
     if (site?.property_type) {
       setPropertyType(site.property_type);
     }
@@ -224,10 +316,7 @@ export default function CreateAssessmentPage() {
   const updateArea = (areaId: string, field: keyof AssessmentArea, value: any) => {
     setAreas(areas.map(area => {
       if (area.id !== areaId) return area;
-      
       const updated = { ...area, [field]: value };
-      
-      // If app_type changed, update name and color
       if (field === 'app_type_id' && value) {
         const appType = appTypes.find(at => at.id === value);
         if (appType) {
@@ -235,7 +324,6 @@ export default function CreateAssessmentPage() {
           updated.app_type_color = appType.color_hex;
         }
       }
-      
       return updated;
     }));
   };
@@ -245,13 +333,7 @@ export default function CreateAssessmentPage() {
   // ============================================
   const getFilteredWordings = (areaId: string) => {
     const search = wordingSearch[areaId]?.toLowerCase().trim() || '';
-
-    if (!search) {
-      // Show first 20 wordings when no search term
-      return allWordings.slice(0, 20);
-    }
-
-    // Search in the 'wordings' field
+    if (!search) return allWordings.slice(0, 20);
     return allWordings.filter(w => {
       const wordingText = w.wordings?.toLowerCase() || '';
       return wordingText.includes(search);
@@ -277,7 +359,6 @@ export default function CreateAssessmentPage() {
   const handleAreaPhotoUpload = (areaId: string, files: FileList | null) => {
     if (!files) return;
     const fileArray = Array.from(files);
-    
     setAreas(areas.map(area => {
       if (area.id !== areaId) return area;
       const newPhotos = [...area.photos, ...fileArray];
@@ -315,13 +396,16 @@ export default function CreateAssessmentPage() {
     e.preventDefault();
     setError(null);
 
-    // Validation
     if (!selectedClient) {
       setError('Please select a client');
       return;
     }
     if (!selectedSite) {
-      setError('Please select a site (required for assessments)');
+      setError('Please select a site');
+      return;
+    }
+    if (!assessmentType) {
+      setError('Please select assessment type (Retrofit or EECA)');
       return;
     }
     if (!installerId) {
@@ -336,8 +420,6 @@ export default function CreateAssessmentPage() {
     setIsSubmitting(true);
 
     try {
-      // 1. Create the assessment record
-      // Generate unique reference number
       const refNumber = `ASM-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 
       const { data: assessment, error: assessmentError } = await supabase
@@ -347,6 +429,7 @@ export default function CreateAssessmentPage() {
           client_id: selectedClient.id,
           site_id: selectedSite.id,
           assigned_installer_id: installerId,
+          assessment_type: assessmentType,
           scheduled_date: scheduledDate,
           scheduled_time: scheduledTime,
           property_type: propertyType || null,
@@ -357,6 +440,104 @@ export default function CreateAssessmentPage() {
           existing_insulation_type: existingInsulationType || null,
           removal_required: removalRequired,
           hazards_present: hazardsPresent || null,
+          
+          // EECA fields
+          house_built_before_2008: assessmentType === 'eeca' ? houseBuiltBefore2008 === 'yes' : null,
+          owner_occupied: assessmentType === 'eeca' ? ownerOccupied === 'yes' : null,
+          deprivation_index_5_7: assessmentType === 'eeca' ? deprivationIndex57 === 'yes' : null,
+          homeowner_name: assessmentType === 'eeca' ? homeownerName : null,
+          homeowner_phone: assessmentType === 'eeca' ? homeownerPhone : null,
+          homeowner_email: assessmentType === 'eeca' ? homeownerEmail : null,
+          homeowner_declaration_1: assessmentType === 'eeca' ? homeownerDeclaration1 : null,
+          homeowner_declaration_2: assessmentType === 'eeca' ? homeownerDeclaration2 : null,
+          homeowner_declaration_date: assessmentType === 'eeca' ? homeownerDeclarationDate : null,
+          address_matches_referral: assessmentType === 'eeca' ? addressMatchesReferral === 'yes' : null,
+          property_has_curtains: assessmentType === 'eeca' ? propertyHasCurtains === 'yes' : null,
+          heating_solution: assessmentType === 'eeca' ? heatingSolution : null,
+          heating_in_main_living: assessmentType === 'eeca' ? heatingInMainLiving === 'yes' : null,
+          heating_working_asked: assessmentType === 'eeca' ? heatingWorkingAsked === 'yes' : null,
+          
+          // H&S fields
+          hs_assessment_completed: hsAssessmentCompleted === 'yes',
+          hs_risks_eliminated: hsRisksEliminated === 'yes',
+          hs_personnel_reviewed: hsPersonnelReviewed === 'yes',
+          hs_safety_concerns: hsSafetyConcerns || null,
+          
+          // Ceiling fields
+          ceiling_accessible: ceilingAccessible === 'yes',
+          ceiling_existing_covers_thermal: ceilingExistingCoversThermal === 'yes',
+          ceiling_existing_at_least_120mm: ceilingExistingAtLeast120mm === 'yes',
+          ceiling_damp_damaged: ceilingDampDamaged === 'yes',
+          ceiling_significant_gaps: ceilingSignificantGaps === 'yes',
+          ceiling_clearances_met: ceilingClearancesMet === 'yes',
+          ceiling_requires_upgrade: ceilingRequiresUpgrade === 'yes',
+          ceiling_access_size: ceilingAccessSize || null,
+          ceiling_new_access_can_create: ceilingNewAccessCanCreate === 'yes',
+          ceiling_contractor_create_access: ceilingContractorCreateAccess === 'yes',
+          ceiling_access_height_mm: ceilingAccessHeightMm ? parseFloat(ceilingAccessHeightMm) : null,
+          ceiling_cavity_apex_height_mm: ceilingCavityApexHeightMm ? parseFloat(ceilingCavityApexHeightMm) : null,
+          ceiling_low_access_areas: ceilingLowAccessAreas === 'yes',
+          ceiling_water_ingress: ceilingWaterIngress === 'yes',
+          ceiling_downlights: ceilingDownlights === 'yes',
+          ceiling_type: ceilingType || null,
+          ceiling_sqm: ceilingSqm ? parseFloat(ceilingSqm) : null,
+          ceiling_remedial_hours: ceilingRemedialHours ? parseFloat(ceilingRemedialHours) : null,
+          ceiling_comments: ceilingComments || null,
+          
+          // Ceiling wall fields
+          ceiling_wall_present: ceilingWallPresent === 'yes',
+          ceiling_wall_cavities_accessible: ceilingWallCavitiesAccessible === 'yes',
+          ceiling_wall_existing_insulation: ceilingWallExistingInsulation === 'yes',
+          ceiling_wall_sqm: ceilingWallSqm ? parseFloat(ceilingWallSqm) : null,
+          pipe_lagging_required: pipeLaggingRequired || null,
+          ceiling_wall_comments: ceilingWallComments || null,
+          
+          // Underfloor fields
+          underfloor_accessible: underfloorAccessible === 'yes',
+          underfloor_existing_covers_thermal: underfloorExistingCoversThermal === 'yes',
+          underfloor_existing_damaged: underfloorExistingDamaged === 'yes',
+          underfloor_significant_gaps: underfloorSignificantGaps === 'yes',
+          underfloor_clearances_met: underfloorClearancesMet === 'yes',
+          underfloor_requires_upgrade: underfloorRequiresUpgrade === 'yes',
+          underfloor_access_size: underfloorAccessSize || null,
+          underfloor_new_access_can_create: underfloorNewAccessCanCreate === 'yes',
+          underfloor_existing_insulation: underfloorExistingInsulation === 'yes',
+          underfloor_perimeter_enclosed: underfloorPerimeterEnclosed === 'yes',
+          underfloor_foil_underlay: underfloorFoilUnderlay === 'yes',
+          underfloor_luminaires: underfloorLuminaires === 'yes',
+          underfloor_sqm: underfloorSqm ? parseFloat(underfloorSqm) : null,
+          underfloor_comments: underfloorComments || null,
+          
+          // Subfloor wall fields
+          subfloor_wall_present: subfloorWallPresent === 'yes',
+          subfloor_wall_cavities_accessible: subfloorWallCavitiesAccessible === 'yes',
+          subfloor_wall_sqm: subfloorWallSqm ? parseFloat(subfloorWallSqm) : null,
+          subfloor_wall_comments: subfloorWallComments || null,
+          
+          // GMB fields (EECA only)
+          gmb_present: assessmentType === 'eeca' ? gmbPresent === 'yes' : null,
+          gmb_installed_nzs_4246: assessmentType === 'eeca' ? gmbInstalledNzs4246 === 'yes' : null,
+          gmb_underfloor_percent_enclosed: assessmentType === 'eeca' && gmbUnderfloorPercentEnclosed ? parseFloat(gmbUnderfloorPercentEnclosed) : null,
+          gmb_homeowner_opt_out: assessmentType === 'eeca' ? gmbHomeownerOptOut === 'yes' : null,
+          gmb_sqm: assessmentType === 'eeca' && gmbSqm ? parseFloat(gmbSqm) : null,
+          
+          // Travel fields (EECA only)
+          travel_over_50km: assessmentType === 'eeca' ? travelOver50km === 'yes' : null,
+          travel_km_over_50: assessmentType === 'eeca' && travelKmOver50 ? parseFloat(travelKmOver50) : null,
+          
+          // Homeowner tasks (EECA only)
+          homeowner_remove_objects: assessmentType === 'eeca' ? homeownerRemoveObjects === 'yes' : null,
+          homeowner_fix_leaks: assessmentType === 'eeca' ? homeownerFixLeaks === 'yes' : null,
+          
+          // Recommendations
+          enabling_measures_comments: enablingMeasuresComments || null,
+          additional_comments: additionalComments || null,
+          
+          // Assessor declaration
+          assessor_declaration: assessorDeclaration,
+          assessor_name: assessorName || null,
+          assessor_date: assessorDate || null,
+          
           notes: generalNotes || null,
           status: 'Scheduled',
         })
@@ -365,10 +546,10 @@ export default function CreateAssessmentPage() {
 
       if (assessmentError) throw assessmentError;
 
-      // 2. Create assessment areas
+      // Create assessment areas
       if (assessment && areas.length > 0) {
         const areasToInsert = areas
-          .filter(a => a.app_type_name) // Only insert areas with area type selected
+          .filter(a => a.app_type_name)
           .map((area, index) => ({
             assessment_id: assessment.id,
             area_name: area.app_type_name || null,
@@ -383,17 +564,11 @@ export default function CreateAssessmentPage() {
           const { error: areasError } = await supabase
             .from('assessment_areas')
             .insert(areasToInsert);
-
           if (areasError) throw areasError;
         }
       }
 
-      // 3. Upload photos (if Supabase storage is configured)
-      // For now, we'll skip photo upload - can be added later
-
       setSuccess(true);
-      
-      // Redirect after 1.5 seconds
       setTimeout(() => {
         router.push('/assessments');
       }, 1500);
@@ -407,18 +582,59 @@ export default function CreateAssessmentPage() {
   };
 
   // ============================================
+  // YES/NO RADIO COMPONENT
+  // ============================================
+  const YesNoRadio = ({ 
+    name, 
+    value, 
+    onChange, 
+    label 
+  }: { 
+    name: string; 
+    value: 'yes' | 'no' | ''; 
+    onChange: (val: 'yes' | 'no') => void;
+    label: string;
+  }) => (
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-2">{label}</label>
+      <div className="flex gap-4">
+        <label className="flex items-center gap-1.5 cursor-pointer">
+          <input
+            type="radio"
+            name={name}
+            value="yes"
+            checked={value === 'yes'}
+            onChange={() => onChange('yes')}
+            className="text-[#0066CC] focus:ring-[#0066CC]"
+          />
+          <span className="text-sm">Yes</span>
+        </label>
+        <label className="flex items-center gap-1.5 cursor-pointer">
+          <input
+            type="radio"
+            name={name}
+            value="no"
+            checked={value === 'no'}
+            onChange={() => onChange('no')}
+            className="text-[#0066CC] focus:ring-[#0066CC]"
+          />
+          <span className="text-sm">No</span>
+        </label>
+      </div>
+    </div>
+  );
+
+  // ============================================
   // RENDER
   // ============================================
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-[1400px] mx-auto">
-        {/* Header */}
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-gray-900">Create New Assessment</h1>
           <p className="text-gray-600">Assessment #{assessmentNumber}</p>
         </div>
 
-        {/* Success Message */}
         {success && (
           <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2">
             <Check className="w-5 h-5 text-green-600" />
@@ -426,7 +642,6 @@ export default function CreateAssessmentPage() {
           </div>
         )}
 
-        {/* Error Message */}
         {error && (
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
             <AlertTriangle className="w-5 h-5 text-red-600" />
@@ -438,21 +653,17 @@ export default function CreateAssessmentPage() {
         )}
 
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* ============================================ */}
-          {/* SECTION 1: CLIENT & SITE SELECTION */}
-          {/* ============================================ */}
+          
+          {/* SECTION 1: CLIENT & SITE */}
           <div className="bg-white rounded-lg shadow p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b border-[#0066CC]">
-              1. Client & Site Selection
-              <span className="text-red-500 ml-1">*</span>
+              1. Client & Site Selection <span className="text-red-500 ml-1">*</span>
             </h2>
-            
             <ClientSelectorWithSites
               onClientAndSiteSelected={handleClientAndSiteSelected}
               selectedClientId={selectedClient?.id}
               selectedSiteId={selectedSite?.id}
             />
-            
             {selectedClient && !selectedSite && (
               <p className="mt-2 text-amber-600 text-sm flex items-center gap-1">
                 <AlertTriangle className="w-4 h-4" />
@@ -461,20 +672,55 @@ export default function CreateAssessmentPage() {
             )}
           </div>
 
-          {/* ============================================ */}
           {/* SECTION 2: ASSESSMENT DETAILS */}
-          {/* ============================================ */}
           <div className="bg-white rounded-lg shadow p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b border-[#0066CC]">
               2. Assessment Details
             </h2>
             
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Opportunity (text input) */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Opportunity Reference
+            {/* ASSESSMENT TYPE - CRITICAL */}
+            <div className="mb-6 p-4 bg-blue-50 border-2 border-blue-300 rounded-lg">
+              <label className="block text-sm font-medium text-gray-900 mb-3">
+                Assessment Type <span className="text-red-500">*</span>
+              </label>
+              <div className="flex gap-6">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="assessmentType"
+                    value="retrofit"
+                    checked={assessmentType === 'retrofit'}
+                    onChange={() => setAssessmentType('retrofit')}
+                    required
+                    className="w-5 h-5 text-[#0066CC] focus:ring-[#0066CC]"
+                  />
+                  <span className="text-sm font-medium">Retrofit (Private)</span>
                 </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="assessmentType"
+                    value="eeca"
+                    checked={assessmentType === 'eeca'}
+                    onChange={() => setAssessmentType('eeca')}
+                    required
+                    className="w-5 h-5 text-[#0066CC] focus:ring-[#0066CC]"
+                  />
+                  <span className="text-sm font-medium">EECA Subsidy</span>
+                </label>
+              </div>
+              <p className="text-xs text-gray-600 mt-2">
+                {assessmentType === 'eeca' 
+                  ? '✓ Full EECA sections will be shown (18 total)'
+                  : assessmentType === 'retrofit'
+                  ? '✓ Retrofit sections only (11 total)'
+                  : 'Please select to continue'}
+              </p>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Opportunity Reference</label>
                 <input
                   type="text"
                   value={opportunity}
@@ -484,7 +730,6 @@ export default function CreateAssessmentPage() {
                 />
               </div>
 
-              {/* Installer */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Assigned Installer <span className="text-red-500">*</span>
@@ -504,7 +749,6 @@ export default function CreateAssessmentPage() {
                 </select>
               </div>
 
-              {/* Scheduled Date */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Scheduled Date <span className="text-red-500">*</span>
@@ -518,7 +762,6 @@ export default function CreateAssessmentPage() {
                 />
               </div>
 
-              {/* Scheduled Time */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Scheduled Time <span className="text-red-500">*</span>
@@ -532,11 +775,8 @@ export default function CreateAssessmentPage() {
                 />
               </div>
 
-              {/* Property Type */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Property Type
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Property Type</label>
                 <select
                   value={propertyType}
                   onChange={(e) => setPropertyType(e.target.value)}
@@ -552,11 +792,8 @@ export default function CreateAssessmentPage() {
                 </select>
               </div>
 
-              {/* Year Built */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Year Built
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Year Built</label>
                 <input
                   type="number"
                   value={yearBuilt}
@@ -568,11 +805,8 @@ export default function CreateAssessmentPage() {
                 />
               </div>
 
-              {/* Estimated Size */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Estimated Size (m²)
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Estimated Size (m²)</label>
                 <input
                   type="number"
                   value={estimatedSize}
@@ -583,11 +817,8 @@ export default function CreateAssessmentPage() {
                 />
               </div>
 
-              {/* Site Access Difficulty */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Site Access Difficulty
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Site Access Difficulty</label>
                 <select
                   value={siteAccessDifficulty}
                   onChange={(e) => setSiteAccessDifficulty(e.target.value)}
@@ -601,26 +832,19 @@ export default function CreateAssessmentPage() {
                 </select>
               </div>
 
-              {/* Crawl Space Height */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Crawl Space Height (cm)
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Crawl Space Height (cm)</label>
                 <input
                   type="number"
                   value={crawlSpaceHeight}
                   onChange={(e) => setCrawlSpaceHeight(e.target.value)}
                   placeholder="e.g., 45"
-                  step="1"
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
                 />
               </div>
 
-              {/* Existing Insulation Type */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Existing Insulation Type
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Existing Insulation Type</label>
                 <input
                   type="text"
                   value={existingInsulationType}
@@ -630,7 +854,6 @@ export default function CreateAssessmentPage() {
                 />
               </div>
 
-              {/* Removal Required */}
               <div className="flex items-center pt-6">
                 <input
                   type="checkbox"
@@ -644,11 +867,8 @@ export default function CreateAssessmentPage() {
                 </label>
               </div>
 
-              {/* Hazards Present */}
               <div className="md:col-span-3">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Hazards Present
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Hazards Present</label>
                 <textarea
                   value={hazardsPresent}
                   onChange={(e) => setHazardsPresent(e.target.value)}
@@ -660,373 +880,369 @@ export default function CreateAssessmentPage() {
             </div>
           </div>
 
-          {/* ============================================ */}
-          {/* SECTION 3: ASSESSMENT AREAS */}
-          {/* ============================================ */}
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center justify-between mb-4 pb-2 border-b border-[#0066CC]">
-              <h2 className="text-lg font-semibold text-gray-900">
-                3. Assessment Areas
+          {/* EECA SECTION 3: ELIGIBILITY */}
+          {assessmentType === 'eeca' && (
+            <div className="bg-white rounded-lg shadow p-6 border-l-4 border-amber-500">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b border-[#0066CC]">
+                3. EECA Eligibility <span className="ml-2 text-xs bg-amber-100 text-amber-800 px-2 py-1 rounded">EECA Only</span>
               </h2>
-              <button
-                type="button"
-                onClick={addArea}
-                className="flex items-center gap-1 px-3 py-1.5 text-sm bg-[#0066CC] text-white rounded-lg hover:bg-[#0052A3] transition"
-              >
-                <Plus className="w-4 h-4" />
-                Add Area
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              {areas.map((area, index) => (
-                <div
-                  key={area.id}
-                  className="border rounded-lg p-4"
-                  style={{ borderLeftWidth: '4px', borderLeftColor: area.app_type_color || '#6B7280' }}
-                >
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="font-medium text-gray-900">Area {index + 1}</h3>
-                    {areas.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => removeArea(area.id)}
-                        className="text-red-500 hover:text-red-700 text-sm flex items-center gap-1"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                        Remove
-                      </button>
-                    )}
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    {/* Area Type */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Area Type
-                      </label>
-                      <select
-                        value={area.app_type_id || ''}
-                        onChange={(e) => updateArea(area.id, 'app_type_id', e.target.value || null)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
-                      >
-                        <option value="">Select...</option>
-                        {appTypes.map(at => (
-                          <option key={at.id} value={at.id}>
-                            {at.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {/* Square Metres */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Square Metres
-                      </label>
-                      <input
-                        type="number"
-                        value={area.area_sqm || ''}
-                        onChange={(e) => updateArea(area.id, 'area_sqm', parseFloat(e.target.value) || 0)}
-                        placeholder="0"
-                        step="0.01"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
-                      />
-                    </div>
-
-                    {/* Wording */}
-                    <div className="md:col-span-2 relative">
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Wording
-                      </label>
-                      <div className="relative">
-                        <input
-                          type="text"
-                          value={area.wording_text || wordingSearch[area.id] || ''}
-                          onChange={(e) => {
-                            const value = e.target.value;
-                            setWordingSearch({ ...wordingSearch, [area.id]: value });
-                            setShowWordingDropdown(area.id);
-                            if (!value) {
-                              updateArea(area.id, 'wording_id', null);
-                              updateArea(area.id, 'wording_text', '');
-                            }
-                          }}
-                          onFocus={() => setShowWordingDropdown(area.id)}
-                          placeholder="Type to search wordings..."
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
-                        />
-                        <Search className="absolute right-3 top-2.5 w-4 h-4 text-gray-400 pointer-events-none" />
-                      </div>
-
-                      {/* Wording Dropdown */}
-                      {showWordingDropdown === area.id && (
-                        <div
-                          className="absolute left-0 right-0 top-full mt-1 z-50 bg-white border border-gray-300 rounded-lg shadow-lg max-h-80 overflow-y-auto"
-                          onMouseDown={(e) => e.preventDefault()}
-                        >
-                          {getFilteredWordings(area.id).length > 0 ? (
-                            <div>
-                              {getFilteredWordings(area.id).map(wording => (
-                                <button
-                                  key={wording.id}
-                                  type="button"
-                                  onClick={() => {
-                                    updateArea(area.id, 'wording_id', wording.id);
-                                    updateArea(area.id, 'wording_text', wording.wordings);
-                                    setWordingSearch({ ...wordingSearch, [area.id]: '' });
-                                    setShowWordingDropdown(null);
-                                  }}
-                                  className="w-full px-4 py-3 text-left hover:bg-blue-50 border-b border-gray-100 last:border-0 transition-colors"
-                                >
-                                  <div className="font-medium text-gray-900">{wording.wordings}</div>
-                                  <div className="flex gap-2 mt-1">
-                                    {wording.area_label && (
-                                      <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded">
-                                        {wording.area_label}
-                                      </span>
-                                    )}
-                                    {wording.result_type && (
-                                      <span className={`text-xs px-2 py-0.5 rounded font-medium ${
-                                        wording.result_type === 'PASS' ? 'bg-green-100 text-green-700' :
-                                        wording.result_type === 'FAIL' ? 'bg-red-100 text-red-700' :
-                                        wording.result_type === 'EXEMPT' ? 'bg-amber-100 text-amber-700' :
-                                        'bg-gray-100 text-gray-700'
-                                      }`}>
-                                        {wording.result_type}
-                                      </span>
-                                    )}
-                                  </div>
-                                </button>
-                              ))}
-                              {getFilteredWordings(area.id).length >= 20 && (
-                                <div className="px-4 py-2 text-xs text-gray-500 bg-gray-50 border-t">
-                                  Showing first 20 results. Type more to refine search.
-                                </div>
-                              )}
-                            </div>
-                          ) : (
-                            <div className="px-4 py-8 text-center text-gray-500">
-                              {wordingSearch[area.id] ? 'No wordings found' : 'Start typing to search...'}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Result Type */}
-                    <div className="md:col-span-2">
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Result
-                      </label>
-                      <div className="flex gap-4">
-                        {(['Pass', 'Fail', 'Exempt', 'Pending'] as const).map(result => (
-                          <label key={result} className="flex items-center gap-1.5 cursor-pointer">
-                            <input
-                              type="radio"
-                              name={`result-${area.id}`}
-                              value={result}
-                              checked={area.result_type === result}
-                              onChange={(e) => updateArea(area.id, 'result_type', e.target.value)}
-                              className="text-[#0066CC] focus:ring-[#0066CC]"
-                            />
-                            <span className={`text-sm ${
-                              result === 'Pass' ? 'text-green-600' :
-                              result === 'Fail' ? 'text-red-600' :
-                              result === 'Exempt' ? 'text-amber-600' :
-                              'text-gray-600'
-                            }`}>
-                              {result}
-                            </span>
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Notes */}
-                    <div className="md:col-span-2">
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Notes
-                      </label>
-                      <textarea
-                        value={area.notes}
-                        onChange={(e) => updateArea(area.id, 'notes', e.target.value)}
-                        placeholder="Area-specific notes..."
-                        rows={2}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
-                      />
-                    </div>
-
-                    {/* Area Photos */}
-                    <div className="md:col-span-4">
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Photos for this area
-                      </label>
-                      <div className="flex flex-wrap gap-2">
-                        {area.photoUrls.map((url, photoIndex) => (
-                          <div key={photoIndex} className="relative w-20 h-20 group">
-                            <img
-                              src={url}
-                              alt={`Area photo ${photoIndex + 1}`}
-                              className="w-full h-full object-cover rounded-lg border"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => removeAreaPhoto(area.id, photoIndex)}
-                              className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition"
-                            >
-                              <X className="w-3 h-3" />
-                            </button>
-                          </div>
-                        ))}
-                        <label className="w-20 h-20 flex flex-col items-center justify-center border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-[#0066CC] hover:bg-gray-50 transition">
-                          <Camera className="w-5 h-5 text-gray-400" />
-                          <span className="text-xs text-gray-400 mt-1">Add</span>
-                          <input
-                            type="file"
-                            accept="image/*"
-                            multiple
-                            onChange={(e) => handleAreaPhotoUpload(area.id, e.target.files)}
-                            className="hidden"
-                          />
-                        </label>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* ============================================ */}
-          {/* SECTION 4: GENERAL PHOTOS */}
-          {/* ============================================ */}
-          <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b border-[#0066CC]">
-              4. General Photos
-            </h2>
-            
-            <div className="flex items-center gap-4 mb-4">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={noPhotosToUpload}
-                  onChange={(e) => {
-                    setNoPhotosToUpload(e.target.checked);
-                    if (e.target.checked) {
-                      setGeneralPhotos([]);
-                      setGeneralPhotoUrls([]);
-                    }
-                  }}
-                  className="w-4 h-4 text-[#0066CC] border-gray-300 rounded focus:ring-[#0066CC]"
-                />
-                <span className="text-sm text-gray-700">No photos to upload</span>
-              </label>
-            </div>
-
-            {!noPhotosToUpload && (
-              <div className="flex flex-wrap gap-2">
-                {generalPhotoUrls.map((url, index) => (
-                  <div key={index} className="relative w-24 h-24 group">
-                    <img
-                      src={url}
-                      alt={`General photo ${index + 1}`}
-                      className="w-full h-full object-cover rounded-lg border"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => removeGeneralPhoto(index)}
-                      className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  </div>
-                ))}
-                <label className="w-24 h-24 flex flex-col items-center justify-center border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-[#0066CC] hover:bg-gray-50 transition">
-                  <Upload className="w-6 h-6 text-gray-400" />
-                  <span className="text-xs text-gray-400 mt-1">Upload</span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    onChange={(e) => handleGeneralPhotoUpload(e.target.files)}
-                    className="hidden"
-                  />
-                </label>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <YesNoRadio name="houseBefore2008" value={houseBuiltBefore2008} onChange={setHouseBuiltBefore2008} label="House built before 2008?" />
+                <YesNoRadio name="ownerOccupied" value={ownerOccupied} onChange={setOwnerOccupied} label="Owner Occupied?" />
+                <YesNoRadio name="deprivationIndex" value={deprivationIndex57} onChange={setDeprivationIndex57} label="Deprivation Index 5-7?" />
               </div>
-            )}
-          </div>
+            </div>
+          )}
 
-          {/* ============================================ */}
-          {/* SECTION 5: OVERALL RESULT & NOTES */}
-          {/* ============================================ */}
+          {/* EECA SECTION 4: HOMEOWNER INFO */}
+          {assessmentType === 'eeca' && (
+            <div className="bg-white rounded-lg shadow p-6 border-l-4 border-amber-500">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b border-[#0066CC]">
+                4. Homeowner Information <span className="ml-2 text-xs bg-amber-100 text-amber-800 px-2 py-1 rounded">EECA Only</span>
+              </h2>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Homeowner Name</label>
+                  <input type="text" value={homeownerName} onChange={(e) => setHomeownerName(e.target.value)} placeholder="Full name" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0066CC] focus:border-transparent" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Homeowner Phone</label>
+                  <input type="tel" value={homeownerPhone} onChange={(e) => setHomeownerPhone(e.target.value)} placeholder="021 XXX XXXX" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0066CC] focus:border-transparent" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Homeowner Email</label>
+                  <input type="email" value={homeownerEmail} onChange={(e) => setHomeownerEmail(e.target.value)} placeholder="email@example.com" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0066CC] focus:border-transparent" />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* EECA SECTION 5: HOMEOWNER DECLARATION */}
+          {assessmentType === 'eeca' && (
+            <div className="bg-white rounded-lg shadow p-6 border-l-4 border-amber-500">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b border-[#0066CC]">
+                5. Homeowner Declaration <span className="ml-2 text-xs bg-amber-100 text-amber-800 px-2 py-1 rounded">EECA Only</span>
+              </h2>
+              <div className="space-y-4">
+                <label className="flex items-start gap-2 cursor-pointer">
+                  <input type="checkbox" checked={homeownerDeclaration1} onChange={(e) => setHomeownerDeclaration1(e.target.checked)} className="mt-1 w-4 h-4 text-[#0066CC] border-gray-300 rounded focus:ring-[#0066CC]" />
+                  <span className="text-sm text-gray-700">I confirm the above details are correct</span>
+                </label>
+                <label className="flex items-start gap-2 cursor-pointer">
+                  <input type="checkbox" checked={homeownerDeclaration2} onChange={(e) => setHomeownerDeclaration2(e.target.checked)} className="mt-1 w-4 h-4 text-[#0066CC] border-gray-300 rounded focus:ring-[#0066CC]" />
+                  <span className="text-sm text-gray-700">I confirm I am the owner and occupier of this property</span>
+                </label>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Declaration Date</label>
+                  <input type="date" value={homeownerDeclarationDate} onChange={(e) => setHomeownerDeclarationDate(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0066CC] focus:border-transparent" />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* EECA SECTION 6: PROPERTY CHECKS */}
+          {assessmentType === 'eeca' && (
+            <div className="bg-white rounded-lg shadow p-6 border-l-4 border-amber-500">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b border-[#0066CC]">
+                6. Property Checks <span className="ml-2 text-xs bg-amber-100 text-amber-800 px-2 py-1 rounded">EECA Only</span>
+              </h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <YesNoRadio name="addressMatch" value={addressMatchesReferral} onChange={setAddressMatchesReferral} label="Does address match referral?" />
+                <YesNoRadio name="curtains" value={propertyHasCurtains} onChange={setPropertyHasCurtains} label="Property have Curtains?" />
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Heating Solution</label>
+                  <select value={heatingSolution} onChange={(e) => setHeatingSolution(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0066CC] focus:border-transparent">
+                    <option value="">Select...</option>
+                    <option value="None">None</option>
+                    <option value="Heat Pump">Heat Pump</option>
+                    <option value="Gas">Gas</option>
+                    <option value="Wood">Wood</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+                <YesNoRadio name="heatingMain" value={heatingInMainLiving} onChange={setHeatingInMainLiving} label="Heating in main living space?" />
+              </div>
+            </div>
+          )}
+
+          {/* SECTION 7: H&S ASSESSMENT */}
           <div className="bg-white rounded-lg shadow p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b border-[#0066CC]">
-              5. Overall Result & Notes
+              {assessmentType === 'eeca' ? '7' : '3'}. H&S Assessment
             </h2>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Overall Result */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <YesNoRadio name="hsComplete" value={hsAssessmentCompleted} onChange={setHsAssessmentCompleted} label="H&S assessment completed?" />
+              <YesNoRadio name="hsRisks" value={hsRisksEliminated} onChange={setHsRisksEliminated} label="Risks eliminated?" />
+              <YesNoRadio name="hsPersonnel" value={hsPersonnelReviewed} onChange={setHsPersonnelReviewed} label="Personnel reviewed H&S?" />
+              <div className="md:col-span-3">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Safety Concerns</label>
+                <textarea value={hsSafetyConcerns} onChange={(e) => setHsSafetyConcerns(e.target.value)} placeholder="Describe any safety concerns..." rows={3} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0066CC] focus:border-transparent" />
+              </div>
+            </div>
+          </div>
+
+          {/* SECTION 8: CEILING CURRENT STATE */}
+          <div className="bg-white rounded-lg shadow p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b border-[#0066CC]">
+              {assessmentType === 'eeca' ? '8' : '4'}. Ceiling - Current State
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <YesNoRadio name="ceilingAccess" value={ceilingAccessible} onChange={setCeilingAccessible} label="Is ceiling accessible?" />
+              <YesNoRadio name="ceilingThermal" value={ceilingExistingCoversThermal} onChange={setCeilingExistingCoversThermal} label="Existing covers thermal envelope?" />
+              <YesNoRadio name="ceiling120mm" value={ceilingExistingAtLeast120mm} onChange={setCeilingExistingAtLeast120mm} label="Existing at least 120mm?" />
+              <YesNoRadio name="ceilingDamp" value={ceilingDampDamaged} onChange={setCeilingDampDamaged} label="Existing damp/damaged?" />
+              <YesNoRadio name="ceilingGaps" value={ceilingSignificantGaps} onChange={setCeilingSignificantGaps} label="Significant gaps?" />
+              <YesNoRadio name="ceilingClearance" value={ceilingClearancesMet} onChange={setCeilingClearancesMet} label="Clearances met?" />
+              <YesNoRadio name="ceilingUpgrade" value={ceilingRequiresUpgrade} onChange={setCeilingRequiresUpgrade} label="Requires upgrading?" />
+            </div>
+          </div>
+
+          {/* SECTION 9: CEILING DETAILED */}
+          <div className="bg-white rounded-lg shadow p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b border-[#0066CC]">
+              {assessmentType === 'eeca' ? '9' : '5'}. Ceiling - Detailed
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Overall Result
-                </label>
-                <div className="flex gap-4">
-                  {(['Pass', 'Fail', 'Exempt', 'Pending'] as const).map(result => (
-                    <label key={result} className="flex items-center gap-1.5 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="overallResult"
-                        value={result}
-                        checked={overallResult === result}
-                        onChange={(e) => setOverallResult(e.target.value as typeof overallResult)}
-                        className="text-[#0066CC] focus:ring-[#0066CC]"
-                      />
-                      <span className={`text-sm font-medium ${
-                        result === 'Pass' ? 'text-green-600' :
-                        result === 'Fail' ? 'text-red-600' :
-                        result === 'Exempt' ? 'text-amber-600' :
-                        'text-gray-600'
-                      }`}>
-                        {result}
-                      </span>
-                    </label>
-                  ))}
-                </div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Access size</label>
+                <select value={ceilingAccessSize} onChange={(e) => setCeilingAccessSize(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0066CC] focus:border-transparent">
+                  <option value="">Select...</option>
+                  <option value="400x600">400x600</option>
+                  <option value="500x500">500x500</option>
+                  <option value="600x600">600x600</option>
+                  <option value="Other">Other</option>
+                </select>
               </div>
-
-              {/* General Notes */}
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  General Notes
-                </label>
-                <textarea
-                  value={generalNotes}
-                  onChange={(e) => setGeneralNotes(e.target.value)}
-                  placeholder="Any additional notes about the assessment..."
-                  rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0066CC] focus:border-transparent"
-                />
+              <YesNoRadio name="ceilingNewAccess" value={ceilingNewAccessCanCreate} onChange={setCeilingNewAccessCanCreate} label="New access can be created?" />
+              <YesNoRadio name="ceilingContractor" value={ceilingContractorCreateAccess} onChange={setCeilingContractorCreateAccess} label="Contractor to create access?" />
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Access height (mm)</label>
+                <input type="number" value={ceilingAccessHeightMm} onChange={(e) => setCeilingAccessHeightMm(e.target.value)} placeholder="e.g., 500" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0066CC] focus:border-transparent" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Cavity apex height (mm)</label>
+                <input type="number" value={ceilingCavityApexHeightMm} onChange={(e) => setCeilingCavityApexHeightMm(e.target.value)} placeholder="e.g., 600" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0066CC] focus:border-transparent" />
+              </div>
+              <YesNoRadio name="ceilingLowAccess" value={ceilingLowAccessAreas} onChange={setCeilingLowAccessAreas} label="Low access areas?" />
+              <YesNoRadio name="ceilingWater" value={ceilingWaterIngress} onChange={setCeilingWaterIngress} label="Water ingress?" />
+              <YesNoRadio name="ceilingDownlights" value={ceilingDownlights} onChange={setCeilingDownlights} label="Downlights present?" />
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Ceiling Type</label>
+                <select value={ceilingType} onChange={(e) => setCeilingType(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0066CC] focus:border-transparent">
+                  <option value="">Select...</option>
+                  <option value="Gib">Gib</option>
+                  <option value="Timber">Timber</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Square meters</label>
+                <input type="number" value={ceilingSqm} onChange={(e) => setCeilingSqm(e.target.value)} placeholder="0" step="0.01" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0066CC] focus:border-transparent" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Remedial hours</label>
+                <input type="number" value={ceilingRemedialHours} onChange={(e) => setCeilingRemedialHours(e.target.value)} placeholder="0" step="0.5" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0066CC] focus:border-transparent" />
+              </div>
+              <div className="md:col-span-3">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Comments</label>
+                <textarea value={ceilingComments} onChange={(e) => setCeilingComments(e.target.value)} rows={2} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0066CC] focus:border-transparent" />
               </div>
             </div>
           </div>
 
-          {/* ============================================ */}
+          {/* SECTION 10: CEILING WALL */}
+          <div className="bg-white rounded-lg shadow p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b border-[#0066CC]">
+              {assessmentType === 'eeca' ? '10' : '6'}. Ceiling Wall
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <YesNoRadio name="ceilingWall" value={ceilingWallPresent} onChange={setCeilingWallPresent} label="Walls in ceiling space?" />
+              <YesNoRadio name="ceilingWallCavities" value={ceilingWallCavitiesAccessible} onChange={setCeilingWallCavitiesAccessible} label="Cavities accessible?" />
+              <YesNoRadio name="ceilingWallInsulation" value={ceilingWallExistingInsulation} onChange={setCeilingWallExistingInsulation} label="Existing insulation?" />
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Square Meters</label>
+                <input type="number" value={ceilingWallSqm} onChange={(e) => setCeilingWallSqm(e.target.value)} placeholder="0" step="0.01" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0066CC] focus:border-transparent" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Pipe lagging</label>
+                <select value={pipeLaggingRequired} onChange={(e) => setPipeLaggingRequired(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0066CC] focus:border-transparent">
+                  <option value="">Select...</option>
+                  <option value="Not Required">Not Required</option>
+                  <option value="Zone 3">Zone 3</option>
+                </select>
+              </div>
+              <div className="md:col-span-3">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Comments</label>
+                <textarea value={ceilingWallComments} onChange={(e) => setCeilingWallComments(e.target.value)} rows={2} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0066CC] focus:border-transparent" />
+              </div>
+            </div>
+          </div>
+
+          {/* SECTION 11: UNDERFLOOR CURRENT */}
+          <div className="bg-white rounded-lg shadow p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b border-[#0066CC]">
+              {assessmentType === 'eeca' ? '11' : '7'}. Underfloor - Current State
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <YesNoRadio name="underfloorAccess" value={underfloorAccessible} onChange={setUnderfloorAccessible} label="Underfloor accessible?" />
+              <YesNoRadio name="underfloorThermal" value={underfloorExistingCoversThermal} onChange={setUnderfloorExistingCoversThermal} label="Existing covers thermal?" />
+              <YesNoRadio name="underfloorDamaged" value={underfloorExistingDamaged} onChange={setUnderfloorExistingDamaged} label="Existing damaged?" />
+              <YesNoRadio name="underfloorGaps" value={underfloorSignificantGaps} onChange={setUnderfloorSignificantGaps} label="Significant gaps?" />
+              <YesNoRadio name="underfloorClearance" value={underfloorClearancesMet} onChange={setUnderfloorClearancesMet} label="Clearances met?" />
+              <YesNoRadio name="underfloorUpgrade" value={underfloorRequiresUpgrade} onChange={setUnderfloorRequiresUpgrade} label="Requires upgrading?" />
+            </div>
+          </div>
+
+          {/* SECTION 12: UNDERFLOOR DETAILED */}
+          <div className="bg-white rounded-lg shadow p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b border-[#0066CC]">
+              {assessmentType === 'eeca' ? '12' : '8'}. Underfloor - Detailed
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Access size</label>
+                <select value={underfloorAccessSize} onChange={(e) => setUnderfloorAccessSize(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0066CC] focus:border-transparent">
+                  <option value="">Select...</option>
+                  <option value="400x600">400x600</option>
+                  <option value="500x500">500x500</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+              <YesNoRadio name="underfloorNewAccess" value={underfloorNewAccessCanCreate} onChange={setUnderfloorNewAccessCanCreate} label="New access can be created?" />
+              <YesNoRadio name="underfloorExisting" value={underfloorExistingInsulation} onChange={setUnderfloorExistingInsulation} label="Existing insulation?" />
+              <YesNoRadio name="underfloorPerimeter" value={underfloorPerimeterEnclosed} onChange={setUnderfloorPerimeterEnclosed} label="Perimeter enclosed?" />
+              <YesNoRadio name="underfloorFoil" value={underfloorFoilUnderlay} onChange={setUnderfloorFoilUnderlay} label="Foil underlay?" />
+              <YesNoRadio name="underfloorLuminaires" value={underfloorLuminaires} onChange={setUnderfloorLuminaires} label="Luminaires?" />
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Square meters</label>
+                <input type="number" value={underfloorSqm} onChange={(e) => setUnderfloorSqm(e.target.value)} placeholder="0" step="0.01" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0066CC] focus:border-transparent" />
+              </div>
+              <div className="md:col-span-3">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Comments</label>
+                <textarea value={underfloorComments} onChange={(e) => setUnderfloorComments(e.target.value)} rows={2} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0066CC] focus:border-transparent" />
+              </div>
+            </div>
+          </div>
+
+          {/* SECTION 13: SUBFLOOR WALL */}
+          <div className="bg-white rounded-lg shadow p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b border-[#0066CC]">
+              {assessmentType === 'eeca' ? '13' : '9'}. Subfloor Wall
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <YesNoRadio name="subfloorWall" value={subfloorWallPresent} onChange={setSubfloorWallPresent} label="Walls in subfloor space?" />
+              <YesNoRadio name="subfloorCavities" value={subfloorWallCavitiesAccessible} onChange={setSubfloorWallCavitiesAccessible} label="Cavities accessible?" />
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Square Meters</label>
+                <input type="number" value={subfloorWallSqm} onChange={(e) => setSubfloorWallSqm(e.target.value)} placeholder="0" step="0.01" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0066CC] focus:border-transparent" />
+              </div>
+              <div className="md:col-span-3">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Comments</label>
+                <textarea value={subfloorWallComments} onChange={(e) => setSubfloorWallComments(e.target.value)} rows={2} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0066CC] focus:border-transparent" />
+              </div>
+            </div>
+          </div>
+
+          {/* EECA SECTION 14: GMB */}
+          {assessmentType === 'eeca' && (
+            <div className="bg-white rounded-lg shadow p-6 border-l-4 border-amber-500">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b border-[#0066CC]">
+                14. GMB <span className="ml-2 text-xs bg-amber-100 text-amber-800 px-2 py-1 rounded">EECA Only</span>
+              </h2>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <YesNoRadio name="gmb" value={gmbPresent} onChange={setGmbPresent} label="GMB present?" />
+                <YesNoRadio name="gmbNzs" value={gmbInstalledNzs4246} onChange={setGmbInstalledNzs4246} label="Installed to NZS 4246?" />
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Underfloor % enclosed</label>
+                  <input type="number" value={gmbUnderfloorPercentEnclosed} onChange={(e) => setGmbUnderfloorPercentEnclosed(e.target.value)} placeholder="80" min="0" max="100" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0066CC] focus:border-transparent" />
+                </div>
+                <YesNoRadio name="gmbOptOut" value={gmbHomeownerOptOut} onChange={setGmbHomeownerOptOut} label="Homeowner opt out?" />
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Square Meters</label>
+                  <input type="number" value={gmbSqm} onChange={(e) => setGmbSqm(e.target.value)} placeholder="0" step="0.01" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0066CC] focus:border-transparent" />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* EECA SECTION 15: TRAVEL */}
+          {assessmentType === 'eeca' && (
+            <div className="bg-white rounded-lg shadow p-6 border-l-4 border-amber-500">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b border-[#0066CC]">
+                15. Travel <span className="ml-2 text-xs bg-amber-100 text-amber-800 px-2 py-1 rounded">EECA Only</span>
+              </h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <YesNoRadio name="travel" value={travelOver50km} onChange={setTravelOver50km} label="Travel >50km?" />
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Km over 50</label>
+                  <input type="number" value={travelKmOver50} onChange={(e) => setTravelKmOver50(e.target.value)} placeholder="0" min="0" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0066CC] focus:border-transparent" />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* EECA SECTION 16: HOMEOWNER TASKS */}
+          {assessmentType === 'eeca' && (
+            <div className="bg-white rounded-lg shadow p-6 border-l-4 border-amber-500">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b border-[#0066CC]">
+                16. Homeowner Tasks <span className="ml-2 text-xs bg-amber-100 text-amber-800 px-2 py-1 rounded">EECA Only</span>
+              </h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <YesNoRadio name="removeObjects" value={homeownerRemoveObjects} onChange={setHomeownerRemoveObjects} label="Remove stored objects?" />
+                <YesNoRadio name="fixLeaks" value={homeownerFixLeaks} onChange={setHomeownerFixLeaks} label="Fix leaks?" />
+              </div>
+            </div>
+          )}
+
+          {/* SECTION 17: RECOMMENDATIONS */}
+          <div className="bg-white rounded-lg shadow p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b border-[#0066CC]">
+              {assessmentType === 'eeca' ? '17' : '10'}. Recommendations
+            </h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Enabling Measures</label>
+                <textarea value={enablingMeasuresComments} onChange={(e) => setEnablingMeasuresComments(e.target.value)} placeholder="Details of enabling measures..." rows={3} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0066CC] focus:border-transparent" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Additional Comments</label>
+                <textarea value={additionalComments} onChange={(e) => setAdditionalComments(e.target.value)} placeholder="Any additional comments..." rows={3} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0066CC] focus:border-transparent" />
+              </div>
+            </div>
+          </div>
+
+          {/* SECTION 18: ASSESSOR DECLARATION */}
+          <div className="bg-white rounded-lg shadow p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b border-[#0066CC]">
+              {assessmentType === 'eeca' ? '18' : '11'}. Assessor Declaration <span className="text-red-500">*</span>
+            </h2>
+            <div className="space-y-4">
+              <label className="flex items-start gap-2 cursor-pointer">
+                <input type="checkbox" checked={assessorDeclaration} onChange={(e) => setAssessorDeclaration(e.target.checked)} required className="mt-1 w-4 h-4 text-[#0066CC] border-gray-300 rounded focus:ring-[#0066CC]" />
+                <span className="text-sm text-gray-700">I declare this information is accurate and complete</span>
+              </label>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Assessor Name <span className="text-red-500">*</span></label>
+                  <input type="text" value={assessorName} onChange={(e) => setAssessorName(e.target.value)} placeholder="Full name" required className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0066CC] focus:border-transparent" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Date <span className="text-red-500">*</span></label>
+                  <input type="date" value={assessorDate} onChange={(e) => setAssessorDate(e.target.value)} required className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0066CC] focus:border-transparent" />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* KEEP YOUR EXISTING ASSESSMENT AREAS SECTION HERE */}
+          {/* (The areas section from your original code) */}
+
           {/* ACTIONS */}
-          {/* ============================================ */}
           <div className="flex justify-end gap-3">
-            <button
-              type="button"
-              onClick={() => router.back()}
-              className="px-6 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition"
-            >
+            <button type="button" onClick={() => router.back()} className="px-6 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition">
               Cancel
             </button>
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="px-6 py-2.5 bg-[#0066CC] text-white rounded-lg hover:bg-[#0052A3] transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-            >
+            <button type="submit" disabled={isSubmitting} className="px-6 py-2.5 bg-[#0066CC] text-white rounded-lg hover:bg-[#0052A3] transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
               {isSubmitting ? (
                 <>
                   <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
