@@ -2,9 +2,7 @@
 // Vercel Edge Function - Secure proxy for GHL API
 // Add GHL_API_TOKEN and GHL_LOCATION_ID to Vercel environment variables
 
-export const config = {
-  runtime: 'edge',
-};
+export const runtime = 'edge';
 
 const GHL_API_TOKEN = process.env.GHL_API_TOKEN;
 const GHL_LOCATION_ID = process.env.GHL_LOCATION_ID;
