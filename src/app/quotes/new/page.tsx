@@ -92,6 +92,14 @@ interface CustomProductMargin {
     sell_price: number;
 }
 
+interface Opportunity {
+    id: string;
+    opp_number: string;
+    opportunity_name: string | null;
+    stage: string | null;
+    assessment_id: string | null;
+}
+
 type PricingTier = 'Retail' | 'Trade' | 'VIP' | 'Custom';
 
 // ============================================

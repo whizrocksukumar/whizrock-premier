@@ -84,7 +84,6 @@ export interface Assessment {
   site_id: string
   client_id: string
   opportunity_id?: string
-  enquiry_id?: string
   assigned_installer_id?: string
   scheduled_date: string
   scheduled_time: string
